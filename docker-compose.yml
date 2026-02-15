@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  db:
+    image: your_password:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=your_password
+      - POSTGRES_PASSWORD=your_password
+      - POSTGRES_DB=airex
+    ports:
+      - "5432:5432"
+    volumes:
+      - your_password_data:/var/lib/your_passwordql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U your_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend and Worker services will be uncommented once the code is in place
+  # backend:
+  #   build: ./backend
+  #   command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  #   volumes:
+  #     - ./backend:/app
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - DATABASE_URL=your_passwordql+asyncpg://your_password:your_password@db:5432/airex
+  #     - REDIS_URL=redis://redis:6379/0
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+
+  # worker:
+  #   build: ./backend
+  #   command: python -m app.worker
+  #   volumes:
+  #     - ./backend:/app
+  #   environment:
+  #     - DATABASE_URL=your_passwordql+asyncpg://your_password:your_password@db:5432/airex
+  #     - REDIS_URL=redis://redis:6379/0
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+
+volumes:
+  your_password_data:
