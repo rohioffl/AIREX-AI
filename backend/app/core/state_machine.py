@@ -1,0 +1,156 @@
+"""
+The State Machine — THE LAW.
+
+All incident state transitions MUST go through transition_state().
+Direct mutation of incident.state is PROHIBITED everywhere else.
+"""
+
+import hashlib
+import uuid
+
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.enums import IncidentState
+from app.models.incident import Incident
+from app.models.state_transition import StateTransition
+
+ALLOWED_TRANSITIONS: dict[IncidentState, list[IncidentState]] = {
+    IncidentState.RECEIVED: [
+        IncidentState.INVESTIGATING,
+    ],
+    IncidentState.INVESTIGATING: [
+        IncidentState.RECOMMENDATION_READY,
+        IncidentState.FAILED_ANALYSIS,
+        IncidentState.ESCALATED,
+    ],
+    IncidentState.RECOMMENDATION_READY: [
+        IncidentState.AWAITING_APPROVAL,
+        IncidentState.ESCALATED,
+    ],
+    IncidentState.AWAITING_APPROVAL: [
+        IncidentState.EXECUTING,
+        IncidentState.ESCALATED,
+    ],
+    IncidentState.EXECUTING: [
+        IncidentState.VERIFYING,
+        IncidentState.FAILED_EXECUTION,
+    ],
+    IncidentState.VERIFYING: [
+        IncidentState.RESOLVED,
+        IncidentState.FAILED_VERIFICATION,
+        IncidentState.ESCALATED,
+    ],
+    IncidentState.FAILED_VERIFICATION: [
+        IncidentState.ESCALATED,
+    ],
+}
+
+TERMINAL_STATES: set[IncidentState] = {
+    IncidentState.RESOLVED,
+    IncidentState.FAILED_ANALYSIS,
+    IncidentState.FAILED_EXECUTION,
+    IncidentState.ESCALATED,
+}
+
+
+class IllegalStateTransition(Exception):
+    """Raised when an attempted state transition violates the graph."""
+
+    def __init__(self, current: IncidentState, target: IncidentState) -> None:
+        self.current = current
+        self.target = target
+        super().__init__(
+            f"Illegal transition: {current.value} -> {target.value}"
+        )
+
+
+def _compute_hash(
+    previous_hash: str, from_state: str, to_state: str, reason: str
+) -> str:
+    """SHA256 hash chain: H(prev_hash : from : to : reason)."""
+    payload = f"{previous_hash}:{from_state}:{to_state}:{reason}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+async def transition_state(
+    session: AsyncSession,
+    incident: Incident,
+    new_state: IncidentState,
+    reason: str,
+    actor: str = "system",
+) -> StateTransition:
+    """
+    The ONLY sanctioned way to change incident state.
+
+    1. Validates the transition against ALLOWED_TRANSITIONS.
+    2. Computes the hash chain link.
+    3. Creates an immutable StateTransition audit record.
+    4. Updates the incident state.
+    5. Emits SSE event + Prometheus metric.
+
+    Raises IllegalStateTransition if the transition is not allowed.
+    """
+    from app.core.metrics import state_transition_total
+
+    allowed = ALLOWED_TRANSITIONS.get(incident.state, [])
+    if new_state not in allowed:
+        raise IllegalStateTransition(incident.state, new_state)
+
+    old_state = incident.state
+
+    # Fetch latest transition for hash chain continuity
+    result = await session.execute(
+        select(StateTransition)
+        .where(
+            StateTransition.tenant_id == incident.tenant_id,
+            StateTransition.incident_id == incident.id,
+        )
+        .order_by(desc(StateTransition.created_at))
+        .limit(1)
+    )
+    prev = result.scalar_one_or_none()
+    previous_hash = prev.hash if prev else "GENESIS"
+
+    # Compute tamper-evident hash
+    new_hash = _compute_hash(
+        previous_hash, incident.state.value, new_state.value, reason
+    )
+
+    # Create immutable audit record
+    transition = StateTransition(
+        tenant_id=incident.tenant_id,
+        incident_id=incident.id,
+        from_state=incident.state,
+        to_state=new_state,
+        reason=reason,
+        actor=actor,
+        previous_hash=previous_hash,
+        hash=new_hash,
+    )
+    session.add(transition)
+
+    # Mutate state — ONLY allowed inside this function
+    incident.state = new_state
+
+    # Prometheus metric
+    state_transition_total.labels(
+        tenant_id=str(incident.tenant_id),
+        from_state=old_state.value,
+        to_state=new_state.value,
+    ).inc()
+
+    # SSE event (fire-and-forget, don't fail transition if Redis is down)
+    try:
+        from app.core.events import emit_state_changed
+        await emit_state_changed(
+            tenant_id=str(incident.tenant_id),
+            incident_id=str(incident.id),
+            from_state=old_state.value,
+            to_state=new_state.value,
+            reason=reason,
+        )
+    except Exception:
+        pass
+
+    return transition

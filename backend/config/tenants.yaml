@@ -1,0 +1,130 @@
+# ═══════════════════════════════════════════════════════════════════
+#  AIREX Tenant Configuration
+# ═══════════════════════════════════════════════════════════════════
+#
+#  Minimal config — just cloud, project_id, and escalation email.
+#  AIREX auto-discovers zone, region, instance name, machine type
+#  from the cloud APIs using the private IP in the webhook tags.
+#
+#  Webhook tags needed:  tenant:<name>,ip:<private-ip>
+#  That's it. AIREX handles the rest.
+#
+#  Hot reload: POST /api/v1/tenants/reload
+#
+# ── GCP Authentication (pick ONE) ──────────────────────────────
+#
+#  Option 1: gcloud CLI (recommended for dev)
+#    gcloud auth activate-service-account SA@PROJECT.iam.gserviceaccount.com \
+#      --key-file=sa-key.json
+#    # or
+#    gcloud auth application-default login
+#
+#  Option 2: Environment variable
+#    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa-key.json
+#
+#  Option 3: Automatic (no config needed)
+#    Running on GCE / GKE / Cloud Run → uses attached service account
+#
+#  Option 4: Explicit key per tenant (store in config/credentials/)
+#    gcp:
+#      service_account_key: "config/credentials/acme-corp-sa.json"
+#
+#  If ANY of Options 1-3 are set, leave service_account_key empty.
+#
+# ── AWS Authentication (pick ONE per tenant) ──────────────────
+#
+#  Option 1: Cross-account Role Assumption (recommended for multi-account)
+#    aws:
+#      account_id: "123456789012"
+#      role_name: "AirexReadOnly"
+#      external_id: "airex-xyz"       # optional, for cross-account trust
+#    Or explicit ARN:
+#      role_arn: "arn:aws:iam::123456789012:role/AirexReadOnly"
+#
+#  Option 2: Access Key + Secret Key (store in config/credentials/)
+#    Create file:  config/credentials/client-aws.json
+#      {"access_key_id": "AKIA...", "secret_access_key": "wJa..."}
+#    Then set:
+#      aws:
+#        credentials_file: "config/credentials/client-aws.json"
+#
+#  Option 3: Instance role (recommended on EC2/ECS)
+#    Attach IAM role to the AIREX host → automatic, no config needed
+#
+#  Option 4: AWS CLI profile
+#    aws configure --profile my-profile
+#    Then set profile: "my-profile" below
+#
+#  Option 5: Environment variables
+#    export AWS_ACCESS_KEY_ID=xxx
+#    export AWS_SECRET_ACCESS_KEY=xxx
+#    export AWS_REGION=ap-south-1
+#
+# ═══════════════════════════════════════════════════════════════════
+
+defaults:
+  ssh_user: ubuntu
+  ssh_port: 22
+  investigation_timeout: 60
+  log_lookback_minutes: 30
+
+tenants:
+
+  # ── GCP client (minimal — just project + email) ──────────────
+  smart-ops:
+    display_name: "Smartops"
+    cloud: gcp
+    gcp:
+      project_id: "smartops-automation"
+      service_account_key: "/home/ubuntu/AIREX/backend/config/credentials/smartops-automation.json"
+    escalation_email: "sre-team@acme-corp.com"
+
+  # ── AWS client — Role Assumption (cross-account) ─────────────
+  #  AIREX assumes a role in the client's AWS account.
+  #  No static keys stored — uses STS temporary credentials.
+  beta-inc:
+    display_name: "Beta Inc."
+    cloud: aws
+    aws:
+      account_id: "123456789012"         # client's AWS account number
+      role_name: "AirexReadOnly"         # role in their account
+      external_id: "airex-beta-2026"     # optional trust condition
+      # region: auto-discovered — AIREX scans all regions to find the instance
+    escalation_email: "ops@beta-inc.com"
+
+  # ── AWS client — Access Key / Secret Key ────────────────────
+  #  Store keys in config/credentials/delta-aws.json:
+  #  {"access_key_id": "AKIA...", "secret_access_key": "wJa..."}
+  delta-corp:
+    display_name: "Delta Corp"
+    cloud: aws
+    aws:
+      credentials_file: "config/credentials/smart-ops.json"
+      # region: auto-discovered — AIREX scans all regions to find the instance
+    escalation_email: "sre@delta-corp.com"
+
+  # ── Multi-cloud (GCP primary, AWS secondary) ─────────────────
+  gamma-tech:
+    display_name: "Gamma Technologies"
+    cloud: gcp
+    gcp:
+      project_id: "gamma-prod-123"
+    aws:
+      account_id: "987654321098"
+      role_name: "AirexReadOnly"
+      # region: auto-discovered
+    escalation_email: "platform@gamma-tech.io"
+
+  # ── Add your clients ─────────────────────────────────────────
+  # my-client:
+  #   display_name: "My Client Name"
+  #   cloud: aws
+  #   aws:
+  #     # Method A: Role assumption
+  #     account_id: "111222333444"
+  #     role_name: "AirexReadOnly"
+  #     external_id: "some-secret"
+  #   # Method B: Access key (region auto-discovered)
+  #   # aws:
+  #   #   credentials_file: "config/credentials/my-client-aws.json"
+  #   escalation_email: "team@client.com"

@@ -20,7 +20,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+.cursor
+.github
 # Node
 node_modules/
 dist/
@@ -46,6 +47,13 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Credentials (NEVER commit)
+backend/config/credentials/*.json
+backend/config/credentials/*.pem
+backend/config/credentials/*.key
+!backend/config/credentials/.gitkeep
+!backend/config/credentials/README.md
 
 # Project Specific
 backend/alembic/versions/__pycache__/
