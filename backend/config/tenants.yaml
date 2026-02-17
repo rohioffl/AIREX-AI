@@ -71,13 +71,16 @@ defaults:
 tenants:
 
   # ── GCP client (minimal — just project + email) ──────────────
-  smart-ops:
+  # Tag in Site24x7: tenant:acme-corp  OR  tenant:smart-ops
+  acme-corp: &smartops
     display_name: "Smartops"
     cloud: gcp
     gcp:
       project_id: "smartops-automation"
       service_account_key: "/home/ubuntu/AIREX/backend/config/credentials/smartops-automation.json"
-    escalation_email: "sre-team@acme-corp.com"
+    escalation_email: "sre-team@smart-ops.com"
+
+  smart-ops: *smartops   # alias — same config as acme-corp
 
   # ── AWS client — Role Assumption (cross-account) ─────────────
   #  AIREX assumes a role in the client's AWS account.

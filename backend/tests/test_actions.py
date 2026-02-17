@@ -79,7 +79,7 @@ class TestScaleInstancesAction:
         result = await action.execute({"service_name": "web-app", "current_instances": 2, "target_instances": 4})
         assert isinstance(result, ActionResult)
         assert result.success is True
-        assert "ASG" in result.logs
+        assert "Auto Scaling Group" in result.logs
 
     @pytest.mark.asyncio
     async def test_verify_returns_bool(self):

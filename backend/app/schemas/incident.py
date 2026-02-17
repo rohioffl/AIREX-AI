@@ -68,12 +68,23 @@ class IncidentListItem(BaseModel):
     updated_at: datetime
 
 
+class RelatedIncidentItem(BaseModel):
+    """Minimal incident info for same-host linking."""
+    id: uuid.UUID
+    alert_type: str
+    state: IncidentState
+    severity: SeverityLevel
+    title: str
+    created_at: datetime
+
+
 class IncidentDetail(IncidentListItem):
     evidence: list[EvidenceResponse] = []
     state_transitions: list[StateTransitionResponse] = []
     executions: list[ExecutionResponse] = []
     recommendation: RecommendationResponse | None = None
     meta: dict | None = None
+    related_incidents: list[RelatedIncidentItem] = []
 
 
 # --- Request models ---

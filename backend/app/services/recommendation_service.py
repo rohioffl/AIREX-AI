@@ -8,6 +8,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.actions.registry import ACTION_REGISTRY
+from app.core.config import settings
 from app.core.events import emit_recommendation_ready
 from app.core.metrics import ai_failure_total, ai_request_total
 from app.core.policy import check_policy, requires_approval
@@ -132,9 +133,39 @@ async def generate_recommendation(
             reason=f"Recommendation: {recommendation.proposed_action} (confidence={recommendation.confidence:.2f})",
         )
     else:
+        # Auto-approve: skip AWAITING_APPROVAL, go straight to EXECUTING
+        log.info(
+            "auto_approving_action",
+            action=recommendation.proposed_action,
+            confidence=recommendation.confidence,
+        )
         await transition_state(
             session,
             incident,
             IncidentState.AWAITING_APPROVAL,
-            reason=f"Auto-approvable: {recommendation.proposed_action}",
+            reason=f"Auto-approved: {recommendation.proposed_action} (confidence={recommendation.confidence:.2f})",
         )
+        await transition_state(
+            session,
+            incident,
+            IncidentState.EXECUTING,
+            reason=f"Auto-approved by policy: {recommendation.proposed_action}",
+            actor="auto_approval",
+        )
+
+        # Enqueue execution task
+        try:
+            from arq import create_pool
+            from arq.connections import RedisSettings
+
+            pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
+            await pool.enqueue_job(
+                "execute_action_task",
+                str(incident.tenant_id),
+                str(incident.id),
+                recommendation.proposed_action,
+            )
+            await pool.aclose()
+            log.info("auto_execution_enqueued", action=recommendation.proposed_action)
+        except Exception as exc:
+            log.error("auto_execution_enqueue_failed", error=str(exc))

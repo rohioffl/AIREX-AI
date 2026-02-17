@@ -50,17 +50,17 @@ export async function fetchIncidents({ state, severity, alertType, limit = 50, c
   if (alertType) params.alert_type = alertType
   if (cursor) params.cursor = cursor
   else if (offset) params.offset = offset
-  const res = await api.get('/incidents', { params })
+  const res = await api.get('/incidents/', { params })
   return res.data
 }
 
 export async function fetchIncident(id) {
-  const res = await api.get(`/incidents/${id}`)
+  const res = await api.get(`/incidents/${id}/`)
   return res.data
 }
 
 export async function approveIncident(id, action, idempotencyKey) {
-  const res = await api.post(`/incidents/${id}/approve`, {
+  const res = await api.post(`/incidents/${id}/approve/`, {
     action,
     idempotency_key: idempotencyKey,
   })

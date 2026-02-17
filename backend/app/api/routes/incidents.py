@@ -21,6 +21,7 @@ from app.schemas.incident import (
     IncidentDetail,
     IncidentListItem,
     PaginatedIncidents,
+    RelatedIncidentItem,
 )
 
 logger = structlog.get_logger()
@@ -127,6 +128,32 @@ async def get_incident(
     if incident.meta and "recommendation" in incident.meta:
         recommendation = incident.meta["recommendation"]
 
+    # Related incidents: same host (host_key), same tenant, exclude self
+    related: list = []
+    if incident.host_key:
+        related_result = await session.execute(
+            select(Incident)
+            .where(
+                Incident.tenant_id == tenant_id,
+                Incident.host_key == incident.host_key,
+                Incident.id != incident_id,
+                Incident.deleted_at.is_(None),
+            )
+            .order_by(desc(Incident.created_at))
+            .limit(20)
+        )
+        for other in related_result.scalars().all():
+            related.append(
+                RelatedIncidentItem(
+                    id=other.id,
+                    alert_type=other.alert_type,
+                    state=other.state,
+                    severity=other.severity,
+                    title=other.title,
+                    created_at=other.created_at,
+                )
+            )
+
     return IncidentDetail(
         id=incident.id,
         tenant_id=incident.tenant_id,
@@ -144,6 +171,7 @@ async def get_incident(
         executions=incident.executions,
         recommendation=recommendation,
         meta=incident.meta,
+        related_incidents=related,
     )
 
 
@@ -244,6 +272,23 @@ async def approve_incident(
             incident_id=str(incident_id),
             action=body.action,
         )
+
+        # Enqueue execution task via ARQ
+        try:
+            from arq import create_pool
+            from arq.connections import RedisSettings
+
+            pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
+            await pool.enqueue_job(
+                "execute_action_task",
+                str(tenant_id),
+                str(incident_id),
+                body.action,
+            )
+            await pool.aclose()
+            logger.info("execution_task_enqueued", incident_id=str(incident_id), action=body.action)
+        except Exception as enq_exc:
+            logger.error("execution_enqueue_failed", error=str(enq_exc))
 
     except IllegalStateTransition as exc:
         await redis.delete(lock_key)

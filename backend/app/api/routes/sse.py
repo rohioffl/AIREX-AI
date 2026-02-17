@@ -84,7 +84,7 @@ async def event_stream(
                     break
 
                 message = await pubsub.get_message(
-                    ignore_subscribe_messages=True, timeout=1.0
+                    ignore_subscribe_messages=True, timeout=0.5
                 )
                 if message and message["type"] == "message":
                     data = message["data"]
@@ -110,7 +110,12 @@ async def event_stream(
             await pubsub.unsubscribe(channel)
             await pubsub.aclose()
 
-    return EventSourceResponse(generate())
+    # ping=15 sends a keepalive comment every 15s so proxies/LBs don't close the stream
+    return EventSourceResponse(
+        generate(),
+        ping=15,
+        send_timeout=2.0,
+    )
 
 
 async def publish_event(

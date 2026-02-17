@@ -226,6 +226,7 @@ async def ingest_site24x7(
                 IncidentState.ESCALATED,
                 IncidentState.FAILED_ANALYSIS,
                 IncidentState.FAILED_EXECUTION,
+                IncidentState.FAILED_VERIFICATION,
             ]),
             Incident.deleted_at.is_(None),
         ).order_by(Incident.created_at.desc()).limit(1)
@@ -286,6 +287,18 @@ async def ingest_site24x7(
         has_target=cloud_ctx.has_target,
     )
 
+    # Host key links related incidents (same server: CPU + memory alerts)
+    host_key = (
+        meta.get("_private_ip")
+        or meta.get("_instance_id")
+        or meta.get("host")
+        or None
+    )
+    if host_key and not isinstance(host_key, str):
+        host_key = str(host_key)
+    if host_key and len(host_key) > 512:
+        host_key = host_key[:512]
+
     # Create incident
     title = f"[{status_str.upper()}] {monitor_name}"
     if incident_reason:
@@ -297,6 +310,7 @@ async def ingest_site24x7(
         severity=severity,
         title=title,
         meta=meta,
+        host_key=host_key or None,
     )
     session.add(incident)
     await session.flush()
@@ -387,12 +401,25 @@ async def ingest_generic(
             incident_id=existing.decode() if isinstance(existing, bytes) else existing
         )
 
+    meta = payload.meta or {}
+    host_key = (
+        meta.get("_private_ip")
+        or meta.get("_instance_id")
+        or meta.get("host")
+        or None
+    )
+    if host_key and not isinstance(host_key, str):
+        host_key = str(host_key)
+    if host_key and len(host_key) > 512:
+        host_key = host_key[:512]
+
     incident = Incident(
         tenant_id=tenant_id,
         alert_type=payload.alert_type,
         severity=severity,
         title=payload.title,
-        meta=payload.meta,
+        meta=meta,
+        host_key=host_key or None,
     )
     session.add(incident)
     await session.flush()

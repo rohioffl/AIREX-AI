@@ -83,6 +83,21 @@ MAX_INVESTIGATION_RETRIES=3
 MAX_EXECUTION_RETRIES=3
 ```
 
+## AWS investigations (SSM and EC2 Instance Connect)
+
+For AWS targets, AIREX runs diagnostics on the instance in this order:
+
+1. **SSM first** — If the instance is managed by Systems Manager, commands run via `ssm:SendCommand`. No SSH keys required.
+2. **EC2 Instance Connect fallback** — If SSM is unavailable (agent not installed / not managed), AIREX uses **EC2 Instance Connect**: a temporary SSH key is pushed via the AWS API (valid 60s), then SSH runs to the instance. **No SSH keys are stored** anywhere; behaviour is similar to GCP OS Login / `gcloud compute ssh`.
+
+**Requirements for EC2 Instance Connect**
+
+- IAM permission: `ec2-instance-connect:SendSSHPublicKey`
+- Instance: Amazon Linux 2, Ubuntu 16.04+, or other AMI with EC2 Instance Connect
+- Network: AIREX must reach the instance’s **private IP** on port 22 (same VPC, peering, or VPN)
+
+See runbook: [runbooks/aws_ec2_instance_connect.md](runbooks/aws_ec2_instance_connect.md).
+
 ## Production Deployment
 
 ### 1. Security Checklist

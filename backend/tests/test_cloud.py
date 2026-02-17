@@ -247,6 +247,36 @@ class TestCloudInvestigationPlugin:
             assert "CloudWatch" in result.raw_output
 
     @pytest.mark.asyncio
+    async def test_aws_fallback_to_ec2_instance_connect_when_ssm_fails(self):
+        """When SSM returns an error, use EC2 Instance Connect (no stored keys)."""
+        from app.investigations.cloud_investigation import CloudInvestigation
+
+        plugin = CloudInvestigation()
+
+        with patch.object(plugin, '_run_aws_ssm', new_callable=AsyncMock) as mock_ssm, \
+             patch.object(plugin, '_run_aws_ec2_connect_ssh', new_callable=AsyncMock) as mock_ec2_ssh, \
+             patch.object(plugin, '_query_aws_logs', new_callable=AsyncMock) as mock_logs:
+            mock_ssm.return_value = "SSM ERROR: Instances not in a valid state"
+            mock_ec2_ssh.return_value = "EC2 Instance Connect: uptime 1 day"
+            mock_logs.return_value = "CloudWatch: no groups"
+
+            result = await plugin.investigate({
+                "_cloud": "aws",
+                "_private_ip": "172.31.5.42",
+                "_instance_id": "i-0abc123",
+                "_has_cloud_target": True,
+                "_region": "ap-south-1",
+                "_zone": "ap-south-1a",
+                "alert_type": "cpu_high",
+                "host": "i-0abc123",
+            })
+
+            mock_ssm.assert_called_once()
+            mock_ec2_ssh.assert_called_once()
+            assert result.raw_output.count("EC2 Instance Connect") >= 1
+            assert "uptime 1 day" in result.raw_output
+
+    @pytest.mark.asyncio
     async def test_gcp_dispatch_calls_ssh(self):
         from app.investigations.cloud_investigation import CloudInvestigation
 

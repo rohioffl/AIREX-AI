@@ -10,10 +10,8 @@ Connect Site24x7 monitoring to AIREX for automated incident investigation and re
 ## Your Webhook URL
 
 ```
-http://15.207.2.175:8000/api/v1/webhooks/site24x7
+https://airex.ankercloud.com/api/v1/webhooks/site24x7
 ```
-
-> For production, use HTTPS with a domain name and reverse proxy (Nginx/Caddy).
 
 ---
 
@@ -28,7 +26,7 @@ http://15.207.2.175:8000/api/v1/webhooks/site24x7
 | Field | Value |
 |-------|-------|
 | **Integration Name** | `AIREX Incident Engine` |
-| **Hook URL** | `http://15.207.2.175:8000/api/v1/webhooks/site24x7` |
+| **Hook URL** | `https://airex.ankercloud.com/api/v1/webhooks/site24x7` |
 | **HTTP Method** | `POST` |
 | **Content Type** | `application/json` |
 | **Send Incident Parameters** | `JSON` |
@@ -246,7 +244,7 @@ RESOLVED (or ESCALATED if auto-fix fails)
 
 Check recent incidents:
 ```bash
-curl -s http://15.207.2.175:8000/api/v1/incidents/ \
+curl -s https://airex.ankercloud.com/api/v1/incidents/ \
   -H "X-Tenant-Id: 00000000-0000-0000-0000-000000000000" | python3 -m json.tool
 ```
 
@@ -259,7 +257,7 @@ curl -s http://15.207.2.175:8000/api/v1/incidents/ \
 ### Test Webhook Manually
 
 ```bash
-curl -X POST http://15.207.2.175:8000/api/v1/webhooks/site24x7 \
+curl -X POST https://airex.ankercloud.com/api/v1/webhooks/site24x7 \
   -H "Content-Type: application/json" \
   -H "X-Tenant-Id: 00000000-0000-0000-0000-000000000000" \
   -d '{

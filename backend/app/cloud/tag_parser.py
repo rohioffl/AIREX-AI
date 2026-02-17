@@ -270,4 +270,15 @@ def merge_context_into_meta(meta: dict, ctx: CloudContext) -> dict:
     meta["_has_cloud_target"] = ctx.has_target
     if ctx.extra_tags:
         meta["_extra_tags"] = ctx.extra_tags
+
+    # Add escalation email from tenant config for UI acknowledge feature
+    if ctx.tenant:
+        try:
+            from app.cloud.tenant_config import get_tenant_config
+            config = get_tenant_config(ctx.tenant)
+            if config and config.escalation_email:
+                meta["_escalation_email"] = config.escalation_email
+        except Exception:
+            pass
+
     return meta

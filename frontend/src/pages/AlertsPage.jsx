@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  AlertTriangle, Bell, Clock,
+  AlertTriangle, Bell, Clock, Mail,
   ChevronRight, Zap, ShieldAlert, AlertOctagon, Radio
 } from 'lucide-react'
 import useIncidents from '../hooks/useIncidents'
 import StateBadge from '../components/common/StateBadge'
 import SeverityBadge from '../components/common/SeverityBadge'
 import ConnectionBanner from '../components/common/ConnectionBanner'
-import { formatTimestamp, truncateId } from '../utils/formatters'
+import { formatTimestamp, truncateId, buildAcknowledgeMailto } from '../utils/formatters'
 
 const ACTIVE_STATES = [
   'RECEIVED', 'INVESTIGATING', 'RECOMMENDATION_READY',
@@ -204,8 +204,26 @@ function AlertRow({ alert }) {
           </div>
         </div>
 
-        {/* Badges */}
+        {/* Actions + Badges */}
         <div className="flex-shrink-0 flex items-center gap-2">
+          <a
+            href={buildAcknowledgeMailto(alert)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md transition-all opacity-0 group-hover:opacity-100"
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              background: 'rgba(99,102,241,0.1)',
+              color: '#818cf8',
+              border: '1px solid rgba(99,102,241,0.2)',
+            }}
+            title="Acknowledge — open Gmail draft"
+          >
+            <Mail size={11} />
+            ACK
+          </a>
           <SeverityBadge severity={alert.severity} />
           <StateBadge state={alert.state} />
           <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} className="opacity-0 group-hover:opacity-100 transition-opacity" />

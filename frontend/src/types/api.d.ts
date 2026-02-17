@@ -19,12 +19,22 @@ export interface Incident {
   updated_at: string
 }
 
+export interface RelatedIncidentItem {
+  id: string
+  alert_type: string
+  state: IncidentState
+  severity: SeverityLevel
+  title: string
+  created_at: string
+}
+
 export interface IncidentDetail extends Incident {
   evidence: Evidence[]
   state_transitions: StateTransition[]
   executions: Execution[]
   recommendation: Recommendation | null
   meta: Record<string, unknown> | null
+  related_incidents?: RelatedIncidentItem[]
 }
 
 export interface Evidence {

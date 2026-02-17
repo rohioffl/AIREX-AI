@@ -141,6 +141,9 @@ async def execute_action(
                 IncidentState.VERIFYING,
                 reason=f"Action {action_type} executed successfully",
             )
+
+            # Auto-enqueue verification task
+            await _enqueue_verification(incident, log)
         else:
             log.error("execution_failed", logs=result.logs)
             execution_total.labels(
@@ -193,3 +196,22 @@ async def execute_action(
 
     finally:
         await redis.delete(lock_key)
+
+
+async def _enqueue_verification(incident: Incident, log) -> None:
+    """Enqueue the verification ARQ task after successful execution."""
+    try:
+        from arq import create_pool
+        from arq.connections import RedisSettings
+
+        pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
+        await pool.enqueue_job(
+            "verify_resolution_task",
+            str(incident.tenant_id),
+            str(incident.id),
+            _defer_by=30,  # wait 30s before verifying
+        )
+        await pool.aclose()
+        log.info("verification_task_enqueued")
+    except Exception as exc:
+        log.error("verification_enqueue_failed", error=str(exc))

@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Radio, WifiOff } from 'lucide-react'
+import { ArrowLeft, Radio, WifiOff, Mail, Server, ChevronRight } from 'lucide-react'
 import useIncidentDetail from '../hooks/useIncidentDetail'
 import StateBadge from '../components/common/StateBadge'
 import SeverityBadge from '../components/common/SeverityBadge'
@@ -12,7 +12,7 @@ import ApprovalControls from '../components/incident/ApprovalControls'
 import ExecutionLogs from '../components/incident/ExecutionLogs'
 import VerificationResult from '../components/incident/VerificationResult'
 import ConnectionBanner from '../components/common/ConnectionBanner'
-import { formatTimestamp } from '../utils/formatters'
+import { formatTimestamp, buildAcknowledgeMailto } from '../utils/formatters'
 
 export default function IncidentDetail() {
   const { id } = useParams()
@@ -56,18 +56,37 @@ export default function IncidentDetail() {
           <span style={{ color: 'var(--text-muted)' }}>/</span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{incident.id.substring(0, 8)}</span>
         </div>
-        <div
-          className="flex items-center gap-2 px-3 py-1 rounded-full"
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            border: `1px solid ${connected ? 'rgba(16,185,129,0.2)' : 'rgba(244,63,94,0.2)'}`,
-            background: connected ? 'rgba(16,185,129,0.05)' : 'rgba(244,63,94,0.05)',
-            color: connected ? '#34d399' : '#fb7185',
-          }}
-        >
-          {connected ? <Radio size={12} /> : <WifiOff size={12} />}
-          {connected ? 'LIVE' : 'OFFLINE'}
+        <div className="flex items-center gap-2">
+          <a
+            href={buildAcknowledgeMailto(incident, { escalationEmail: incident.meta?._escalation_email || '' })}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              background: 'rgba(99,102,241,0.1)',
+              color: '#818cf8',
+              border: '1px solid rgba(99,102,241,0.25)',
+            }}
+            title="Acknowledge — opens Gmail with incident details"
+          >
+            <Mail size={13} />
+            Acknowledge
+          </a>
+          <div
+            className="flex items-center gap-2 px-3 py-1 rounded-full"
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              border: `1px solid ${connected ? 'rgba(16,185,129,0.2)' : 'rgba(244,63,94,0.2)'}`,
+              background: connected ? 'rgba(16,185,129,0.05)' : 'rgba(244,63,94,0.05)',
+              color: connected ? '#34d399' : '#fb7185',
+            }}
+          >
+            {connected ? <Radio size={12} /> : <WifiOff size={12} />}
+            {connected ? 'LIVE' : 'OFFLINE'}
+          </div>
         </div>
       </div>
 
@@ -91,6 +110,34 @@ export default function IncidentDetail() {
           <StateBadge state={incident.state} />
         </div>
       </header>
+
+      {/* Related incidents (same server) */}
+      {incident.related_incidents?.length > 0 && (
+        <div className="glass rounded-xl p-4" style={{ borderLeft: '3px solid rgba(99,102,241,0.4)' }}>
+          <div className="flex items-center gap-2 mb-3" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <Server size={12} />
+            Same server — other alerts
+          </div>
+          <ul className="space-y-2">
+            {incident.related_incidents.map((rel) => (
+              <li key={rel.id}>
+                <Link
+                  to={`/incidents/${rel.id}`}
+                  className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg transition-colors"
+                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 13 }}
+                >
+                  <span className="truncate">{rel.title}</span>
+                  <span className="flex items-center gap-1 flex-shrink-0">
+                    <StateBadge state={rel.state} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{rel.alert_type}</span>
+                    <ChevronRight size={14} style={{ color: '#818cf8' }} />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Pipeline */}
       <div className="glass rounded-xl px-4 py-2">

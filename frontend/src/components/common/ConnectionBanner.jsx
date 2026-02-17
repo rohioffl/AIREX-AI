@@ -1,11 +1,40 @@
-import { WifiOff, Loader, Wifi } from 'lucide-react'
+import { WifiOff, Loader } from 'lucide-react'
 
 /**
- * Displays a reconnecting/disconnected banner when SSE drops.
- * Placed at the top of the main content area.
+ * Displays connection status: connecting (initial), reconnecting, or disconnected.
+ * Only shows "Disconnected" after we had a connection and then closed (e.g. left page).
+ * Avoids flashing "Disconnected" on initial load.
  */
-export default function ConnectionBanner({ connected, reconnecting }) {
+export default function ConnectionBanner({ connected, reconnecting, initial }) {
   if (connected) return null
+  if (initial) {
+    return (
+      <div
+        style={{
+          background: 'rgba(99,102,241,0.08)',
+          border: '1px solid rgba(99,102,241,0.2)',
+          borderRadius: 8,
+          padding: '8px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 16,
+          fontSize: 12,
+          color: '#818cf8',
+          fontWeight: 500,
+        }}
+      >
+        <Loader size={14} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+        <span>Connecting to live feed...</span>
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -32,7 +61,7 @@ export default function ConnectionBanner({ connected, reconnecting }) {
       )}
       <span>
         {reconnecting
-          ? 'Connection lost — reconnecting to live feed...'
+          ? 'Connection lost — reconnecting...'
           : 'Disconnected from live feed. Updates may be delayed.'}
       </span>
       <style>{`

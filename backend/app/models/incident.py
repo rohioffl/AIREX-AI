@@ -113,6 +113,9 @@ class Incident(Base, TenantMixin):
         Integer, nullable=False, default=0
     )
 
+    # Host key for linking related incidents (same server: e.g. private_ip or instance_id)
+    host_key: Mapped[str | None] = mapped_column(String(512), nullable=True, index=False)
+
     # Flexible metadata
     meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 

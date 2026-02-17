@@ -54,6 +54,12 @@ class CloudInvestigation(BaseInvestigation):
             except Exception:
                 pass
 
+        # Fill project from tenant config if not in meta
+        if not project and tenant_config and tenant_config.gcp.project_id:
+            project = tenant_config.gcp.project_id
+        if not region and tenant_config and tenant_config.aws.region:
+            region = tenant_config.aws.region
+
         # Get the diagnostic commands for this alert type
         commands = get_diagnostic_commands(alert_type)
 
@@ -71,10 +77,36 @@ class CloudInvestigation(BaseInvestigation):
         sa_key = tenant_config.gcp.service_account_key if tenant_config else ""
 
         if cloud == "aws" and instance_id:
+            # Prefer SSM; only use EC2 Instance Connect when SSM is not available.
             log.info("investigating_via_aws_ssm")
             sections.append("--- Diagnostics via AWS SSM ---")
             ssh_output = await self._run_aws_ssm(instance_id, commands, region, aws_config)
             sections.append(ssh_output)
+
+            # SSM failed (agent not installed / not managed) → fall back to EC2 Instance Connect (no stored keys).
+            if ssh_output.strip().startswith("SSM ERROR") and private_ip:
+                zone_for_connect = zone or await self._get_aws_instance_zone(
+                    instance_id, region, aws_config
+                )
+                if zone_for_connect:
+                    sections.append("")
+                    sections.append("--- Diagnostics via EC2 Instance Connect (no keys stored) ---")
+                    os_user = (tenant_config.ssh.user if tenant_config else "") or "ubuntu"
+                    try:
+                        ec2_out = await self._run_aws_ec2_connect_ssh(
+                            private_ip=private_ip,
+                            instance_id=instance_id,
+                            zone=zone_for_connect,
+                            commands=commands,
+                            region=region,
+                            aws_config=aws_config,
+                            os_user=os_user,
+                        )
+                        sections.append(ec2_out)
+                    except Exception as exc:
+                        sections.append(f"EC2 Instance Connect ERROR: {exc}")
+                else:
+                    sections.append("(EC2 Instance Connect requires instance AZ; discovery may not have run.)")
 
         elif cloud == "gcp" and (private_ip or instance_id):
             log.info("investigating_via_gcp_ssh")
@@ -142,6 +174,37 @@ class CloudInvestigation(BaseInvestigation):
             )
         except Exception as exc:
             return f"SSM ERROR: {exc}"
+
+    async def _get_aws_instance_zone(
+        self, instance_id: str, region: str, aws_config=None
+    ) -> str:
+        """Resolve instance to Availability Zone for EC2 Instance Connect."""
+        from app.cloud.aws_ssh import get_instance_availability_zone
+        return await get_instance_availability_zone(
+            instance_id=instance_id, region=region, aws_config=aws_config
+        )
+
+    async def _run_aws_ec2_connect_ssh(
+        self,
+        private_ip: str,
+        instance_id: str,
+        zone: str,
+        commands: list[str],
+        region: str,
+        aws_config=None,
+        os_user: str = "ubuntu",
+    ) -> str:
+        """Execute diagnostic commands via EC2 Instance Connect (no stored keys)."""
+        from app.cloud.aws_ssh import aws_ec2_connect_run_command
+        return await aws_ec2_connect_run_command(
+            private_ip=private_ip,
+            instance_id=instance_id,
+            zone=zone,
+            commands=commands,
+            region=region,
+            aws_config=aws_config,
+            os_user=os_user,
+        )
 
     async def _run_gcp_ssh(
         self,

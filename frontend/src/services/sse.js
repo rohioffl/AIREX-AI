@@ -1,5 +1,5 @@
 /**
- * SSE connection manager with auto-reconnect (exponential backoff + jitter).
+ * SSE connection manager with auto-reconnect (short delay, low latency).
  *
  * Subscribes to the tenant event stream. All UI state updates
  * come from SSE — never simulate transitions locally.
@@ -8,15 +8,19 @@
  * API does not support custom headers). Falls back to tenant ID.
  */
 
-const MAX_RETRY_DELAY = 30000
-const INITIAL_RETRY_DELAY = 1000
-const MAX_JITTER = 500
+const MAX_RETRY_DELAY = 10000
+const INITIAL_RETRY_DELAY = 300
+const MAX_JITTER = 200
+const STALE_THRESHOLD_MS = 45000
 
 export function createSSEConnection(tenantId, handlers, onConnectionChange) {
   let eventSource = null
   let retryDelay = INITIAL_RETRY_DELAY
   let closed = false
   let retryCount = 0
+  let lastEventAt = 0
+  let staleCheckInterval = null
+  let hasConnectedOnce = false
 
   function connect() {
     if (closed) return
@@ -34,28 +38,53 @@ export function createSSEConnection(tenantId, handlers, onConnectionChange) {
     eventSource = new EventSource(url)
 
     eventSource.onopen = () => {
+      hasConnectedOnce = true
+      lastEventAt = Date.now()
       retryDelay = INITIAL_RETRY_DELAY
       retryCount = 0
-      onConnectionChange?.({ connected: true, retrying: false, retryCount: 0 })
+      onConnectionChange?.({ connected: true, retrying: false, initial: false })
+      startStaleCheck()
     }
 
     eventSource.onerror = () => {
+      stopStaleCheck()
       eventSource.close()
+      eventSource = null
       retryCount++
-      onConnectionChange?.({ connected: false, retrying: true, retryCount })
+      onConnectionChange?.({ connected: false, retrying: true, initial: false })
 
       if (!closed) {
         const jitter = Math.random() * MAX_JITTER
         const delay = Math.min(retryDelay + jitter, MAX_RETRY_DELAY)
 
         setTimeout(() => {
-          retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY)
+          retryDelay = Math.min(retryDelay * 1.5, MAX_RETRY_DELAY)
           connect()
         }, delay)
       }
     }
 
-    // Register event handlers
+    function markActivity() {
+      lastEventAt = Date.now()
+    }
+
+    function startStaleCheck() {
+      stopStaleCheck()
+      staleCheckInterval = setInterval(() => {
+        if (closed || !eventSource || eventSource.readyState !== EventSource.OPEN) return
+        if (Date.now() - lastEventAt > STALE_THRESHOLD_MS) {
+          eventSource.close()
+        }
+      }, 5000)
+    }
+
+    function stopStaleCheck() {
+      if (staleCheckInterval) {
+        clearInterval(staleCheckInterval)
+        staleCheckInterval = null
+      }
+    }
+
     const eventTypes = [
       'incident_created',
       'state_changed',
@@ -69,6 +98,7 @@ export function createSSEConnection(tenantId, handlers, onConnectionChange) {
 
     eventTypes.forEach((type) => {
       eventSource.addEventListener(type, (event) => {
+        markActivity()
         try {
           const data = JSON.parse(event.data)
           handlers[type]?.(data)
@@ -78,17 +108,18 @@ export function createSSEConnection(tenantId, handlers, onConnectionChange) {
       })
     })
 
-    // Ignore heartbeats silently
-    eventSource.addEventListener('heartbeat', () => {})
+    eventSource.addEventListener('heartbeat', markActivity)
   }
 
+  onConnectionChange?.({ connected: false, retrying: false, initial: true })
   connect()
 
   return {
     close() {
       closed = true
+      if (staleCheckInterval) clearInterval(staleCheckInterval)
       eventSource?.close()
-      onConnectionChange?.({ connected: false, retrying: false, retryCount })
+      onConnectionChange?.({ connected: false, retrying: false, initial: false })
     },
   }
 }

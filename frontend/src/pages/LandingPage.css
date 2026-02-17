@@ -1,0 +1,894 @@
+/**
+ * AIREX Landing — Hero, features, how it works, stats, integrations, CTA, footer.
+ */
+
+:root {
+  --airex-bg: #0B1120;
+  --airex-bg-elevated: #111827;
+  --airex-blue: #3B82F6;
+  --airex-purple: #8B5CF6;
+  --airex-white: #F9FAFB;
+  --airex-muted: rgba(249, 250, 251, 0.7);
+  --airex-border: rgba(255, 255, 255, 0.08);
+  --airex-container: min(1200px, 100% - 3rem);
+  /* Centered text over cube area – dark so it doesn’t clash with white cube */
+  --airex-text-over-cube: #1E293B;
+  --airex-text-over-cube-muted: #475569;
+  /* Light white shade over dark bg areas so section text stays visible */
+  --airex-section-light-shade: rgba(249, 250, 251, 0.2);
+  /* Dark background shade for sections below Why AIREX */
+  --airex-section-bg-shade: rgba(6, 10, 18, 0.98);
+  --airex-section-bg-shade-security: rgba(18, 16, 42, 0.98);
+  --airex-section-bg-shade-cta: rgba(15, 40, 110, 0.98);
+}
+
+.airex-landing {
+  min-height: 100vh;
+  background: var(--airex-bg);
+}
+
+/* ── Image zone: one fixed bg, one light global tint so section overlays feel cohesive ── */
+.airex-image-zone {
+  position: relative;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
+  background-color: var(--airex-bg);
+}
+
+.airex-image-zone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 120% 80% at 50% 30%,
+      transparent 0%,
+      rgba(11, 17, 32, 0.12) 70%,
+      rgba(11, 17, 32, 0.18) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.airex-image-zone>*:not(.airex-landing-header) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Shared container ── */
+.airex-container {
+  width: 100%;
+  max-width: var(--airex-container);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* ── Hero: one viewport, no empty scroll above next section ── */
+.airex-scroll-section {
+  position: relative;
+  height: 100vh;
+  background: transparent;
+}
+
+.airex-content-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  z-index: 10;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  padding-top: 5rem;
+  /* space for fixed header */
+  box-sizing: border-box;
+  background: linear-gradient(to right,
+      rgba(11, 17, 32, 0.5) 0%,
+      rgba(11, 17, 32, 0.2) 35%,
+      transparent 55%);
+}
+
+.airex-content-overlay * {
+  pointer-events: auto;
+}
+
+.airex-landing-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 2rem;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(11, 17, 32, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.airex-logo-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.airex-logo {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--airex-white);
+  line-height: 1;
+}
+
+.airex-logo-abbr {
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--airex-muted);
+  text-transform: none;
+  max-width: 180px;
+  line-height: 1.2;
+}
+
+.airex-landing-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.airex-nav-link {
+  color: rgba(249, 250, 251, 0.9);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.airex-nav-link:hover {
+  color: var(--airex-white);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.airex-nav-cta {
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+}
+
+.airex-nav-cta:hover {
+  background: rgba(59, 130, 246, 0.4);
+  color: var(--airex-white);
+}
+
+.airex-hero-content {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+  padding: 2rem 2rem 2rem clamp(2rem, 8vw, 4rem);
+  max-width: 520px;
+  margin: 0;
+}
+
+.airex-hero-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--airex-blue);
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  margin-bottom: 1rem;
+}
+
+.airex-hero-title {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 700;
+  color: var(--airex-white);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 0 0 0.35rem;
+  text-shadow: 0 0 60px rgba(59, 130, 246, 0.3);
+}
+
+.airex-hero-abbr {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--airex-muted);
+  margin: 0 0 0.75rem;
+  letter-spacing: 0.02em;
+}
+
+.airex-hero-subtitle {
+  font-size: clamp(1rem, 2.5vw, 1.125rem);
+  color: rgba(249, 250, 251, 0.8);
+  font-weight: 400;
+  margin: 0 0 2rem;
+  line-height: 1.5;
+}
+
+.airex-hero-cta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1rem;
+}
+
+.airex-hero-btn {
+  padding: 0.75rem 1.75rem;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.airex-hero-btn:hover {
+  transform: translateY(-1px);
+}
+
+.airex-hero-btn-primary {
+  background: var(--airex-blue);
+  color: var(--airex-white);
+  box-shadow: 0 0 24px rgba(59, 130, 246, 0.35);
+}
+
+.airex-hero-btn-primary:hover {
+  background: #2563eb;
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.5);
+}
+
+.airex-hero-btn-secondary {
+  background: transparent;
+  color: var(--airex-white);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+}
+
+.airex-hero-btn-secondary:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: var(--airex-purple);
+}
+
+/* ── Bg section: bg from .airex-image-zone ── */
+.airex-bg-section {
+  position: relative;
+  min-height: 50vh;
+  padding: 2rem 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
+
+/* Same fade as hero – fades out at bottom so no dark band before Integrations ── */
+.airex-bg-section-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, rgba(11, 17, 32, 0.48) 0%, transparent 65%);
+  mask-image: linear-gradient(to bottom, black 0%, black 72%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 72%, transparent 100%);
+}
+
+.airex-bg-section-content {
+  position: relative;
+  z-index: 1;
+  padding: 4rem clamp(2rem, 8vw, 4rem);
+  max-width: 480px;
+}
+
+.airex-bg-section-lead {
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  font-weight: 600;
+  color: var(--airex-white);
+  margin: 0 0 1.5rem;
+  line-height: 1.35;
+}
+
+.airex-bg-section-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.airex-bg-section-list li {
+  font-size: 1rem;
+  color: var(--airex-muted);
+  padding: 0.5rem 0;
+  padding-left: 1.5rem;
+  position: relative;
+  line-height: 1.4;
+}
+
+.airex-bg-section-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.9rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--airex-blue);
+}
+
+/* ── Integrations: bg from .airex-image-zone, content left, cube clear ── */
+.airex-integrations-bg {
+  position: relative;
+  min-height: 50vh;
+  padding: 2rem 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
+
+/* Same fade as hero – fades in from top so no dark band after One platform ── */
+.airex-integrations-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, rgba(11, 17, 32, 0.48) 0%, transparent 65%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 28%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 28%, black 100%);
+}
+
+.airex-integrations-bg-content {
+  position: relative;
+  z-index: 1;
+  padding: 4rem clamp(2rem, 8vw, 4rem);
+  max-width: 420px;
+}
+
+.airex-integrations-bg-title {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  color: var(--airex-white);
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.airex-integrations-bg-lead {
+  font-size: 1rem;
+  color: var(--airex-muted);
+  margin: 0 0 1.5rem;
+  line-height: 1.45;
+}
+
+.airex-integrations-bg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.airex-integrations-bg .airex-integration-item {
+  background: rgba(11, 17, 32, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  color: var(--airex-white);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.airex-integrations-bg .airex-integration-item:hover {
+  background: rgba(11, 17, 32, 0.5);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.airex-integrations-bg .airex-integration-icon {
+  color: var(--airex-purple);
+  flex-shrink: 0;
+}
+
+.airex-integrations-bg .airex-integration-name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--airex-white);
+}
+
+.airex-integrations-bg .airex-integration-type {
+  font-size: 0.8125rem;
+  color: rgba(249, 250, 251, 0.85);
+  margin-left: 0.25rem;
+}
+
+/* ── Section common ── */
+.airex-section {
+  position: relative;
+  z-index: 2;
+  padding: 3rem 0;
+  background: var(--airex-bg);
+}
+
+/* Sections: no single overlay; each section has its own overlay below (varied, attractive) */
+.airex-image-zone .airex-section {
+  background: transparent;
+}
+
+.airex-image-zone .airex-footer {
+  background: rgba(11, 17, 32, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Centered over cube – dark so not lost on white cube */
+.airex-section-title {
+  font-size: clamp(1.6rem, 3.5vw, 2.25rem);
+  font-weight: 700;
+  color: var(--airex-text-over-cube);
+  letter-spacing: -0.03em;
+  margin: 0 0 0.5rem;
+  text-align: center;
+}
+
+.airex-section-lead {
+  font-size: 1rem;
+  color: var(--airex-text-over-cube-muted);
+  text-align: center;
+  max-width: 520px;
+  margin: 0 auto 2.25rem;
+  line-height: 1.5;
+}
+
+/* Same background for Why AIREX + all sections below – smooth gradient, no center line ── */
+.airex-image-zone .airex-section.airex-why,
+.airex-image-zone .airex-section.airex-features,
+.airex-image-zone .airex-section.airex-how,
+.airex-image-zone .airex-section.airex-stats,
+.airex-image-zone .airex-section.airex-security,
+.airex-image-zone .airex-section.airex-testimonial,
+.airex-image-zone .airex-section.airex-cta-section {
+  background: linear-gradient(to right,
+      rgba(11, 17, 32, 0.55) 0%,
+      rgba(11, 17, 32, 0.48) 25%,
+      rgba(11, 17, 32, 0.42) 50%,
+      rgba(11, 17, 32, 0.38) 75%,
+      rgba(11, 17, 32, 0.35) 100%);
+}
+
+/* Shade sections: font white – high specificity so it wins ── */
+.airex-image-zone .airex-section.airex-why .airex-section-title,
+.airex-image-zone .airex-section.airex-features .airex-section-title,
+.airex-image-zone .airex-section.airex-how .airex-section-title,
+.airex-image-zone .airex-section.airex-security .airex-section-title,
+.airex-image-zone .airex-section.airex-testimonial .airex-section-title {
+  color: var(--airex-white);
+}
+.airex-image-zone .airex-section.airex-why .airex-section-lead,
+.airex-image-zone .airex-section.airex-features .airex-section-lead,
+.airex-image-zone .airex-section.airex-how .airex-section-lead,
+.airex-image-zone .airex-section.airex-security .airex-section-lead,
+.airex-image-zone .airex-section.airex-testimonial .airex-section-lead {
+  color: var(--airex-muted);
+}
+.airex-image-zone .airex-section.airex-stats .airex-stat-label {
+  color: var(--airex-muted);
+}
+.airex-image-zone .airex-section.airex-cta-section .airex-cta-title {
+  color: var(--airex-white);
+}
+.airex-image-zone .airex-section.airex-cta-section .airex-cta-lead {
+  color: var(--airex-muted);
+}
+
+.airex-why>* {
+  position: relative;
+  z-index: 1;
+}
+
+.airex-why-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.airex-why-card {
+  background: rgba(11, 17, 32, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 1.75rem;
+  text-align: center;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.airex-why-card:hover {
+  background: rgba(11, 17, 32, 0.5);
+  transform: translateY(-4px);
+  border-color: rgba(59, 130, 246, 0.25);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+
+.airex-why-icon {
+  color: var(--airex-blue);
+  margin-bottom: 1rem;
+  opacity: 1;
+}
+
+.airex-why-card h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--airex-white);
+  margin: 0 0 0.5rem;
+  text-transform: capitalize;
+}
+
+.airex-why-card p {
+  font-size: 0.9rem;
+  color: rgba(249, 250, 251, 0.88);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ── Testimonial: same bg as Why AIREX (no extra overlay) ── */
+.airex-testimonial {
+  padding: 2.5rem 0;
+}
+
+.airex-quote {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 2rem 2.5rem;
+  border-left: 4px solid var(--airex-blue);
+  background: rgba(59, 130, 246, 0.06);
+  border-radius: 0 12px 12px 0;
+}
+
+.airex-quote p {
+  font-size: 1.15rem;
+  color: var(--airex-white);
+  line-height: 1.6;
+  margin: 0 0 1rem;
+  font-style: italic;
+}
+
+.airex-quote-footer {
+  font-size: 0.875rem;
+  color: var(--airex-muted);
+  margin: 0;
+}
+
+/* ── Features: same bg as Why AIREX (no extra overlay) ── */
+.airex-features {
+  padding: 3rem 0;
+}
+
+.airex-features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.airex-feature-card {
+  background: rgba(11, 17, 32, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s ease;
+}
+
+.airex-feature-card:hover {
+  background: rgba(11, 17, 32, 0.5);
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 8px 28px rgba(59, 130, 246, 0.12);
+  transform: translateY(-2px);
+}
+
+.airex-feature-title {
+  color: var(--airex-white);
+}
+
+.airex-feature-desc {
+  color: rgba(249, 250, 251, 0.88);
+}
+
+.airex-feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--airex-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.airex-feature-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.airex-feature-desc {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── How it works: same bg as Why AIREX ── */
+.airex-how {
+}
+
+.airex-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.airex-step {
+  position: relative;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.airex-step-num {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--airex-blue), var(--airex-purple));
+  color: var(--airex-white);
+  font-weight: 700;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.airex-step-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--airex-white);
+  margin: 0 0 0.5rem;
+}
+
+.airex-step-body {
+  font-size: 0.875rem;
+  color: var(--airex-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.airex-step-connector {
+  display: none;
+}
+
+/* ── Stats: same bg as Why AIREX (no extra overlay) ── */
+.airex-stats {
+  padding: 2.5rem 0;
+}
+
+.airex-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  max-width: 700px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.airex-stat {
+  padding: 1.5rem;
+}
+
+.airex-stat-value {
+  display: block;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  color: var(--airex-blue);
+  letter-spacing: -0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.airex-stat-label {
+  font-size: 0.9375rem;
+  color: var(--airex-muted);
+}
+
+/* ── Security: same bg as Why AIREX ── */
+.airex-security {
+}
+
+.airex-security-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.airex-security-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.3), rgba(139, 92, 246, 0.25));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 2px solid rgba(139, 92, 246, 0.6);
+  box-shadow:
+    0 0 20px rgba(59, 130, 246, 0.4),
+    0 0 40px rgba(139, 92, 246, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+}
+
+.airex-security-lock {
+  color: #E0E7FF;
+  filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.6));
+}
+
+.airex-security .airex-section-title {
+  margin-bottom: 1.5rem;
+}
+
+.airex-security-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+
+.airex-security-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--airex-muted);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--airex-border);
+}
+
+.airex-security-list li:last-child {
+  border-bottom: none;
+}
+
+.airex-security-list svg {
+  color: #10B981;
+  flex-shrink: 0;
+}
+
+/* ── CTA: same bg as Why AIREX (no extra overlay) ── */
+.airex-cta-section {
+  padding: 3.5rem 0;
+}
+
+.airex-cta-title {
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 700;
+  color: var(--airex-white);
+  margin: 0 0 0.5rem;
+  text-align: center;
+}
+
+.airex-cta-lead {
+  font-size: 1.125rem;
+  color: var(--airex-muted);
+  text-align: center;
+  margin: 0 0 2rem;
+}
+
+.airex-cta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ── Footer ── */
+.airex-footer {
+  border-top: 1px solid var(--airex-border);
+  padding: 2rem 0;
+  background: var(--airex-bg);
+}
+
+.airex-footer-inner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.airex-footer-brand .airex-logo {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.airex-footer-tagline {
+  font-size: 0.8125rem;
+  color: var(--airex-muted);
+  margin: 0;
+}
+
+.airex-footer-copy {
+  font-size: 0.8125rem;
+  color: var(--airex-muted);
+  margin: 0;
+  text-align: right;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .airex-content-overlay {
+    grid-template-columns: 1fr;
+    background: linear-gradient(to bottom,
+        rgba(11, 17, 32, 0.6) 0%,
+        transparent 50%);
+  }
+
+  .airex-hero-content {
+    grid-column: 1;
+    align-items: center;
+    text-align: center;
+    padding: 2rem 1.5rem;
+    max-width: 100%;
+  }
+
+  .airex-hero-cta {
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  .airex-landing-header {
+    padding: 1rem 1.25rem;
+  }
+
+  .airex-hero-btn {
+    width: 100%;
+    max-width: 280px;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .airex-steps {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .airex-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .airex-why-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .airex-quote {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .airex-quote p {
+    font-size: 1rem;
+  }
+
+  .airex-footer-inner {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .airex-footer-copy {
+    text-align: center;
+  }
+}
