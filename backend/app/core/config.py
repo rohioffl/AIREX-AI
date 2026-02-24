@@ -27,8 +27,23 @@ class Settings(BaseSettings):
     LLM_FALLBACK_TIMEOUT: int = 30
     LLM_CIRCUIT_BREAKER_THRESHOLD: int = 3
     LLM_CIRCUIT_BREAKER_COOLDOWN: int = 300
+    LLM_BASE_URL: str | None = None
+    LLM_API_KEY: str | None = None
+    LLM_API_VERSION: str | None = None
+    LLM_CORRELATION_HEADER: str = "X-Correlation-ID"
+    LLM_EMBEDDING_MODEL: str = "text-embedding-3-large"
+    LLM_EMBEDDING_TIMEOUT: int = 15
+    LLM_EMBEDDING_DIMENSION: int = 3072
     VERTEX_PROJECT: str = "smartops-automation"
     VERTEX_LOCATION: str = "us-central1"
+
+    # Retrieval-Augmented Generation (RAG)
+    RAG_RUNBOOK_LIMIT: int = 5
+    RAG_INCIDENT_LIMIT: int = 3
+    RAG_CONTEXT_MAX_CHARS: int = 4000
+    RAG_QUERY_MAX_CHARS: int = 2000
+    RAG_SNIPPET_MAX_CHARS: int = 600
+    RAG_INCIDENT_SUMMARY_MAX_CHARS: int = 1600
 
     # Timeouts (seconds)
     INVESTIGATION_TIMEOUT: int = 60
@@ -51,18 +66,18 @@ class Settings(BaseSettings):
     # GCP
     GCP_PROJECT_ID: str = ""
     GCP_ZONE: str = ""
-    GCP_SERVICE_ACCOUNT_KEY: str = ""       # path to SA JSON key file (empty = use ADC)
-    GCP_OS_LOGIN_USER: str = ""             # OS Login username (auto-resolved if empty)
+    GCP_SERVICE_ACCOUNT_KEY: str = ""  # path to SA JSON key file (empty = use ADC)
+    GCP_OS_LOGIN_USER: str = ""  # OS Login username (auto-resolved if empty)
     GCP_LOG_EXPLORER_ENABLED: bool = True
 
     # AWS
     AWS_REGION: str = "ap-south-1"
-    AWS_PROFILE: str = ""                   # empty = use instance role / default creds
+    AWS_PROFILE: str = ""  # empty = use instance role / default creds
     AWS_SSM_DOCUMENT: str = "AWS-RunShellScript"
-    AWS_SSM_TIMEOUT: int = 30               # seconds to wait for SSM command
+    AWS_SSM_TIMEOUT: int = 30  # seconds to wait for SSM command
 
     # SSH fallback (when SSM / OS Login unavailable)
-    SSH_KEY_PATH: str = ""                  # path to private key
+    SSH_KEY_PATH: str = ""  # path to private key
     SSH_USER: str = "ubuntu"
     SSH_PORT: int = 22
     SSH_TIMEOUT: int = 15

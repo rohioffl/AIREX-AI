@@ -149,6 +149,15 @@ AWAITING_APPROVAL ────────────────▶ REJECTED
 | `ClearLogsAction` | `clear_logs` | Disk usage below threshold |
 | `ScaleInstancesAction` | `scale_instances` | All instances healthy |
 
+## Retrieval-Augmented Context
+
+- **Storage**: `runbook_chunks` + `incident_embeddings` tables (pgvector) with RLS + composite PKs.
+- **Ingestion**: `backend/scripts/ingest_runbooks.py` chunks markdown runbooks and stores embeddings.
+- **Vector Store**: `app/rag/vector_store.py` performs cosine search against pgvector for runbooks + prior incidents.
+- **Auto-Summarize**: When incidents hit a terminal state, `transition_state()` calls `upsert_incident_embedding()` to embed their final summary/metadata.
+- **Prompt Wiring**: `build_recommendation_context()` feeds top matches into the LLM prompt (sanitized + size capped).
+- **Config**: Tunable via `RAG_*` settings (limits, char caps, embedding model/dimension).
+
 ## Observability Stack
 
 ```

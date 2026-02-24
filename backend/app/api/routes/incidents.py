@@ -135,6 +135,10 @@ async def get_incident(
     if incident.meta and "recommendation" in incident.meta:
         recommendation = incident.meta["recommendation"]
 
+    rag_context = None
+    if incident.meta and "rag_context" in incident.meta:
+        rag_context = incident.meta["rag_context"]
+
     # Related incidents: same host (host_key), same tenant, exclude self
     related: list = []
     if incident.host_key:
@@ -184,6 +188,7 @@ async def get_incident(
         executions=executions,
         recommendation=recommendation,
         meta=incident.meta,
+        rag_context=rag_context,
         related_incidents=related,
     )
 

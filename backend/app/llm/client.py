@@ -10,11 +10,13 @@ import asyncio
 import json
 import os
 import time
+from typing import Any, cast
 
 import structlog
 
 from app.core.config import settings
 from app.core.metrics import ai_failure_total, ai_request_total, circuit_breaker_state
+from app.llm import build_llm_headers, configure_litellm
 from app.llm.prompts import build_recommendation_prompt
 from app.models.enums import RiskLevel
 from app.schemas.recommendation import Recommendation
@@ -112,7 +114,9 @@ def _ensure_vertex_credentials() -> None:
     # Try the tenant config path for the default project
     default_key = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        "config", "credentials", "smartops-automation.json",
+        "config",
+        "credentials",
+        "smartops-automation.json",
     )
     if os.path.exists(default_key):
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = default_key
@@ -123,6 +127,7 @@ class LLMClient:
     """Model-agnostic LLM client with circuit breaker."""
 
     def __init__(self) -> None:
+        configure_litellm()
         self.circuit_breaker = CircuitBreaker(
             threshold=settings.LLM_CIRCUIT_BREAKER_THRESHOLD,
             cooldown_seconds=settings.LLM_CIRCUIT_BREAKER_COOLDOWN,
@@ -133,6 +138,7 @@ class LLMClient:
         alert_type: str,
         evidence: str,
         severity: str,
+        context: str | None = None,
         redis=None,
     ) -> Recommendation | None:
         """
@@ -148,7 +154,12 @@ class LLMClient:
 
         _ensure_vertex_credentials()
 
-        messages = build_recommendation_prompt(alert_type, evidence, severity)
+        messages = build_recommendation_prompt(
+            alert_type,
+            evidence,
+            severity,
+            context=context,
+        )
 
         # Attempt primary model
         ai_request_total.labels(model=settings.LLM_PRIMARY_MODEL).inc()
@@ -163,7 +174,9 @@ class LLMClient:
             return result
 
         # Attempt fallback model
-        logger.info("llm_primary_failed_trying_fallback", fallback=settings.LLM_FALLBACK_MODEL)
+        logger.info(
+            "llm_primary_failed_trying_fallback", fallback=settings.LLM_FALLBACK_MODEL
+        )
         ai_request_total.labels(model=settings.LLM_FALLBACK_MODEL).inc()
         result = await self._call_model(
             settings.LLM_FALLBACK_MODEL,
@@ -190,24 +203,30 @@ class LLMClient:
         try:
             import litellm
 
-            call_kwargs: dict = {
+            call_kwargs: dict[str, Any] = {
                 "model": model,
                 "messages": messages,
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1,
             }
 
+            headers = build_llm_headers()
+            if headers:
+                call_kwargs["extra_headers"] = headers
+
             # Vertex AI requires project and location
             if model.startswith("vertex_ai/"):
                 call_kwargs["vertex_project"] = settings.VERTEX_PROJECT
                 call_kwargs["vertex_location"] = settings.VERTEX_LOCATION
 
-            response = await asyncio.wait_for(
+            raw_response = await asyncio.wait_for(
                 litellm.acompletion(**call_kwargs),
                 timeout=timeout,
             )
-
-            content = response.choices[0].message.content
+            response = cast(dict[str, Any], raw_response)
+            choice = response["choices"][0]
+            message = choice["message"]
+            content = cast(str, message["content"])
             data = json.loads(content)
 
             recommendation = Recommendation(

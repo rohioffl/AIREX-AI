@@ -81,7 +81,24 @@ LLM_CIRCUIT_BREAKER_THRESHOLD=3
 LLM_CIRCUIT_BREAKER_COOLDOWN=300
 MAX_INVESTIGATION_RETRIES=3
 MAX_EXECUTION_RETRIES=3
+LLM_BASE_URL=http://ai-platform:4000/v1
+LLM_API_KEY=proxy-secret
+LLM_EMBEDDING_MODEL=text-embedding-3-large
 ```
+
+## Retrieval-Augmented Generation (RAG) Setup
+
+1. **Apply migrations (pgvector + vector tables)**
+   ```bash
+   alembic upgrade head
+   ```
+2. **Ingest runbooks / KB docs per tenant**
+   ```bash
+   python -m scripts.ingest_runbooks --directory docs/runbooks --tenant-id <tenant-uuid>
+   ```
+3. **Backfill historical incidents** (optional) so past runs get embeddings and show up in similarity search.
+
+All embedding + completion calls should flow through the LiteLLM proxy; set `LLM_BASE_URL` and `LLM_API_KEY` so both the chat client and embeddings client inherit the same routing and Langfuse tracing.
 
 ## AWS investigations (SSM and EC2 Instance Connect)
 

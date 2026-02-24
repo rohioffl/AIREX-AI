@@ -86,6 +86,7 @@ class IncidentDetail(IncidentListItem):
     executions: list[ExecutionResponse] = []
     recommendation: RecommendationResponse | None = None
     related_incidents: list[RelatedIncidentItem] = []
+    rag_context: str | None = None
 
 
 # --- Request models ---

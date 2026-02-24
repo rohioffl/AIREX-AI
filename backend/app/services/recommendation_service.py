@@ -6,6 +6,7 @@ Generates structured recommendations via LLM with circuit breaker fallback.
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.actions.registry import ACTION_REGISTRY
 from app.core.config import settings
@@ -17,6 +18,7 @@ from app.llm.client import LLMClient
 from app.models.enums import IncidentState
 from app.models.incident import Incident
 from app.schemas.recommendation import Recommendation
+from app.services.rag_context import build_recommendation_context
 
 logger = structlog.get_logger()
 
@@ -41,12 +43,26 @@ async def generate_recommendation(
         f"[{e.tool_name}] {e.raw_output}" for e in incident.evidence
     )
 
+    meta = dict(incident.meta or {})
+
+    context: str | None = None
+    try:
+        context = await build_recommendation_context(session, incident, evidence_text)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        log.warning("rag_context_failed", error=str(exc))
+
+    if context:
+        meta["rag_context"] = context
+        incident.meta = meta
+        flag_modified(incident, "meta")
+
     ai_request_total.labels(model="primary").inc()
 
     recommendation = await llm_client.generate_recommendation(
         alert_type=incident.alert_type,
         evidence=evidence_text,
         severity=incident.severity.value,
+        context=context,
         redis=redis,
     )
 
@@ -57,7 +73,6 @@ async def generate_recommendation(
         ).inc()
         from sqlalchemy.orm.attributes import flag_modified
 
-        meta = dict(incident.meta or {})
         meta["recommendation_note"] = "AI unavailable — manual review required"
         incident.meta = meta
         flag_modified(incident, "meta")
@@ -76,15 +91,13 @@ async def generate_recommendation(
             "invalid_proposed_action",
             action=recommendation.proposed_action,
         )
-        from sqlalchemy.orm.attributes import flag_modified as _flag_modified
-
-        meta = dict(incident.meta or {})
+        meta = dict(meta)
         meta.setdefault("_manual_review_required", True)
         meta["_manual_review_reason"] = (
             f"LLM proposed unregistered action: {recommendation.proposed_action}"
         )
         incident.meta = meta
-        _flag_modified(incident, "meta")
+        flag_modified(incident, "meta")
         await session.flush()
         await transition_state(
             session,
@@ -100,13 +113,11 @@ async def generate_recommendation(
     )
     if not allowed:
         log.error("policy_rejected", reason=reason)
-        from sqlalchemy.orm.attributes import flag_modified as _flag_modified
-
-        meta = dict(incident.meta or {})
+        meta = dict(meta)
         meta.setdefault("_manual_review_required", True)
         meta["_manual_review_reason"] = f"Policy rejected: {reason}"
         incident.meta = meta
-        _flag_modified(incident, "meta")
+        flag_modified(incident, "meta")
         await session.flush()
         await transition_state(
             session,
@@ -117,9 +128,6 @@ async def generate_recommendation(
         return
 
     # Store recommendation in incident meta
-    from sqlalchemy.orm.attributes import flag_modified
-
-    meta = dict(incident.meta or {})
     rec_dict = recommendation.model_dump()
     rec_dict["risk_level"] = (
         rec_dict["risk_level"].value

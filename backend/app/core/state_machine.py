@@ -8,6 +8,7 @@ Direct mutation of incident.state is PROHIBITED everywhere else.
 import hashlib
 import uuid
 
+import structlog
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,6 +58,9 @@ TERMINAL_STATES: set[IncidentState] = {
     IncidentState.RESOLVED,
     IncidentState.REJECTED,
 }
+
+
+logger = structlog.get_logger()
 
 
 class IllegalStateTransition(Exception):
@@ -156,5 +160,19 @@ async def transition_state(
         )
     except Exception:
         pass
+
+    if new_state in TERMINAL_STATES:
+        try:
+            from app.services.incident_embedding_service import (
+                upsert_incident_embedding,
+            )
+
+            await upsert_incident_embedding(session, incident)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning(
+                "incident_embedding_upsert_failed",
+                incident_id=str(incident.id),
+                error=str(exc),
+            )
 
     return transition

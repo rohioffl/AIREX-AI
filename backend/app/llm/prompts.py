@@ -37,6 +37,8 @@ def build_recommendation_prompt(
     alert_type: str,
     evidence: str,
     severity: str,
+    *,
+    context: str | None = None,
 ) -> list[dict[str, str]]:
     """Build the LLM message list for recommendation generation."""
     sanitized = _sanitize_evidence(evidence)
@@ -47,6 +49,12 @@ def build_recommendation_prompt(
         f"\n--- Investigation Evidence ---\n{sanitized}\n--- End Evidence ---\n"
         f"\nAnalyze the above evidence and provide your recommendation as JSON."
     )
+
+    if context:
+        sanitized_context = _sanitize_evidence(context, max_chars=4000)
+        user_content += (
+            f"\n\n--- Retrieved Context ---\n{sanitized_context}\n--- End Context ---\n"
+        )
 
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
