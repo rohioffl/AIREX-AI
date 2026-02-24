@@ -297,7 +297,7 @@ export default function IncidentDetail() {
       {/* Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         <div className="space-y-6">
-          <RecommendationCard recommendation={incident.recommendation} state={incident.state} />
+          <RecommendationCard recommendation={incident.recommendation} state={incident.state} ragContext={incident.rag_context} />
           <EvidencePanel evidence={incident.evidence} />
         </div>
         <div className="space-y-6">

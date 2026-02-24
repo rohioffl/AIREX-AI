@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react'
+import { Sparkles, BookOpen } from 'lucide-react'
 
 const RISK_THEME = {
   LOW:  { border: '#10b981', bg: 'rgba(16,185,129,0.04)' },
@@ -11,7 +11,7 @@ const SHOW_STATES = new Set([
   'RESOLVED', 'FAILED_ANALYSIS', 'FAILED_EXECUTION', 'FAILED_VERIFICATION',
 ])
 
-export default function RecommendationCard({ recommendation, state }) {
+export default function RecommendationCard({ recommendation, state, ragContext }) {
   if (!recommendation) {
     if (!SHOW_STATES.has(state)) {
       return (
@@ -68,6 +68,18 @@ export default function RecommendationCard({ recommendation, state }) {
             {recommendation.proposed_action}
           </div>
         </div>
+
+        {ragContext && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <BookOpen size={14} style={{ color: 'var(--text-muted)' }} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>AI Context & Reasoning</span>
+            </div>
+            <div className="p-3 rounded-lg" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-input)', border: '1px solid var(--border)', maxHeight: '200px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+              {ragContext}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
