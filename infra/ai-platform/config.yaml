@@ -1,17 +1,25 @@
 model_list:
-  - model_name: vertex_ai/gemini-2.0-flash
+  # Primary model: Gemini directly via Google AI Studio API
+  - model_name: gemini-2.0-flash
     litellm_params:
-      model: vertex_ai/gemini-2.0-flash
+      model: gemini/gemini-2.0-flash
+  
+  # Fallback model: Gemini 2.0 Flash Lite via Google AI Studio API
+  - model_name: gemini-2.0-flash-lite
+    litellm_params:
+      model: gemini/gemini-2.0-flash-lite
+
+  # Bedrock Models (if you want to use Anthropic/Llama via AWS)
+  - model_name: bedrock-claude-3-5-sonnet
+    litellm_params:
+      model: bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0
+      
+  # Embedding Model: text-embedding-3-large (OpenAI) or swap for Bedrock Titan
   - model_name: text-embedding-3-large
     litellm_params:
       model: text-embedding-3-large
-      # Add API base or keys below if using OpenAI, Azure, etc.
 
 litellm_settings:
   # Enable Langfuse tracing
   success_callback: ["langfuse"]
   failure_callback: ["langfuse"]
-  # Optional: cache settings if needed
-  # cache: true
-  # cache_params:
-  #   type: redis

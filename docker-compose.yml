@@ -44,6 +44,8 @@ services:
       - CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
       - LLM_BASE_URL=http://ai-platform:4000/v1
       - LLM_API_KEY=sk-proxy-dummy
+      - LLM_PRIMARY_MODEL=gemini-2.0-flash
+      - LLM_FALLBACK_MODEL=gemini-2.0-flash-lite
       - LLM_EMBEDDING_MODEL=text-embedding-3-large
     depends_on:
       db:
@@ -63,6 +65,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - LLM_BASE_URL=http://ai-platform:4000/v1
       - LLM_API_KEY=sk-proxy-dummy
+      - LLM_PRIMARY_MODEL=gemini-2.0-flash
+      - LLM_FALLBACK_MODEL=gemini-2.0-flash-lite
       - LLM_EMBEDDING_MODEL=text-embedding-3-large
     depends_on:
       db:
@@ -99,11 +103,13 @@ services:
     volumes:
       - ./infra/ai-platform/config.yaml:/app/config.yaml
     environment:
-      # Use same DB if you want to store LiteLLM budgets/keys, or an ephemeral run
-      # - DATABASE_URL=your_passwordql://your_password:your_password@db:5432/airex
-      # If using Vertex AI / GCP:
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-sa.json
-      # If using OpenAI / Anthropic:
+      # If using Gemini (Google AI Studio API Key)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # If using AWS Bedrock
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION_NAME=${AWS_REGION_NAME:-us-east-1}
+      # If using OpenAI (for embeddings)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # Langfuse Observability Credentials
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
