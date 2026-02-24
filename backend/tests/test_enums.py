@@ -11,10 +11,17 @@ class TestIncidentState:
 
     def test_all_expected_states_exist(self):
         expected = {
-            "RECEIVED", "INVESTIGATING", "RECOMMENDATION_READY",
-            "AWAITING_APPROVAL", "EXECUTING", "VERIFYING", "RESOLVED",
-            "FAILED_ANALYSIS", "FAILED_EXECUTION", "FAILED_VERIFICATION",
-            "ESCALATED",
+            "RECEIVED",
+            "INVESTIGATING",
+            "RECOMMENDATION_READY",
+            "AWAITING_APPROVAL",
+            "EXECUTING",
+            "VERIFYING",
+            "RESOLVED",
+            "FAILED_ANALYSIS",
+            "FAILED_EXECUTION",
+            "FAILED_VERIFICATION",
+            "REJECTED",
         }
         actual = {s.value for s in IncidentState}
         assert actual == expected

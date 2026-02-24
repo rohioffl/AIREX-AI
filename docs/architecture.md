@@ -16,19 +16,19 @@ AIREX (Autonomous Incident Resolution Engine Xecution) is an autonomous SRE plat
   RECEIVED
      │
      ▼
-INVESTIGATING ──────▶ FAILED_ANALYSIS
-     │                     │
-     ▼                     ▼ (retry)
-RECOMMENDATION_READY       │
-     │                     │
-     ▼                ◄────┘
-AWAITING_APPROVAL ──────▶ ESCALATED
+INVESTIGATING ──────▶ FAILED_ANALYSIS ───┐
+     │                                    │
+     ▼                                    ▼
+RECOMMENDATION_READY ───────────────▶ REJECTED (manual review)
      │
      ▼
-  EXECUTING ──────────▶ FAILED_EXECUTION
+AWAITING_APPROVAL ────────────────▶ REJECTED
      │
      ▼
-  VERIFYING ──────────▶ FAILED_VERIFICATION
+  EXECUTING ──────────▶ FAILED_EXECUTION ──▶ REJECTED
+     │
+     ▼
+  VERIFYING ──────────▶ FAILED_VERIFICATION ──▶ REJECTED
      │
      ▼
   RESOLVED

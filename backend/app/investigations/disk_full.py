@@ -1,12 +1,15 @@
 """
 Investigation plugin for disk full alerts.
 
-Simulates collecting real disk metrics.
+Generates deterministic, problem-consistent evidence for disk-full incidents.
+File sizes are derived from the disk usage percentage to ensure consistency.
 """
 
-import random
-
-from app.investigations.base import BaseInvestigation, InvestigationResult
+from app.investigations.base import (
+    BaseInvestigation,
+    InvestigationResult,
+    _make_seeded_rng,
+)
 
 
 class DiskFullInvestigation(BaseInvestigation):
@@ -15,19 +18,36 @@ class DiskFullInvestigation(BaseInvestigation):
     alert_type = "disk_full"
 
     async def investigate(self, incident_meta: dict) -> InvestigationResult:
-        host = incident_meta.get("host") or incident_meta.get("monitor_name", "unknown-host")
-        disk_pct = incident_meta.get("disk_percent", random.randint(90, 99))
+        host = incident_meta.get("host") or incident_meta.get(
+            "monitor_name", "unknown-host"
+        )
+        rng = _make_seeded_rng(incident_meta)
+
+        # Primary metric: Disk MUST be near-full (this IS a disk_full alert)
+        disk_pct = incident_meta.get("disk_percent") or rng.randint(91, 98)
 
         total_gb = 100
         used_gb = int(total_gb * disk_pct / 100)
         avail_gb = total_gb - used_gb
 
+        # File sizes must add up to something plausible relative to used_gb
+        # Main culprit should be large (application logs)
+        main_log_gb = rng.randint(
+            max(int(used_gb * 0.3), 15), max(int(used_gb * 0.5), 25)
+        )
+        syslog_gb = rng.randint(max(int(used_gb * 0.1), 3), max(int(used_gb * 0.2), 12))
+        heap_dump_gb = rng.randint(2, 8)
+        nginx_log_gb = rng.randint(1, 5)
+
         large_files = [
-            {"size": f"{random.randint(5, 30)}G", "path": "/var/log/app/application.log"},
-            {"size": f"{random.randint(2, 15)}G", "path": "/var/log/syslog.1"},
-            {"size": f"{random.randint(1, 8)}G", "path": "/tmp/heap_dump_20260215.hprof"},
-            {"size": f"{random.randint(1, 5)}G", "path": "/var/log/nginx/access.log"},
+            {"size": f"{main_log_gb}G", "path": "/var/log/app/application.log"},
+            {"size": f"{syslog_gb}G", "path": "/var/log/syslog.1"},
+            {"size": f"{heap_dump_gb}G", "path": "/tmp/heap_dump_20260215.hprof"},
+            {"size": f"{nginx_log_gb}G", "path": "/var/log/nginx/access.log"},
         ]
+
+        # Inode usage should be moderate-to-high for disk full scenarios
+        inode_pct = rng.randint(35, 70)
 
         output_lines = [
             f"=== Disk Investigation: {host} ===",
@@ -43,7 +63,7 @@ class DiskFullInvestigation(BaseInvestigation):
 
         output_lines += [
             f"",
-            f"Inode usage: {random.randint(20, 60)}%",
+            f"Inode usage: {inode_pct}%",
             f"",
             f"Diagnosis: Disk at {disk_pct}% — primary culprit is application logs.",
             f"Recommendation: Rotate/clear old log files to free space.",

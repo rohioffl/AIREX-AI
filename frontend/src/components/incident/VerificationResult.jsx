@@ -1,6 +1,6 @@
-import { Loader, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
+import { Loader, CheckCircle, XCircle } from 'lucide-react'
 
-const SHOW_STATES = new Set(['VERIFYING', 'RESOLVED', 'FAILED_VERIFICATION', 'ESCALATED'])
+const SHOW_STATES = new Set(['VERIFYING', 'RESOLVED', 'FAILED_VERIFICATION'])
 
 const CONFIGS = {
   VERIFYING: {
@@ -38,18 +38,6 @@ const CONFIGS = {
     title: 'Verification Failed',
     titleColor: '#fb7185',
     desc: 'System still reporting issues. Manual intervention may be required.',
-  },
-  ESCALATED: {
-    border: '#f59e0b',
-    bg: 'rgba(245,158,11,0.03)',
-    Icon: AlertTriangle,
-    iconClass: '',
-    iconBg: 'rgba(245,158,11,0.1)',
-    iconBorder: 'rgba(245,158,11,0.2)',
-    iconColor: '#fbbf24',
-    title: 'Escalated',
-    titleColor: '#fbbf24',
-    desc: 'Escalated to SRE on-call for manual resolution.',
   },
 }
 

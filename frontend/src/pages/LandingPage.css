@@ -27,32 +27,88 @@
   background: var(--airex-bg);
 }
 
-/* ── Image zone: one fixed bg, one light global tint so section overlays feel cohesive ── */
+/* ── Image zone: container for animated bg and content ── */
 .airex-image-zone {
   position: relative;
-  background-repeat: no-repeat;
-  background-position: center center;
-  background-size: cover;
-  background-attachment: fixed;
   background-color: var(--airex-bg);
+  overflow: hidden; /* contain the zoomed image */
+}
+
+/* Cinematic Background Movement */
+@keyframes ken-burns {
+  0% { transform: scale(1) translate(0, 0); }
+  50% { transform: scale(1.05) translate(-2%, -1%); } /* Reduced scale for subtle movement */
+  100% { transform: scale(1) translate(0, 0); }
+}
+
+.airex-cinematic-bg {
+  position: fixed; /* Fixed to viewport so it doesn't scroll away */
+  inset: -5%; /* Larger buffer for movement */
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+  animation: ken-burns 60s ease-in-out infinite; /* Slower animation for elegance */
+  pointer-events: none;
+  will-change: transform;
+}
+
+.airex-image-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('https://grainy-gradients.vercel.app/noise.svg');
+  opacity: 0.1;
+  pointer-events: none;
+  z-index: 1;
+  animation: noise-drift 20s ease-in-out infinite;
+  will-change: transform;
+  filter: contrast(1.2) brightness(0.9);
+}
+
+@keyframes noise-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-2px, 1px) scale(1.01); }
+  50% { transform: translate(1px, -2px) scale(1); }
+  75% { transform: translate(-1px, 2px) scale(1.01); }
 }
 
 .airex-image-zone::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 120% 80% at 50% 30%,
-      transparent 0%,
-      rgba(11, 17, 32, 0.12) 70%,
-      rgba(11, 17, 32, 0.18) 100%);
+  background: linear-gradient(to right,
+      rgba(11, 17, 32, 0.4) 0%,
+      rgba(11, 17, 32, 0.25) 25%,
+      rgba(11, 17, 32, 0.15) 50%,
+      rgba(11, 17, 32, 0.1) 75%,
+      rgba(11, 17, 32, 0.05) 100%);
   pointer-events: none;
-  z-index: 0;
-}
-
-.airex-image-zone>*:not(.airex-landing-header) {
-  position: relative;
   z-index: 1;
 }
+
+.airex-image-zone > *:not(.airex-landing-header):not(.airex-cinematic-bg) {
+  position: relative;
+  z-index: 3;
+  isolation: isolate;
+}
+
+/* ── Scroll Reveal Animation ── */
+.airex-reveal {
+  opacity: 0;
+  transform: translateY(60px) scale(0.95);
+  transition: opacity 0.8s ease-out, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.airex-reveal.active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Stagger delays for children if needed */
+.airex-reveal-stagger-1 { transition-delay: 0.1s; }
+.airex-reveal-stagger-2 { transition-delay: 0.2s; }
+.airex-reveal-stagger-3 { transition-delay: 0.3s; }
 
 /* ── Shared container ── */
 .airex-container {
@@ -79,14 +135,12 @@
   pointer-events: none;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  align-items: center;
-  padding-top: 5rem;
+  align-items: flex-start;
+  padding-top: 25vh;
   /* space for fixed header */
   box-sizing: border-box;
   background: linear-gradient(to right,
-      rgba(11, 17, 32, 0.5) 0%,
-      rgba(11, 17, 32, 0.2) 35%,
-      transparent 55%);
+      transparent 60%);
 }
 
 .airex-content-overlay * {
@@ -176,6 +230,8 @@
   padding: 2rem 2rem 2rem clamp(2rem, 8vw, 4rem);
   max-width: 520px;
   margin: 0;
+  position: relative;
+  z-index: 11;
 }
 
 .airex-hero-badge {
@@ -184,8 +240,8 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--airex-blue);
-  background: rgba(59, 130, 246, 0.15);
+  color: #ffffff;;
+  background: rgba(32, 32, 207, 0.15);
   border: 1px solid rgba(59, 130, 246, 0.35);
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
@@ -195,27 +251,30 @@
 .airex-hero-title {
   font-size: clamp(2rem, 5vw, 3.5rem);
   font-weight: 700;
-  color: var(--airex-white);
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-  margin: 0 0 0.35rem;
-  text-shadow: 0 0 60px rgba(59, 130, 246, 0.3);
+  color: #F9FAFB;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  isolation: isolate;
 }
 
 .airex-hero-abbr {
   font-size: 0.8rem;
   font-weight: 500;
-  color: var(--airex-muted);
+  color: var(--airex-white);
   margin: 0 0 0.75rem;
   letter-spacing: 0.02em;
+  opacity: 0.9;
 }
 
 .airex-hero-subtitle {
   font-size: clamp(1rem, 2.5vw, 1.125rem);
-  color: rgba(249, 250, 251, 0.8);
+  color: #F9FAFB;
   font-weight: 400;
   margin: 0 0 2rem;
   line-height: 1.5;
+  isolation: isolate;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .airex-hero-cta {
@@ -263,39 +322,39 @@
   border-color: var(--airex-purple);
 }
 
-/* ── Bg section: bg from .airex-image-zone ── */
-.airex-bg-section {
+/* ── Parallel Block: Lifecycle & Integrations ── */
+.airex-parallel-section {
   position: relative;
-  min-height: 50vh;
-  padding: 2rem 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
   z-index: 2;
+  padding: 4rem 1.5rem;
+  overflow: visible;
 }
 
-/* Same fade as hero – fades out at bottom so no dark band before Integrations ── */
-.airex-bg-section-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to right, rgba(11, 17, 32, 0.48) 0%, transparent 65%);
-  mask-image: linear-gradient(to bottom, black 0%, black 72%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 72%, transparent 100%);
+.airex-parallel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
 .airex-bg-section-content {
   position: relative;
-  z-index: 1;
-  padding: 4rem clamp(2rem, 8vw, 4rem);
-  max-width: 480px;
+  z-index: 3;
+  max-width: 440px;
+  margin-left: -8rem;
+  margin-right: -20px;
+  isolation: isolate;
 }
 
 .airex-bg-section-lead {
   font-size: clamp(1.25rem, 2.5vw, 1.5rem);
   font-weight: 600;
-  color: var(--airex-white);
+  color: #F9FAFB;
   margin: 0 0 1.5rem;
   line-height: 1.35;
+  isolation: isolate;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .airex-bg-section-list {
@@ -306,11 +365,13 @@
 
 .airex-bg-section-list li {
   font-size: 1rem;
-  color: var(--airex-muted);
+  color: #F9FAFB;
   padding: 0.5rem 0;
   padding-left: 1.5rem;
   position: relative;
   line-height: 1.4;
+  opacity: 0.95;
+  isolation: isolate;
 }
 
 .airex-bg-section-list li::before {
@@ -324,84 +385,80 @@
   background: var(--airex-blue);
 }
 
-/* ── Integrations: bg from .airex-image-zone, content left, cube clear ── */
-.airex-integrations-bg {
-  position: relative;
-  min-height: 50vh;
-  padding: 2rem 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  z-index: 2;
-}
-
-/* Same fade as hero – fades in from top so no dark band after One platform ── */
-.airex-integrations-bg-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to right, rgba(11, 17, 32, 0.48) 0%, transparent 65%);
-  mask-image: linear-gradient(to bottom, transparent 0%, black 28%, black 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 28%, black 100%);
-}
-
 .airex-integrations-bg-content {
   position: relative;
-  z-index: 1;
-  padding: 4rem clamp(2rem, 8vw, 4rem);
-  max-width: 420px;
+  z-index: 3;
+  max-width: 440px;
+  justify-self: end;
+  text-align: right;
+  overflow: visible;
+  word-wrap: break-word;
+  margin-right: -2rem;
+  isolation: isolate;
 }
 
 .airex-integrations-bg-title {
   font-size: clamp(1.5rem, 3vw, 2rem);
   font-weight: 700;
-  color: var(--airex-white);
+  color: #F9FAFB;
   margin: 0 0 0.5rem;
   letter-spacing: -0.02em;
+  isolation: isolate;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .airex-integrations-bg-lead {
   font-size: 1rem;
-  color: var(--airex-muted);
+  color: #F9FAFB;
   margin: 0 0 1.5rem;
   line-height: 1.45;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  opacity: 0.95;
+  isolation: isolate;
 }
 
 .airex-integrations-bg-list {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  align-items: flex-end;
 }
 
-.airex-integrations-bg .airex-integration-item {
-  background: rgba(11, 17, 32, 0.35);
+.airex-integration-item {
+  background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 1rem 1.25rem;
   color: var(--airex-white);
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  transition: all 0.3s ease;
+  width: fit-content;
 }
 
-.airex-integrations-bg .airex-integration-item:hover {
-  background: rgba(11, 17, 32, 0.5);
+.airex-integration-item:hover {
+  background: rgba(255, 255, 255, 0.06);
   border-color: rgba(139, 92, 246, 0.3);
+  transform: translateX(-4px);
 }
 
-.airex-integrations-bg .airex-integration-icon {
+.airex-integration-icon {
   color: var(--airex-purple);
   flex-shrink: 0;
 }
 
-.airex-integrations-bg .airex-integration-name {
+.airex-integration-name {
   font-weight: 600;
   font-size: 0.9375rem;
   color: var(--airex-white);
 }
 
-.airex-integrations-bg .airex-integration-type {
+.airex-integration-type {
   font-size: 0.8125rem;
   color: rgba(249, 250, 251, 0.85);
   margin-left: 0.25rem;
@@ -865,6 +922,25 @@
   .airex-steps {
     grid-template-columns: 1fr;
     gap: 1rem;
+  }
+
+  .airex-parallel-grid {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  .airex-bg-section-content, 
+  .airex-integrations-bg-content {
+    max-width: 100%;
+    justify-self: start;
+    text-align: center;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .airex-bg-section-list {
+    text-align: left;
+    display: inline-block;
   }
 
   .airex-stats-grid {

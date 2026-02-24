@@ -14,7 +14,7 @@ An **Autonomous SRE Platform** that reduces MTTR by closing the loop between det
 3.  **AI Analysis**: Uses LiteLLM (Local -> Gemini Pro fallback) to determine root cause and suggest logic.
 4.  **Human Approval**: Policy-based gating. SRE authorizes actions via the [Frontend Dashboard](docs/frontend_skill.md).
 5.  **Execution**: deterministic, mapped actions (e.g., `restart_service`) run in isolated environments.
-6.  **Verification**: Post-execution health checks ensure resolution. Retries or escalates if failed.
+6.  **Verification**: Post-execution health checks ensure resolution. Retries or routes to manual review (`REJECTED`) if failed.
 
 ### 🛠 Tech Stack
 -   **Backend**: FastAPI (Async), SQLAlchemy 2.0 (Async), Alembic, Redis (ARQ/Celery).

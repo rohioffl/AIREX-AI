@@ -7,7 +7,9 @@ creates incidents, and queues async investigation.
 
 import hashlib
 import json as _json
-from datetime import datetime, timezone
+import re
+import uuid
+from datetime import datetime, timedelta, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -22,13 +24,28 @@ from app.schemas.webhook import GenericWebhookPayload, Site24x7Payload
 from app.core.events import emit_incident_created
 from app.core.metrics import incident_created_total
 from app.core.state_machine import transition_state
-from app.cloud.tag_parser import parse_tags, merge_context_into_meta, discover_and_enrich
+from app.cloud.tag_parser import (
+    parse_tags,
+    merge_context_into_meta,
+    discover_and_enrich,
+)
 
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+# ── Repeated alert handling ───────────────────────────────────
+# Keep the 5-minute idempotency bucket, but instead of skipping duplicates,
+# enrich the existing incident with alert_count/last_seen/metrics.
+_IDEM_TTL_SECONDS = 600
+_COOLDOWN_SILENCE_SECONDS = 30 * 60
+
+# Track last few UP/DOWN states to detect flapping.
+_FLAP_HISTORY_SIZE = 5
+_FLAP_TTL_SECONDS = 60 * 60
 
 # ── Severity mapping ─────────────────────────────────────────
 SEVERITY_MAP: dict[str, SeverityLevel] = {
@@ -64,6 +81,25 @@ MONITOR_TYPE_MAP: dict[str, str] = {
     "ftp": "ftp_check",
 }
 
+GENERIC_MONITOR_TYPES = {
+    "healthcheck",
+    "http_check",
+    "heartbeat_check",
+    "network_issue",
+    "cloud_check",
+    "api_check",
+}
+
+_KEYWORD_ALERT_OVERRIDES: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\b(cpu|processor|load average|load)\b", re.IGNORECASE), "cpu_high"),
+    (re.compile(r"\b(memory|ram|oom)\b", re.IGNORECASE), "memory_high"),
+    (re.compile(r"\b(disk|filesystem|storage|inode)\b", re.IGNORECASE), "disk_full"),
+    (
+        re.compile(r"\b(latency|packet|ping|network|throughput)\b", re.IGNORECASE),
+        "network_check",
+    ),
+]
+
 
 def _generate_idempotency_key(
     alert_type: str, resource_id: str, time_window: str
@@ -87,6 +123,172 @@ def _map_site24x7_alert_type(monitor_type: str) -> str:
         if k in key:
             return v
     return monitor_type.lower().replace(" ", "_")
+
+
+def _refine_alert_type(
+    base_type: str,
+    monitor_type: str,
+    incident_reason: str | None,
+    cloud_ctx,
+) -> tuple[str, dict | None]:
+    """Use heuristics (reason text, tags) to override generic alert types."""
+    override_info = None
+    if base_type not in GENERIC_MONITOR_TYPES:
+        return base_type, override_info
+
+    text_blobs = [monitor_type or "", incident_reason or ""]
+    if getattr(cloud_ctx, "extra_tags", None):
+        text_blobs.extend(
+            f"{k}:{v}" if v else k for k, v in cloud_ctx.extra_tags.items()
+        )
+    haystack = " ".join(text_blobs).lower()
+
+    for pattern, mapped_type in _KEYWORD_ALERT_OVERRIDES:
+        if pattern.search(haystack):
+            override_info = {
+                "from": base_type,
+                "match": pattern.pattern,
+                "source": "keywords",
+            }
+            return mapped_type, override_info
+
+    return base_type, override_info
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utcnow_iso() -> str:
+    return _utcnow().isoformat()
+
+
+def _parse_iso_dt(value: str) -> datetime | None:
+    if not value:
+        return None
+    v = value.strip()
+    if v.endswith("Z"):
+        v = v[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(v)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return None
+
+
+def _is_flapping(last_states: list[str]) -> bool:
+    if len(last_states) < _FLAP_HISTORY_SIZE:
+        return False
+    window = [s.upper() for s in last_states[-_FLAP_HISTORY_SIZE:]]
+    return window == ["DOWN", "UP", "DOWN", "UP", "DOWN"]
+
+
+async def _track_flap(
+    redis, tenant_id: uuid.UUID, monitor_id: str, status_str: str
+) -> dict:
+    """Store status history in Redis and return flap summary."""
+    key = f"flap:{tenant_id}:{monitor_id}"
+    raw = await redis.get(key)
+    history: list[dict] = []
+    if raw:
+        try:
+            decoded = raw.decode() if isinstance(raw, (bytes, bytearray)) else raw
+            history = _json.loads(decoded) or []
+        except Exception:
+            history = []
+
+    history.append({"s": status_str.upper(), "t": _utcnow_iso()})
+    if len(history) > _FLAP_HISTORY_SIZE:
+        history = history[-_FLAP_HISTORY_SIZE:]
+
+    await redis.set(key, _json.dumps(history), ex=_FLAP_TTL_SECONDS)
+    last_states = [h.get("s", "") for h in history if isinstance(h, dict)]
+    return {
+        "last_states": last_states,
+        "transition_count": len(last_states),
+        "is_flapping": _is_flapping(last_states),
+    }
+
+
+def _extract_metric_sample(
+    alert_type: str, incident_reason: str | None
+) -> tuple[str, float] | None:
+    """Best-effort numeric extraction from Site24x7 incident_reason."""
+    if not incident_reason:
+        return None
+
+    percents = [
+        float(x) for x in re.findall(r"(\d{1,3}(?:\.\d+)?)\s*%", incident_reason)
+    ]
+    if not percents:
+        return None
+
+    sample = max(percents)
+    if alert_type == "cpu_high":
+        return ("cpu_percent", sample)
+    if alert_type in {"memory_high"}:
+        return ("memory_percent", sample)
+    if alert_type in {"disk_full"}:
+        return ("disk_percent", sample)
+    return ("percent", sample)
+
+
+def _enrich_meta_for_repeat(
+    meta: dict | None,
+    *,
+    status_str: str,
+    flap: dict,
+    alert_type: str,
+    incident_reason: str | None,
+) -> dict:
+    now = _utcnow()
+    m: dict = dict(meta) if meta else {}
+
+    first_seen = _parse_iso_dt(str(m.get("_alert_first_seen_at", "")))
+    if not first_seen:
+        first_seen = now
+        m["_alert_first_seen_at"] = first_seen.isoformat()
+
+    m["_alert_last_seen_at"] = now.isoformat()
+    m["_alert_last_status"] = status_str.upper()
+
+    try:
+        m["_alert_count"] = int(m.get("_alert_count", 0)) + 1
+    except Exception:
+        m["_alert_count"] = 1
+
+    m["_alert_duration_seconds"] = int((now - first_seen).total_seconds())
+
+    # Flap metadata (does NOT change incident.state)
+    m["_flap_last_5_states"] = flap.get("last_states", [])
+    m["_flap_transition_count"] = int(flap.get("transition_count", 0) or 0)
+    m["_unstable"] = bool(flap.get("is_flapping"))
+
+    # Metric enrichment (optional)
+    sample = _extract_metric_sample(alert_type, incident_reason)
+    if sample:
+        metric_name, value = sample
+        stats = m.setdefault("_alert_stats", {})
+        ms = stats.setdefault(metric_name, {"count": 0, "sum": 0.0, "peak": None})
+        ms["count"] = int(ms.get("count", 0)) + 1
+        ms["sum"] = float(ms.get("sum", 0.0)) + float(value)
+        prev_peak = ms.get("peak")
+        if prev_peak is None or float(value) > float(prev_peak):
+            ms["peak"] = float(value)
+        ms["avg"] = float(ms["sum"]) / float(ms["count"])
+
+    return m
+
+
+def _is_stale_for_cooldown(incident: Incident) -> bool:
+    now = _utcnow()
+    meta = incident.meta or {}
+    last_seen = _parse_iso_dt(str(meta.get("_alert_last_seen_at", "")))
+    if not last_seen:
+        last_seen = incident.updated_at or incident.created_at
+    return (now - last_seen) > timedelta(seconds=_COOLDOWN_SILENCE_SECONDS)
 
 
 async def _parse_site24x7_payload(request: Request) -> Site24x7Payload:
@@ -117,6 +319,7 @@ async def _parse_site24x7_payload(request: Request) -> Site24x7Payload:
     # Form-urlencoded: Site24x7 sometimes sends the entire JSON as a form key
     if "=" in body_str or "application/x-www-form-urlencoded" in content_type:
         from urllib.parse import parse_qs, unquote
+
         parsed = parse_qs(body_str)
         # Case 1: JSON string is the first key (no =value)
         for key in parsed:
@@ -151,11 +354,16 @@ async def ingest_site24x7(
 
     Accepts both JSON and form-urlencoded payloads.
 
+    Tenant identification (priority order):
+      1. JWT Bearer token with tenant_id claim
+      2. X-Tenant-Id HTTP header (UUID)
+      3. DEV_TENANT_ID fallback (single-tenant mode)
+
     Configure in Site24x7:
       Admin → IT Automation → Webhooks
       URL: https://<your-domain>/api/v1/webhooks/site24x7
       Method: POST
-      Headers: X-Tenant-Id: <your-tenant-uuid>
+      Tags: optional (no tenant tag required in single-tenant mode)
     """
     payload = await _parse_site24x7_payload(request)
     monitor_name = payload.get_monitor_name()
@@ -163,6 +371,20 @@ async def ingest_site24x7(
     monitor_type = payload.get_monitor_type()
     monitor_id = payload.get_monitor_id()
     incident_reason = payload.get_incident_reason()
+
+    # ── Parse cloud tags early to resolve tenant_id ──────────────
+    # Site24x7 sends TAGS as either a comma-string or a JSON array.
+    # Parsing before UP/idempotency/active-incident checks ensures
+    # all DB operations use the correct tenant_id (not DEV_TENANT_ID).
+    raw_tags = payload.TAGS or payload.MONITOR_TAGS or ""
+    if isinstance(raw_tags, list):
+        raw_tags = ",".join(str(t) for t in raw_tags)
+    cloud_ctx = parse_tags(raw_tags)
+
+    # Track status history for flapping detection (UP and DOWN)
+    flap = await _track_flap(
+        redis, tenant_id=tenant_id, monitor_id=monitor_id, status_str=status_str
+    )
 
     # Skip "UP" status alerts — these are recovery notifications
     if status_str.lower() == "up":
@@ -173,20 +395,35 @@ async def ingest_site24x7(
         )
         # Find active incident for this monitor and resolve it
         result = await session.execute(
-            select(Incident).where(
+            select(Incident)
+            .where(
                 Incident.tenant_id == tenant_id,
-                Incident.state.notin_([
-                    IncidentState.RESOLVED,
-                    IncidentState.ESCALATED,
-                ]),
+                Incident.state.notin_(
+                    [
+                        IncidentState.RESOLVED,
+                    ]
+                ),
                 Incident.deleted_at.is_(None),
-            ).order_by(Incident.created_at.desc()).limit(1)
+            )
+            .order_by(Incident.created_at.desc())
+            .limit(1)
         )
         active = result.scalar_one_or_none()
         if active:
             try:
+                active.meta = _enrich_meta_for_repeat(
+                    active.meta,
+                    status_str=status_str,
+                    flap=flap,
+                    alert_type=_map_site24x7_alert_type(monitor_type),
+                    incident_reason=incident_reason,
+                )
+                flag_modified(active, "meta")
+                session.add(active)
                 await transition_state(
-                    session, active, IncidentState.RESOLVED,
+                    session,
+                    active,
+                    IncidentState.RESOLVED,
                     reason=f"Site24x7 recovery: {monitor_name} is UP",
                     actor="site24x7_webhook",
                 )
@@ -196,62 +433,159 @@ async def ingest_site24x7(
 
         # No active incident to resolve — return a dummy response
         import uuid as _uuid
+
         return IncidentCreatedResponse(
             incident_id=_uuid.UUID("00000000-0000-0000-0000-000000000000")
         )
 
     alert_type = _map_site24x7_alert_type(monitor_type)
+    alert_type, override_info = _refine_alert_type(
+        alert_type, monitor_type, incident_reason, cloud_ctx
+    )
+    if override_info:
+        logger.info(
+            "alert_type_overridden",
+            original_alert_type=override_info["from"],
+            new_alert_type=alert_type,
+            monitor_type=monitor_type,
+            incident_reason=incident_reason,
+        )
     severity = SEVERITY_MAP.get(status_str.lower(), SeverityLevel.MEDIUM)
 
     # Idempotency: reject duplicate alerts within same 5-min window
     idem_key = _generate_idempotency_key(alert_type, monitor_id, _time_window())
     existing = await redis.get(f"idem:{tenant_id}:{idem_key}")
     if existing:
+        decoded = (
+            existing.decode()
+            if isinstance(existing, (bytes, bytearray))
+            else str(existing)
+        )
+        try:
+            existing_id = uuid.UUID(decoded)
+        except ValueError:
+            logger.info(
+                "duplicate_webhook_rejected",
+                tenant_id=str(tenant_id),
+                idempotency_key=idem_key,
+            )
+            raise HTTPException(
+                status_code=500, detail="Invalid idempotency incident id"
+            )
+
+        # Enrich the existing incident instead of skipping.
+        try:
+            result = await session.execute(
+                select(Incident).where(
+                    Incident.tenant_id == tenant_id,
+                    Incident.id == existing_id,
+                    Incident.deleted_at.is_(None),
+                )
+            )
+            dup_incident = result.scalar_one_or_none()
+            if dup_incident:
+                dup_incident.meta = _enrich_meta_for_repeat(
+                    dup_incident.meta,
+                    status_str=status_str,
+                    flap=flap,
+                    alert_type=alert_type,
+                    incident_reason=incident_reason,
+                )
+                flag_modified(dup_incident, "meta")
+                session.add(dup_incident)
+                await session.flush()
+        except Exception:
+            logger.warning(
+                "enrichment_flush_failed", incident_id=str(existing_id), exc_info=True
+            )
+
+        # Refresh TTL so rapid repeats keep enriching the same incident.
+        await redis.set(
+            f"idem:{tenant_id}:{idem_key}", str(existing_id), ex=_IDEM_TTL_SECONDS
+        )
         logger.info(
-            "duplicate_webhook_rejected",
+            "duplicate_webhook_enriched",
             tenant_id=str(tenant_id),
+            incident_id=str(existing_id),
             idempotency_key=idem_key,
         )
-        return IncidentCreatedResponse(
-            incident_id=existing.decode() if isinstance(existing, bytes) else existing
-        )
+        return IncidentCreatedResponse(incident_id=existing_id)
 
     # Check for active incident on same monitor (use first() — there may be multiples)
     result = await session.execute(
-        select(Incident).where(
+        select(Incident)
+        .where(
             Incident.tenant_id == tenant_id,
             Incident.alert_type == alert_type,
-            Incident.state.notin_([
-                IncidentState.RESOLVED,
-                IncidentState.ESCALATED,
-                IncidentState.FAILED_ANALYSIS,
-                IncidentState.FAILED_EXECUTION,
-                IncidentState.FAILED_VERIFICATION,
-            ]),
+            Incident.state.notin_(
+                [
+                    IncidentState.RESOLVED,
+                    IncidentState.FAILED_ANALYSIS,
+                    IncidentState.FAILED_EXECUTION,
+                    IncidentState.FAILED_VERIFICATION,
+                ]
+            ),
             Incident.deleted_at.is_(None),
-        ).order_by(Incident.created_at.desc()).limit(1)
+        )
+        .order_by(Incident.created_at.desc())
+        .limit(1)
     )
     active = result.scalar_one_or_none()
     if active:
-        logger.info(
-            "active_incident_exists",
-            tenant_id=str(tenant_id),
-            incident_id=str(active.id),
-        )
-        return IncidentCreatedResponse(incident_id=active.id)
+        # Cooldown window: if the incident has been silent long enough,
+        # treat this as a new occurrence instead of keeping one incident open forever.
+        if not _is_stale_for_cooldown(active):
+            active.meta = _enrich_meta_for_repeat(
+                active.meta,
+                status_str=status_str,
+                flap=flap,
+                alert_type=alert_type,
+                incident_reason=incident_reason,
+            )
+            flag_modified(active, "meta")
+            session.add(active)
+            await session.flush()
+            logger.info(
+                "active_incident_enriched",
+                tenant_id=str(tenant_id),
+                incident_id=str(active.id),
+            )
+            return IncidentCreatedResponse(incident_id=active.id)
+
+        try:
+            cooldown_meta = dict(active.meta) if active.meta else {}
+            cooldown_meta["_cooldown_stale"] = True
+            cooldown_meta["_cooldown_last_seen_at"] = str(
+                cooldown_meta.get("_alert_last_seen_at") or ""
+            )
+            active.meta = cooldown_meta
+            flag_modified(active, "meta")
+            session.add(active)
+            await session.flush()
+        except Exception:
+            logger.warning(
+                "cooldown_meta_flush_failed", incident_id=str(active.id), exc_info=True
+            )
 
     # Build rich meta from Site24x7 payload
     meta = payload.model_dump(exclude_none=True)
     meta["_source"] = "site24x7"
     meta["monitor_name"] = monitor_name
     meta["host"] = monitor_name
+    meta["_source_monitor_type"] = monitor_type
+    if override_info:
+        meta["_alert_type_override"] = override_info
 
-    # Parse cloud tags (cloud:gcp, tenant:name, ip:10.x.x.x, etc.)
-    # Site24x7 sends TAGS as either a comma-string or a JSON array
-    raw_tags = payload.TAGS or payload.MONITOR_TAGS or ""
-    if isinstance(raw_tags, list):
-        raw_tags = ",".join(str(t) for t in raw_tags)
-    cloud_ctx = parse_tags(raw_tags)
+    # Initialize repeated-alert tracking fields for the new incident
+    meta = _enrich_meta_for_repeat(
+        meta,
+        status_str=status_str,
+        flap=flap,
+        alert_type=alert_type,
+        incident_reason=incident_reason,
+    )
+
+    # cloud_ctx and raw_tags already parsed above (before UP check)
 
     # Auto-fill IP from payload fields if not in tags
     if not cloud_ctx.private_ip:
@@ -289,10 +623,7 @@ async def ingest_site24x7(
 
     # Host key links related incidents (same server: CPU + memory alerts)
     host_key = (
-        meta.get("_private_ip")
-        or meta.get("_instance_id")
-        or meta.get("host")
-        or None
+        meta.get("_private_ip") or meta.get("_instance_id") or meta.get("host") or None
     )
     if host_key and not isinstance(host_key, str):
         host_key = str(host_key)
@@ -316,7 +647,9 @@ async def ingest_site24x7(
     await session.flush()
 
     await transition_state(
-        session, incident, IncidentState.INVESTIGATING,
+        session,
+        incident,
+        IncidentState.INVESTIGATING,
         reason=f"Site24x7 webhook: {monitor_name} - {status_str}",
         actor="site24x7_webhook",
     )
@@ -325,7 +658,7 @@ async def ingest_site24x7(
     await redis.set(
         f"idem:{tenant_id}:{idem_key}",
         str(incident.id),
-        ex=600,
+        ex=_IDEM_TTL_SECONDS,
     )
 
     # Metrics + SSE
@@ -397,16 +730,22 @@ async def ingest_generic(
     )
     existing = await redis.get(f"idem:{tenant_id}:{idem_key}")
     if existing:
-        return IncidentCreatedResponse(
-            incident_id=existing.decode() if isinstance(existing, bytes) else existing
+        decoded = (
+            existing.decode()
+            if isinstance(existing, (bytes, bytearray))
+            else str(existing)
         )
+        try:
+            existing_id = uuid.UUID(decoded)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=500, detail="Invalid idempotency incident id"
+            ) from exc
+        return IncidentCreatedResponse(incident_id=existing_id)
 
     meta = payload.meta or {}
     host_key = (
-        meta.get("_private_ip")
-        or meta.get("_instance_id")
-        or meta.get("host")
-        or None
+        meta.get("_private_ip") or meta.get("_instance_id") or meta.get("host") or None
     )
     if host_key and not isinstance(host_key, str):
         host_key = str(host_key)
@@ -425,12 +764,16 @@ async def ingest_generic(
     await session.flush()
 
     await transition_state(
-        session, incident, IncidentState.INVESTIGATING,
+        session,
+        incident,
+        IncidentState.INVESTIGATING,
         reason=f"Generic webhook: {payload.title}",
         actor="webhook_ingestion",
     )
 
-    await redis.set(f"idem:{tenant_id}:{idem_key}", str(incident.id), ex=600)
+    await redis.set(
+        f"idem:{tenant_id}:{idem_key}", str(incident.id), ex=_IDEM_TTL_SECONDS
+    )
 
     incident_created_total.labels(
         tenant_id=str(tenant_id),

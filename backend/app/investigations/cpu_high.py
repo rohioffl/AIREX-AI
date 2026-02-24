@@ -1,13 +1,16 @@
 """
 Investigation plugin for high CPU alerts.
 
-Simulates collecting real system metrics. In production, replace
-the simulation with actual SSM RunCommand / GCP OS Login calls.
+Generates deterministic, problem-consistent evidence for CPU-high incidents.
+When no cloud connectivity is available, this simulates what a real
+investigation would find: high CPU values consistent with the alert.
 """
 
-import random
-
-from app.investigations.base import BaseInvestigation, InvestigationResult
+from app.investigations.base import (
+    BaseInvestigation,
+    InvestigationResult,
+    _make_seeded_rng,
+)
 
 
 class CpuHighInvestigation(BaseInvestigation):
@@ -16,22 +19,57 @@ class CpuHighInvestigation(BaseInvestigation):
     alert_type = "cpu_high"
 
     async def investigate(self, incident_meta: dict) -> InvestigationResult:
-        host = incident_meta.get("host") or incident_meta.get("monitor_name", "unknown-host")
-        cpu_pct = incident_meta.get("cpu_percent", random.uniform(85, 99))
+        host = incident_meta.get("host") or incident_meta.get(
+            "monitor_name", "unknown-host"
+        )
+        rng = _make_seeded_rng(incident_meta)
+
+        # Primary metric: CPU MUST be high (this IS a cpu_high alert)
+        cpu_pct = incident_meta.get("cpu_percent") or rng.uniform(88, 98)
+
+        # Top process must consume most of the CPU to be consistent
+        primary_process = incident_meta.get("process", "java -jar app.jar")
+        primary_cpu = cpu_pct - rng.uniform(1, 5)  # slightly less than total
+        secondary_cpu = rng.uniform(0.5, 3.0)
+        tertiary_cpu = rng.uniform(0.1, 1.5)
 
         top_processes = [
-            {"pid": 1234, "user": "app", "cpu": f"{cpu_pct:.1f}%", "cmd": incident_meta.get("process", "java -jar app.jar")},
-            {"pid": 5678, "user": "root", "cpu": f"{random.uniform(1, 5):.1f}%", "cmd": "/usr/sbin/sshd"},
-            {"pid": 9012, "user": "nobody", "cpu": f"{random.uniform(0.1, 2):.1f}%", "cmd": "nginx: worker"},
+            {
+                "pid": 1234 + rng.randint(0, 100),
+                "user": "app",
+                "cpu": f"{primary_cpu:.1f}%",
+                "cmd": primary_process,
+            },
+            {
+                "pid": 5678 + rng.randint(0, 100),
+                "user": "root",
+                "cpu": f"{secondary_cpu:.1f}%",
+                "cmd": "/usr/sbin/sshd",
+            },
+            {
+                "pid": 9012 + rng.randint(0, 100),
+                "user": "nobody",
+                "cpu": f"{tertiary_cpu:.1f}%",
+                "cmd": "nginx: worker",
+            },
         ]
 
-        load_avg = [round(random.uniform(3, 12), 2), round(random.uniform(2, 8), 2), round(random.uniform(1, 6), 2)]
+        # Load average must be HIGH for a CPU alert (proportional to CPU usage)
+        # On a 4-core system, load avg > 4.0 indicates saturation
+        cores = 4
+        load_1m = round(cores * (cpu_pct / 100) * rng.uniform(1.0, 1.3), 2)
+        load_5m = round(load_1m * rng.uniform(0.7, 0.9), 2)
+        load_15m = round(load_5m * rng.uniform(0.6, 0.85), 2)
+
+        # Memory should be moderately high (CPU issues often correlate)
+        mem_pct = rng.randint(65, 85)
+        swap_pct = rng.randint(5, 25)
 
         output_lines = [
             f"=== CPU Investigation: {host} ===",
             f"",
-            f"Load Average (1m/5m/15m): {load_avg[0]} / {load_avg[1]} / {load_avg[2]}",
-            f"CPU Cores: 4",
+            f"Load Average (1m/5m/15m): {load_1m} / {load_5m} / {load_15m}",
+            f"CPU Cores: {cores}",
             f"Overall CPU Usage: {cpu_pct:.1f}%",
             f"",
             f"Top Processes by CPU:",
@@ -39,12 +77,14 @@ class CpuHighInvestigation(BaseInvestigation):
             f"{'---':>8} {'---':<10} {'---':>6} -------",
         ]
         for p in top_processes:
-            output_lines.append(f"{p['pid']:>8} {p['user']:<10} {p['cpu']:>6} {p['cmd']}")
+            output_lines.append(
+                f"{p['pid']:>8} {p['user']:<10} {p['cpu']:>6} {p['cmd']}"
+            )
 
         output_lines += [
             f"",
-            f"Memory: {random.randint(60, 90)}% used (of 8GB)",
-            f"Swap: {random.randint(0, 30)}% used",
+            f"Memory: {mem_pct}% used (of 8GB)",
+            f"Swap: {swap_pct}% used",
             f"",
             f"Diagnosis: High CPU driven by PID {top_processes[0]['pid']} ({top_processes[0]['cmd']})",
             f"Recommendation: Restart the service or investigate memory leaks.",

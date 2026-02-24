@@ -2,20 +2,21 @@ import { useMemo } from 'react'
 import { Check } from 'lucide-react'
 
 const STATE_ORDER = [
-  { id: 'RECEIVED',             label: 'Received',     icon: '01' },
+  { id: 'RECEIVED',             label: 'Received',      icon: '01' },
   { id: 'INVESTIGATING',        label: 'Investigating', icon: '02' },
   { id: 'RECOMMENDATION_READY', label: 'Analysis',      icon: '03' },
   { id: 'AWAITING_APPROVAL',    label: 'Approval',      icon: '04' },
   { id: 'EXECUTING',            label: 'Executing',     icon: '05' },
   { id: 'VERIFYING',            label: 'Verifying',     icon: '06' },
   { id: 'RESOLVED',             label: 'Resolved',      icon: '07' },
+  { id: 'REJECTED',             label: 'Rejected',      icon: '08' },
 ]
 
 const COLORS = {
   normal:   { active: '#6366f1', done: 'rgba(99,102,241,0.2)', doneText: '#818cf8' },
   failed:   { active: '#f43f5e', done: 'rgba(244,63,94,0.2)',  doneText: '#fb7185' },
-  escalated:{ active: '#f59e0b', done: 'rgba(245,158,11,0.2)', doneText: '#fbbf24' },
   resolved: { active: '#10b981', done: 'rgba(16,185,129,0.2)', doneText: '#34d399' },
+  rejected: { active: '#f87171', done: 'rgba(248,113,113,0.2)', doneText: '#fda4af' },
 }
 
 export default function StatePipeline({ currentState }) {
@@ -25,14 +26,19 @@ export default function StatePipeline({ currentState }) {
     if (currentState === 'FAILED_ANALYSIS') return 1
     if (currentState === 'FAILED_EXECUTION') return 4
     if (currentState === 'FAILED_VERIFICATION') return 5
-    if (currentState === 'ESCALATED') return 6
     return 0
   }, [currentState])
 
   const isFailed = currentState?.includes('FAILED')
-  const isEscalated = currentState === 'ESCALATED'
   const isResolved = currentState === 'RESOLVED'
-  const palette = isFailed ? COLORS.failed : isEscalated ? COLORS.escalated : isResolved ? COLORS.resolved : COLORS.normal
+  const isRejected = currentState === 'REJECTED'
+  const palette = isFailed
+    ? COLORS.failed
+    : isResolved
+      ? COLORS.resolved
+      : isRejected
+        ? COLORS.rejected
+        : COLORS.normal
 
   return (
     <div className="w-full overflow-x-auto py-2 px-2">

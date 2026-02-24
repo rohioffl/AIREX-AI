@@ -9,8 +9,6 @@ import StateBadge from '../components/common/StateBadge'
 import SeverityBadge from '../components/common/SeverityBadge'
 import { truncateId } from '../utils/formatters'
 
-const TENANT_ID = localStorage.getItem('tenant_id') || '00000000-0000-0000-0000-000000000000'
-
 const EVENT_COLORS = {
   incident_created:     { bg: 'rgba(96,165,250,0.08)',  accent: '#60a5fa', label: 'INCIDENT' },
   state_changed:        { bg: 'rgba(167,139,250,0.08)', accent: '#a78bfa', label: 'STATE' },
@@ -57,7 +55,6 @@ export default function LiveFeed() {
     })
 
     const sse = createSSEConnection(
-      TENANT_ID,
       handlers,
       (status) => {
         setConnected(status.connected)

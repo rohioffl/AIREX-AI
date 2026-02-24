@@ -4,7 +4,7 @@ import { formatDuration } from '../../utils/formatters'
 
 const SHOW_STATES = new Set([
   'EXECUTING', 'VERIFYING', 'RESOLVED',
-  'FAILED_EXECUTION', 'FAILED_VERIFICATION', 'ESCALATED',
+  'FAILED_EXECUTION', 'FAILED_VERIFICATION',
 ])
 
 export default function ExecutionLogs({ executions, state, liveLogs }) {

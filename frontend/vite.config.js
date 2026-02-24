@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    allowedHosts: ['airex.ankercloud.com'],
+    allowedHosts: ['airex.rohitpt.online'],
     proxy: {
       '/api': 'http://localhost:8000',
     },

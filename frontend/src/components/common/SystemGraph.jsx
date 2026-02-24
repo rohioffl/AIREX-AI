@@ -5,19 +5,65 @@ import {
   Tooltip, ResponsiveContainer, BarChart, Bar
 } from 'recharts'
 
-function generateData(incidents) {
-  const hours = 24
-  const data = []
-  for (let i = 0; i < hours; i++) {
-    const hr = String(i).padStart(2, '0') + ':00'
-    data.push({
-      name: hr,
-      incidents: Math.floor(Math.random() * 4) + (incidents.length > 5 ? 2 : 0),
-      resolved: Math.floor(Math.random() * 3),
-      responseTime: Math.floor(Math.random() * 40) + 10,
-    })
+function formatHourLabel(d) {
+  try {
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', hour12: false }) + ':00'
+  } catch {
+    const h = String(d.getHours()).padStart(2, '0')
+    return `${h}:00`
   }
-  return data
+}
+
+function bucketStartOfHour(d) {
+  const x = new Date(d)
+  x.setMinutes(0, 0, 0)
+  return x
+}
+
+function buildSeries(incidents) {
+  const now = new Date()
+  const end = bucketStartOfHour(now)
+  const start = new Date(end)
+  start.setHours(start.getHours() - 23)
+
+  const buckets = []
+  const byMs = new Map()
+
+  for (let i = 0; i < 24; i++) {
+    const b = new Date(start)
+    b.setHours(start.getHours() + i)
+    const key = b.getTime()
+    const row = { name: formatHourLabel(b), incidents: 0, resolved: 0 }
+    buckets.push(row)
+    byMs.set(key, row)
+  }
+
+  const firstMs = buckets.length ? new Date(start).getTime() : 0
+  const lastMs = new Date(end).getTime()
+
+  for (const inc of incidents || []) {
+    const created = inc?.created_at ? new Date(inc.created_at) : null
+    if (created && !Number.isNaN(created.getTime())) {
+      const ms = bucketStartOfHour(created).getTime()
+      if (ms >= firstMs && ms <= lastMs) {
+        const row = byMs.get(ms)
+        if (row) row.incidents += 1
+      }
+    }
+
+    if (inc?.state === 'RESOLVED' && inc?.updated_at) {
+      const updated = new Date(inc.updated_at)
+      if (!Number.isNaN(updated.getTime())) {
+        const ms = bucketStartOfHour(updated).getTime()
+        if (ms >= firstMs && ms <= lastMs) {
+          const row = byMs.get(ms)
+          if (row) row.resolved += 1
+        }
+      }
+    }
+  }
+
+  return buckets
 }
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -37,7 +83,18 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function SystemGraph({ incidents = [], type = 'area' }) {
-  const data = useMemo(() => generateData(incidents), [incidents.length])
+  const data = useMemo(() => buildSeries(incidents), [incidents])
+
+  const mini = useMemo(() => {
+    const created24h = data.reduce((acc, r) => acc + (r.incidents || 0), 0)
+    const resolved24h = data.reduce((acc, r) => acc + (r.resolved || 0), 0)
+    const activeNow = (incidents || []).filter(i => !['RESOLVED', 'REJECTED'].includes(i.state)).length
+    return [
+      { label: 'Created (24h)', value: String(created24h) },
+      { label: 'Resolved (24h)', value: String(resolved24h) },
+      { label: 'Active Now', value: String(activeNow) },
+    ]
+  }, [data, incidents])
 
   return (
     <div className="glass p-5">
@@ -96,11 +153,7 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
 
       {/* Mini stats */}
       <div className="flex gap-6 pt-4 mt-4" style={{ borderTop: '1px solid var(--border)' }}>
-        {[
-          { label: 'Avg Response', value: '23ms' },
-          { label: 'Uptime', value: '99.97%' },
-          { label: 'Active Nodes', value: '14/14' },
-        ].map(s => (
+        {mini.map(s => (
           <div key={s.label} className="flex flex-col gap-1">
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</span>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>{s.value}</span>

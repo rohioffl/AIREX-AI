@@ -3,16 +3,24 @@ import axios from 'axios'
 const api = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 })
+
+function getCsrfToken() {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(/(?:^|; )airex_csrf=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
 
 /** Inject auth token or tenant header on every request. */
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('airex-token')
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`
-  } else {
-    const tenantId = localStorage.getItem('tenant_id') || '00000000-0000-0000-0000-000000000000'
-    config.headers['X-Tenant-Id'] = tenantId
+  }
+  const csrf = getCsrfToken()
+  if (csrf) {
+    config.headers['X-CSRF-Token'] = csrf
   }
   return config
 })
@@ -64,6 +72,15 @@ export async function approveIncident(id, action, idempotencyKey) {
     action,
     idempotency_key: idempotencyKey,
   })
+  return res.data
+}
+
+export async function rejectIncident(id, reason) {
+  const payload = {}
+  if (reason && reason.trim()) {
+    payload.reason = reason.trim()
+  }
+  const res = await api.post(`/incidents/${id}/reject/`, payload)
   return res.data
 }
 

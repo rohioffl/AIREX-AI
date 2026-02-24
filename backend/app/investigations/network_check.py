@@ -1,8 +1,16 @@
-"""Investigation plugin for network connectivity issues."""
+"""
+Investigation plugin for network connectivity issues.
 
-import random
+Generates deterministic, problem-consistent evidence for network incidents.
+All metrics ALWAYS indicate a network problem since this only runs when
+an alert has already been triggered.
+"""
 
-from app.investigations.base import BaseInvestigation, InvestigationResult
+from app.investigations.base import (
+    BaseInvestigation,
+    InvestigationResult,
+    _make_seeded_rng,
+)
 
 
 class NetworkCheckInvestigation(BaseInvestigation):
@@ -11,32 +19,60 @@ class NetworkCheckInvestigation(BaseInvestigation):
     alert_type = "network_issue"
 
     async def investigate(self, incident_meta: dict) -> InvestigationResult:
-        host = incident_meta.get("host") or incident_meta.get("monitor_name", "unknown-host")
+        host = incident_meta.get("host") or incident_meta.get(
+            "monitor_name", "unknown-host"
+        )
         target = incident_meta.get("target_host", "api.example.com")
+        rng = _make_seeded_rng(incident_meta)
 
-        packet_loss = random.uniform(0, 30)
-        avg_latency = random.uniform(1, 500)
+        # Primary metrics: MUST show a network problem (this IS a network_issue alert)
+        # Packet loss must be significant (15-45%), not 0-30% which could show healthy
+        packet_loss = rng.uniform(15, 45)
+        # Latency must be high (150-600ms), not 1-500ms which could show 2ms
+        avg_latency = rng.uniform(150, 600)
+
+        # Packets received must be consistent with loss percentage
+        transmitted = 10
+        received = max(transmitted - int(packet_loss / 10), 5)
+
+        # DNS should be slow (consistent with network issues)
+        dns_resolution_time = rng.uniform(25, 120)
+
+        # Generate a consistent IP for the target (seeded, not random)
+        dns_ip = f"{rng.randint(10, 172)}.{rng.randint(0, 255)}.{rng.randint(0, 255)}.{rng.randint(1, 254)}"
+
+        # Ports should show problems (at least one TIMEOUT for a network issue)
+        port_443_status = "TIMEOUT" if rng.random() > 0.4 else "OPEN"
+        port_80_status = "TIMEOUT" if rng.random() > 0.5 else "OPEN"
+        # Ensure at least one port is timing out (this IS a network alert)
+        if port_443_status == "OPEN" and port_80_status == "OPEN":
+            port_443_status = "TIMEOUT"
+
+        # Traceroute should show a clear bottleneck
+        total_hops = rng.randint(8, 15)
+        bottleneck_hop = rng.randint(4, min(total_hops - 1, 9))
+        bottleneck_latency = rng.uniform(200, 500)
 
         lines = [
             f"=== Network Investigation: {host} → {target} ===",
             f"",
-            f"Ping Results (10 packets):",
-            f"  Transmitted: 10  Received: {10 - int(packet_loss / 10)}  Loss: {packet_loss:.1f}%",
+            f"Ping Results ({transmitted} packets):",
+            f"  Transmitted: {transmitted}  Received: {received}  Loss: {packet_loss:.1f}%",
             f"  RTT min/avg/max: {avg_latency * 0.5:.1f}/{avg_latency:.1f}/{avg_latency * 1.5:.1f} ms",
             f"",
             f"DNS Resolution:",
-            f"  {target} → {random.randint(10, 172)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}",
-            f"  Resolution time: {random.uniform(1, 50):.1f}ms",
+            f"  {target} → {dns_ip}",
+            f"  Resolution time: {dns_resolution_time:.1f}ms",
             f"",
             f"TCP Connectivity:",
-            f"  Port 443: {'OPEN' if random.random() > 0.3 else 'TIMEOUT'}",
-            f"  Port 80:  {'OPEN' if random.random() > 0.2 else 'TIMEOUT'}",
+            f"  Port 443: {port_443_status}",
+            f"  Port 80:  {port_80_status}",
             f"",
-            f"Traceroute ({random.randint(5, 15)} hops):",
-            f"  Bottleneck at hop {random.randint(3, 8)}: {random.uniform(50, 300):.1f}ms",
+            f"Traceroute ({total_hops} hops):",
+            f"  Bottleneck at hop {bottleneck_hop}: {bottleneck_latency:.1f}ms",
             f"",
-            f"Diagnosis: {'High packet loss and latency' if packet_loss > 10 else 'Intermittent connectivity'}.",
-            f"Recommendation: Check network ACLs or contact NOC.",
+            f"Diagnosis: High packet loss ({packet_loss:.1f}%) and elevated latency ({avg_latency:.0f}ms avg).",
+            f"Recommendation: Check network ACLs, firewall rules, or contact NOC.",
         ]
 
         return InvestigationResult(

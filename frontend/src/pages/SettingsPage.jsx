@@ -16,16 +16,19 @@ export default function SettingsPage() {
   async function fetchHealth() {
     setLoading(true)
     try {
-      const res = await fetch('/api/v1/../health')
+      const res = await fetch('/api/../health', { credentials: 'include' })
+      if (!res.ok) throw new Error('health check failed')
       const data = await res.json()
       setHealth(data)
-    } catch {
+    } catch (err) {
+      console.warn('health check failed', err)
       setHealth(null)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
-  const tenantId = localStorage.getItem('tenant_id') || '00000000-0000-0000-0000-000000000000'
+  const tenantId = '00000000-0000-0000-0000-000000000000'
 
   const configs = [
     {

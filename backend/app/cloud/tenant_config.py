@@ -44,9 +44,11 @@ _CACHE_TTL = 60.0  # seconds
 #  Data classes
 # ═══════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class GCPConfig:
     """GCP-specific configuration for a tenant."""
+
     project_id: str = ""
     zone: str = ""
     service_account_key: str = ""
@@ -57,21 +59,26 @@ class GCPConfig:
 @dataclass
 class AWSConfig:
     """AWS-specific configuration for a tenant."""
-    region: str = ""                 # empty = auto-discover from all regions
+
+    region: str = ""  # empty = auto-discover from all regions
     profile: str = ""
     ssm_document: str = "AWS-RunShellScript"
     ssm_timeout: int = 30
     log_group_prefix: str = ""
 
     # ── Auth Method 1: Cross-account Role Assumption ──────────────
-    account_id: str = ""         # AWS account number (e.g. "123456789012")
-    role_arn: str = ""           # Full role ARN — auto-built from account_id + role_name if empty
-    role_name: str = ""          # Role name (e.g. "AirexReadOnly") — used with account_id
-    external_id: str = ""        # STS external ID for cross-account trust
+    account_id: str = ""  # AWS account number (e.g. "123456789012")
+    role_arn: str = (
+        ""  # Full role ARN — auto-built from account_id + role_name if empty
+    )
+    role_name: str = ""  # Role name (e.g. "AirexReadOnly") — used with account_id
+    external_id: str = ""  # STS external ID for cross-account trust
 
     # ── Auth Method 2: Static Access Key / Secret Key ─────────────
-    credentials_file: str = ""   # Path to JSON/YAML with access_key_id + secret_access_key
-    access_key_id: str = ""      # Inline (not recommended — use credentials_file)
+    credentials_file: str = (
+        ""  # Path to JSON/YAML with access_key_id + secret_access_key
+    )
+    access_key_id: str = ""  # Inline (not recommended — use credentials_file)
     secret_access_key: str = ""  # Inline (not recommended — use credentials_file)
 
     def get_role_arn(self) -> str:
@@ -86,6 +93,7 @@ class AWSConfig:
 @dataclass
 class SSHConfig:
     """SSH connection configuration."""
+
     user: str = "ubuntu"
     key_path: str = ""
     port: int = 22
@@ -94,19 +102,22 @@ class SSHConfig:
 @dataclass
 class ServerEntry:
     """A known server/instance for a tenant."""
+
     name: str = ""
     instance_id: str = ""
     private_ip: str = ""
-    cloud: str = ""       # override per-server (for multi-cloud tenants)
-    role: str = ""        # web, api, database, worker, etc.
+    cloud: str = ""  # override per-server (for multi-cloud tenants)
+    role: str = ""  # web, api, database, worker, etc.
 
 
 @dataclass
 class TenantConfig:
     """Complete configuration for one tenant."""
+
     tenant_name: str = ""
+    tenant_id: str = ""  # UUID for DB isolation (RLS)
     display_name: str = ""
-    cloud: str = ""                             # primary cloud: "gcp" | "aws"
+    cloud: str = ""  # primary cloud: "gcp" | "aws"
     gcp: GCPConfig = field(default_factory=GCPConfig)
     aws: AWSConfig = field(default_factory=AWSConfig)
     ssh: SSHConfig = field(default_factory=SSHConfig)
@@ -126,6 +137,7 @@ class TenantConfig:
 #  Loader
 # ═══════════════════════════════════════════════════════════════════
 
+
 def _load_raw_config(config_path: str | Path = "") -> dict:
     """Load and parse the YAML config file."""
     path = Path(config_path) if config_path else _DEFAULT_CONFIG_PATH
@@ -137,7 +149,11 @@ def _load_raw_config(config_path: str | Path = "") -> dict:
     try:
         with open(path) as f:
             data = yaml.safe_load(f)
-        logger.info("tenant_config_loaded", path=str(path), tenant_count=len(data.get("tenants", {})))
+        logger.info(
+            "tenant_config_loaded",
+            path=str(path),
+            tenant_count=len(data.get("tenants", {})),
+        )
         return data or {}
     except Exception as exc:
         logger.error("tenant_config_load_failed", path=str(path), error=str(exc))
@@ -169,13 +185,18 @@ def _parse_tenant(name: str, raw: dict, defaults: dict) -> TenantConfig:
     """Parse a raw tenant dict into a TenantConfig dataclass."""
     tc = TenantConfig(
         tenant_name=name,
+        tenant_id=raw.get("tenant_id", ""),
         display_name=raw.get("display_name", name),
         cloud=raw.get("cloud", ""),
         escalation_email=raw.get("escalation_email", ""),
         slack_channel=raw.get("slack_channel", ""),
         ssh_timeout=raw.get("ssh_timeout", defaults.get("ssh_timeout", 15)),
-        investigation_timeout=raw.get("investigation_timeout", defaults.get("investigation_timeout", 60)),
-        log_lookback_minutes=raw.get("log_lookback_minutes", defaults.get("log_lookback_minutes", 30)),
+        investigation_timeout=raw.get(
+            "investigation_timeout", defaults.get("investigation_timeout", 60)
+        ),
+        log_lookback_minutes=raw.get(
+            "log_lookback_minutes", defaults.get("log_lookback_minutes", 30)
+        ),
         log_severity=raw.get("log_severity", defaults.get("log_severity", "WARNING")),
         max_log_entries=raw.get("max_log_entries", defaults.get("max_log_entries", 50)),
     )
@@ -220,13 +241,15 @@ def _parse_tenant(name: str, raw: dict, defaults: dict) -> TenantConfig:
 
     # Servers
     for srv_raw in raw.get("servers", []):
-        tc.servers.append(ServerEntry(
-            name=srv_raw.get("name", ""),
-            instance_id=srv_raw.get("instance_id", ""),
-            private_ip=srv_raw.get("private_ip", ""),
-            cloud=srv_raw.get("cloud", tc.cloud),
-            role=srv_raw.get("role", ""),
-        ))
+        tc.servers.append(
+            ServerEntry(
+                name=srv_raw.get("name", ""),
+                instance_id=srv_raw.get("instance_id", ""),
+                private_ip=srv_raw.get("private_ip", ""),
+                cloud=srv_raw.get("cloud", tc.cloud),
+                role=srv_raw.get("role", ""),
+            )
+        )
 
     return tc
 
@@ -234,6 +257,7 @@ def _parse_tenant(name: str, raw: dict, defaults: dict) -> TenantConfig:
 # ═══════════════════════════════════════════════════════════════════
 #  Public API
 # ═══════════════════════════════════════════════════════════════════
+
 
 def get_tenant_config(tenant_name: str, config_path: str = "") -> TenantConfig | None:
     """
@@ -294,3 +318,19 @@ def get_server_by_ip(
         if server.private_ip == ip:
             return server
     return None
+
+
+def resolve_tenant_id_by_name(tenant_name: str, config_path: str = "") -> str:
+    """
+    Resolve a tenant name (from Site24x7 tags) to a database tenant_id UUID.
+
+    Returns the tenant_id string from tenants.yaml, or empty string if
+    the tenant is not found or has no tenant_id configured.
+
+    This enables Site24x7 webhooks to automatically resolve the correct
+    database tenant without needing an X-Tenant-Id header.
+    """
+    config = get_tenant_config(tenant_name, config_path)
+    if config and config.tenant_id:
+        return config.tenant_id
+    return ""

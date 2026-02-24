@@ -6,6 +6,8 @@ license: Private
 
 # Frontend Skill — AIREX
 
+> **Single-tenant note:** The product currently operates in a single-tenant configuration. UI controls or headers referencing tenant IDs are ignored until multi-tenancy returns.
+
 This skill defines the frontend implementation rules for the operational SRE dashboard.
 
 This is NOT a marketing site.
@@ -39,7 +41,8 @@ The UI must be:
 The UI MUST be 100% state-driven.
 
 **Backend State Machine (Immutable Source of Truth):**
-`RECEIVED` → `INVESTIGATING` → `RECOMMENDATION_READY` → `AWAITING_APPROVAL` → `EXECUTING` → `VERIFYING` → `RESOLVED` | `FAILED_ANALYSIS` | `FAILED_EXECUTION` | `FAILED_VERIFICATION` | `ESCALATED`
+`RECEIVED` → `INVESTIGATING` → `RECOMMENDATION_READY` → `AWAITING_APPROVAL` → `EXECUTING` → `VERIFYING` → `RESOLVED` | `FAILED_ANALYSIS` | `FAILED_EXECUTION` | `FAILED_VERIFICATION` | `REJECTED`
+> `REJECTED` only occurs when an operator uses the Reject action. Automation failures remain in their corresponding `FAILED_*` states with `_manual_review_required` metadata.
 
 **Strict Rules for AI:**
 1.  **NEVER** infer state (e.g., `if (logs.length > 0) return 'EXECUTING'`).
@@ -99,7 +102,7 @@ The UI MUST be 100% state-driven.
     state === 'VERIFYING' ||
     state === 'RESOLVED' ||
     state.startsWith('FAILED') ||
-    state === 'ESCALATED'
+    state === 'REJECTED'
     ```
 - **Risk Display**:
     - **Low**: Green border/text.
@@ -185,7 +188,7 @@ type IncidentState =
   | 'FAILED_ANALYSIS'
   | 'FAILED_EXECUTION'
   | 'FAILED_VERIFICATION'
-  | 'ESCALATED';
+  | 'REJECTED';
 
 interface Incident {
   incident_id: string;

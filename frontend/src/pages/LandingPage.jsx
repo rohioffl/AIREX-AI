@@ -3,6 +3,7 @@
  */
 
 import { Link } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
 import {
   Zap,
   Search,
@@ -83,11 +84,38 @@ const INTEGRATIONS = [
   { name: 'PagerDuty', type: 'Alerting' },
 ]
 
+/* Hook for scroll reveal animation */
+function useScrollReveal() {
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('active')
+            // Optional: unobserve after reveal so it doesn't re-trigger
+            // observer.unobserve(entry.target)
+          }
+        })
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -50px 0px' }
+    )
+
+    const hiddenElements = document.querySelectorAll('.airex-reveal')
+    hiddenElements.forEach((el) => observer.observe(el))
+
+    return () => hiddenElements.forEach((el) => observer.unobserve(el))
+  }, [])
+}
+
 export default function LandingPage() {
+  useScrollReveal()
+
   return (
     <div className="airex-landing">
       {/* Image as bg for everything until Secure by design; then it scrolls up ── */}
-      <div className="airex-image-zone" style={{ backgroundImage: `url(${landFinalBg})` }}>
+      <div className="airex-image-zone">
+        <div className="airex-cinematic-bg" style={{ backgroundImage: `url(${landFinalBg})` }} />
+      
       {/* Fixed header: all sections scroll under it ── */}
       <header className="airex-landing-header">
         <div className="airex-logo-block">
@@ -102,7 +130,7 @@ export default function LandingPage() {
       {/* ── Hero (text left, cube clear) ── */}
       <section className="airex-scroll-section" aria-label="Hero">
         <div className="airex-content-overlay">
-          <div className="airex-hero-content">
+          <div className="airex-hero-content airex-reveal">
             <span className="airex-hero-badge">AI-powered SRE</span>
             <h1 className="airex-hero-title">Autonomous Incident Resolution</h1>
             <p className="airex-hero-abbr">Autonomous Incident Resolution Engine</p>
@@ -117,34 +145,33 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Bg section: lifecycle content ── */}
-      <section className="airex-bg-section" aria-label="Platform">
-        <div className="airex-bg-section-overlay" />
-        <div className="airex-bg-section-content">
-          <p className="airex-bg-section-lead">One platform for the full incident lifecycle</p>
-          <ul className="airex-bg-section-list">
-            <li>Ingest alerts from any source</li>
-            <li>AI investigates and recommends</li>
-            <li>You approve — we execute</li>
-            <li>Verify and close</li>
-          </ul>
-        </div>
-      </section>
+      {/* ── Parallel Block: Lifecycle & Integrations ── */}
+      <section className="airex-parallel-section airex-container" aria-label="Platform and Integrations">
+        <div className="airex-parallel-grid">
+          {/* Lifecycle (Left) */}
+          <div className="airex-bg-section-content airex-reveal">
+            <p className="airex-bg-section-lead">One platform for the full incident lifecycle</p>
+            <ul className="airex-bg-section-list">
+              <li>Ingest alerts from any source</li>
+              <li>AI investigates and recommends</li>
+              <li>You approve — we execute</li>
+              <li>Verify and close</li>
+            </ul>
+          </div>
 
-      {/* ── Integrations: content left, cube clear on right ── */}
-      <section className="airex-integrations-bg" aria-label="Integrations">
-        <div className="airex-integrations-bg-overlay" />
-        <div className="airex-integrations-bg-content">
-          <h2 className="airex-integrations-bg-title">Integrations</h2>
-          <p className="airex-integrations-bg-lead">Connect your monitoring and cloud providers.</p>
-          <div className="airex-integrations-bg-list">
-            {INTEGRATIONS.map(({ name, type }) => (
-              <div key={name} className="airex-integration-item">
-                <Server size={20} className="airex-integration-icon" />
-                <span className="airex-integration-name">{name}</span>
-                <span className="airex-integration-type">{type}</span>
-              </div>
-            ))}
+          {/* Integrations (Right) */}
+          <div className="airex-integrations-bg-content airex-reveal airex-reveal-stagger-1">
+            <h2 className="airex-integrations-bg-title">Integrations</h2>
+            <p className="airex-integrations-bg-lead">Connect your monitoring and cloud providers.</p>
+            <div className="airex-integrations-bg-list">
+              {INTEGRATIONS.map(({ name, type }) => (
+                <div key={name} className="airex-integration-item">
+                  <Server size={20} className="airex-integration-icon" />
+                  <span className="airex-integration-name">{name}</span>
+                  <span className="airex-integration-type">{type}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -152,20 +179,20 @@ export default function LandingPage() {
       {/* ── Why AIREX (highlights) ── */}
       <section className="airex-section airex-why" aria-label="Why AIREX">
         <div className="airex-container">
-          <h2 className="airex-section-title">Why AIREX?</h2>
-          <p className="airex-section-lead">Built for teams that need speed without sacrificing control.</p>
+          <h2 className="airex-section-title airex-reveal">Why AIREX?</h2>
+          <p className="airex-section-lead airex-reveal">Built for teams that need speed without sacrificing control.</p>
           <div className="airex-why-grid">
-            <div className="airex-why-card">
+            <div className="airex-why-card airex-reveal airex-reveal-stagger-1">
               <Zap className="airex-why-icon" size={28} />
               <h3>Faster MTTR</h3>
               <p>AI investigates in under 60s and suggests runbooks so you resolve incidents faster.</p>
             </div>
-            <div className="airex-why-card">
+            <div className="airex-why-card airex-reveal airex-reveal-stagger-2">
               <ShieldCheck className="airex-why-icon" size={28} />
               <h3>Human in the loop</h3>
               <p>No action runs without approval. Full audit trail and policy gating.</p>
             </div>
-            <div className="airex-why-card">
+            <div className="airex-why-card airex-reveal airex-reveal-stagger-3">
               <Cloud className="airex-why-icon" size={28} />
               <h3>Multi-cloud native</h3>
               <p>AWS, GCP, and more. Tenant-scoped, RLS, and correlation IDs end to end.</p>
@@ -177,11 +204,11 @@ export default function LandingPage() {
       {/* ── Features ── */}
       <section className="airex-section airex-features" aria-label="Features">
         <div className="airex-container">
-          <h2 className="airex-section-title">Built for autonomous SRE</h2>
-          <p className="airex-section-lead">From alert to resolution with AI in the loop and humans in control.</p>
+          <h2 className="airex-section-title airex-reveal">Built for autonomous SRE</h2>
+          <p className="airex-section-lead airex-reveal">From alert to resolution with AI in the loop and humans in control.</p>
           <div className="airex-features-grid">
-            {FEATURES.map(({ icon: Icon, title, description }) => (
-              <article key={title} className="airex-feature-card">
+            {FEATURES.map(({ icon: Icon, title, description }, idx) => (
+              <article key={title} className={`airex-feature-card airex-reveal airex-reveal-stagger-${(idx % 3) + 1}`}>
                 <div className="airex-feature-icon">
                   <Icon size={24} strokeWidth={1.8} />
                 </div>
@@ -196,11 +223,11 @@ export default function LandingPage() {
       {/* ── How it works ── */}
       <section className="airex-section airex-how" aria-label="How it works">
         <div className="airex-container">
-          <h2 className="airex-section-title">How it works</h2>
-          <p className="airex-section-lead">Predictable pipeline from ingestion to verification.</p>
+          <h2 className="airex-section-title airex-reveal">How it works</h2>
+          <p className="airex-section-lead airex-reveal">Predictable pipeline from ingestion to verification.</p>
           <div className="airex-steps">
-            {STEPS.map(({ step, title, body }) => (
-              <div key={step} className="airex-step">
+            {STEPS.map(({ step, title, body }, idx) => (
+              <div key={step} className={`airex-step airex-reveal airex-reveal-stagger-${idx + 1}`}>
                 <div className="airex-step-num">{step}</div>
                 <div className="airex-step-content">
                   <h3 className="airex-step-title">{title}</h3>
@@ -217,8 +244,8 @@ export default function LandingPage() {
       <section className="airex-section airex-stats" aria-label="Stats">
         <div className="airex-container">
           <div className="airex-stats-grid">
-            {STATS.map(({ value, label }) => (
-              <div key={label} className="airex-stat">
+            {STATS.map(({ value, label }, idx) => (
+              <div key={label} className={`airex-stat airex-reveal airex-reveal-stagger-${idx + 1}`}>
                 <span className="airex-stat-value">{value}</span>
                 <span className="airex-stat-label">{label}</span>
               </div>
@@ -229,7 +256,7 @@ export default function LandingPage() {
 
       {/* ── Security & compliance ── */}
       <section className="airex-section airex-security" aria-label="Security">
-        <div className="airex-container airex-security-inner">
+        <div className="airex-container airex-security-inner airex-reveal">
           <div className="airex-security-icon">
             <Lock size={36} strokeWidth={2.25} className="airex-security-lock" />
           </div>
@@ -246,7 +273,7 @@ export default function LandingPage() {
       {/* ── Testimonial / social proof ── */}
       <section className="airex-section airex-testimonial" aria-label="Testimonial">
         <div className="airex-container">
-          <blockquote className="airex-quote">
+          <blockquote className="airex-quote airex-reveal">
             <p>“AIREX gives us one place to see, investigate, and resolve incidents—with AI doing the heavy lifting and our team keeping final say.”</p>
             <footer className="airex-quote-footer">— Platform reliability team</footer>
           </blockquote>
@@ -255,7 +282,7 @@ export default function LandingPage() {
 
       {/* ── CTA ── */}
       <section className="airex-section airex-cta-section" aria-label="Get started">
-        <div className="airex-container">
+        <div className="airex-container airex-reveal">
           <h2 className="airex-cta-title">Ready to run autonomous SRE?</h2>
           <p className="airex-cta-lead">Open the app and see incidents, recommendations, and the live feed.</p>
           <div className="airex-cta-buttons">

@@ -8,11 +8,11 @@ describe('StateBadge', () => {
     expect(screen.getByText('RECEIVED')).toBeInTheDocument()
   })
 
-  it('renders all 11 states without crashing', () => {
+  it('renders all states without crashing', () => {
     const states = [
       'RECEIVED', 'INVESTIGATING', 'RECOMMENDATION_READY', 'AWAITING_APPROVAL',
       'EXECUTING', 'VERIFYING', 'RESOLVED', 'FAILED_ANALYSIS',
-      'FAILED_EXECUTION', 'FAILED_VERIFICATION', 'ESCALATED',
+      'FAILED_EXECUTION', 'FAILED_VERIFICATION', 'REJECTED',
     ]
     states.forEach((state) => {
       const { unmount } = render(<StateBadge state={state} />)

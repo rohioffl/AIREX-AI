@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import ExecutionStatus, IncidentState, RiskLevel, SeverityLevel
 
@@ -66,10 +66,12 @@ class IncidentListItem(BaseModel):
     verification_retry_count: int
     created_at: datetime
     updated_at: datetime
+    meta: dict | None = None
 
 
 class RelatedIncidentItem(BaseModel):
     """Minimal incident info for same-host linking."""
+
     id: uuid.UUID
     alert_type: str
     state: IncidentState
@@ -83,7 +85,6 @@ class IncidentDetail(IncidentListItem):
     state_transitions: list[StateTransitionResponse] = []
     executions: list[ExecutionResponse] = []
     recommendation: RecommendationResponse | None = None
-    meta: dict | None = None
     related_incidents: list[RelatedIncidentItem] = []
 
 
@@ -95,6 +96,14 @@ class ApproveRequest(BaseModel):
     idempotency_key: str
 
 
+class RejectRequest(BaseModel):
+    reason: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Operator-provided note explaining why the incident was rejected",
+    )
+
+
 # --- Minimal creation response ---
 
 
@@ -104,6 +113,7 @@ class IncidentCreatedResponse(BaseModel):
 
 class PaginatedIncidents(BaseModel):
     """Cursor-based paginated response."""
+
     items: list[IncidentListItem]
     next_cursor: str | None = None
     has_more: bool = False

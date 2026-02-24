@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { fetchIncident } from '../services/api'
 import { createSSEConnection } from '../services/sse'
 
-const TENANT_ID = localStorage.getItem('tenant_id') || '00000000-0000-0000-0000-000000000000'
-
 export default function useIncidentDetail(id) {
   const [incident, setIncident] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -13,8 +11,9 @@ export default function useIncidentDetail(id) {
   const [executionLogs, setExecutionLogs] = useState([])
   const sseRef = useRef(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts = {}) => {
+    const silent = Boolean(opts.silent)
+    if (!silent) setLoading(true)
     setError(null)
     try {
       const data = await fetchIncident(id)
@@ -22,7 +21,7 @@ export default function useIncidentDetail(id) {
     } catch (err) {
       setError(err.message)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [id])
 
@@ -30,13 +29,22 @@ export default function useIncidentDetail(id) {
     load()
   }, [load])
 
+  // Background refresh so repeated alerts update meta without UI flicker.
+  useEffect(() => {
+    if (!id) return
+    const interval = setInterval(() => {
+      load({ silent: true })
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [id, load])
+
   useEffect(() => {
     const sse = createSSEConnection(
-      TENANT_ID,
       {
         state_changed(data) {
           if (data.incident_id === id) {
             setIncident((prev) => prev ? { ...prev, state: data.new_state } : prev)
+            load({ silent: true })
           }
         },
         evidence_added(data) {

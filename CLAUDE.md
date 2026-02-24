@@ -47,10 +47,10 @@ cp .env.template .env  # then edit secrets
 
 ## Architecture & Key Constraints
 ### Backend (FastAPI, Async, Redis workers)
-- **State Machine Law**: Incident lifecycle is fixed (`RECEIVED → … → RESOLVED/FAILED/ESCALATED`). Only transition via the sanctioned helper described in `docs/backend_skill.md`. Never mutate `incident.state` directly.
+- **State Machine Law**: Incident lifecycle is fixed (`RECEIVED → … → RESOLVED/FAILED/REJECTED`). Only transition via the sanctioned helper described in `docs/backend_skill.md`. Never mutate `incident.state` directly.
 - **Engines**:
   - *Unification Layer*: Deduplicate webhooks using deterministic idempotency keys before spawning investigation tasks.
-  - *Investigation Plugins*: Read-only modules under `app/investigations/`. Hard 60s timeout, capped retries, must fail-safe to `ESCALATED`.
+  - *Investigation Plugins*: Read-only modules under `app/investigations/`. Hard 60s timeout, capped retries, must fail-safe to `REJECTED` (manual review).
   - *AI Recommendation*: LiteLLM wrapper (`app/llm/`) prioritizes local models with circuit breaker fallback. Output must match `Recommendation` schema and registered actions.
   - *Execution Engine*: Deterministic `ACTION_REGISTRY` under `app/actions/`. Requires Redis distributed locks, respects policy gating, logs every attempt, and never replays executions during verification retries.
 - **Safety Rules**: No raw shell commands, no blocking IO on async paths, no implicit fallbacks, all logging structured with `correlation_id`, and every API schema must use Pydantic.

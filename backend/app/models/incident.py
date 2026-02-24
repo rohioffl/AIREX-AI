@@ -36,7 +36,7 @@ class Incident(Base, TenantMixin):
         PrimaryKeyConstraint("tenant_id", "id"),
         CheckConstraint(
             "deleted_at IS NULL OR state IN "
-            "('RESOLVED', 'ESCALATED', 'FAILED_EXECUTION', 'FAILED_VERIFICATION')",
+            "('RESOLVED', 'FAILED_EXECUTION', 'FAILED_VERIFICATION', 'REJECTED')",
             name="ck_incidents_soft_delete",
         ),
         CheckConstraint(
@@ -62,9 +62,7 @@ class Incident(Base, TenantMixin):
             "idx_incidents_awaiting_approval",
             "tenant_id",
             text("created_at DESC"),
-            postgresql_where=text(
-                "state = 'AWAITING_APPROVAL' AND deleted_at IS NULL"
-            ),
+            postgresql_where=text("state = 'AWAITING_APPROVAL' AND deleted_at IS NULL"),
         ),
     )
 
@@ -114,7 +112,9 @@ class Incident(Base, TenantMixin):
     )
 
     # Host key for linking related incidents (same server: e.g. private_ip or instance_id)
-    host_key: Mapped[str | None] = mapped_column(String(512), nullable=True, index=False)
+    host_key: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, index=False
+    )
 
     # Flexible metadata
     meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

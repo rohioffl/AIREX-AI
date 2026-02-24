@@ -72,7 +72,13 @@ tenants:
 
   # ── GCP client (minimal — just project + email) ──────────────
   # Tag in Site24x7: tenant:acme-corp  OR  tenant:smart-ops
+  #
+  # tenant_id: The UUID used for database isolation (RLS).
+  #   When Site24x7 sends tenant:acme-corp in tags, AIREX auto-resolves
+  #   this UUID for the DB session. No X-Tenant-Id header needed.
+  #   Generate with: python3 -c "import uuid; print(uuid.uuid4())"
   acme-corp: &smartops
+    tenant_id: "a1b2c3d4-0000-0000-0000-000000000001"
     display_name: "Smartops"
     cloud: gcp
     gcp:
@@ -86,6 +92,7 @@ tenants:
   #  AIREX assumes a role in the client's AWS account.
   #  No static keys stored — uses STS temporary credentials.
   beta-inc:
+    tenant_id: "b1b2c3d4-0000-0000-0000-000000000002"
     display_name: "Beta Inc."
     cloud: aws
     aws:
@@ -99,6 +106,7 @@ tenants:
   #  Store keys in config/credentials/delta-aws.json:
   #  {"access_key_id": "AKIA...", "secret_access_key": "wJa..."}
   delta-corp:
+    tenant_id: "d1d2d3d4-0000-0000-0000-000000000003"
     display_name: "Delta Corp"
     cloud: aws
     aws:
@@ -108,6 +116,7 @@ tenants:
 
   # ── Multi-cloud (GCP primary, AWS secondary) ─────────────────
   gamma-tech:
+    tenant_id: "e1e2e3e4-0000-0000-0000-000000000004"
     display_name: "Gamma Technologies"
     cloud: gcp
     gcp:
@@ -120,6 +129,7 @@ tenants:
 
   # ── Add your clients ─────────────────────────────────────────
   # my-client:
+  #   tenant_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # REQUIRED for DB isolation
   #   display_name: "My Client Name"
   #   cloud: aws
   #   aws:

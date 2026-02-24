@@ -6,6 +6,8 @@ license: Private
 
 # Backend Skill — AIREX
 
+> **Single-tenant mode:** Multi-tenancy is temporarily disabled while we simplify operations. All API requests execute under the primary DEV tenant ID (`00000000-0000-0000-0000-000000000000`). Any references to tenant switching or `X-Tenant-Id` headers in this document describe the long-term design but are currently no-ops.
+
 This skill defines the backend implementation rules for the autonomous SRE platform.
 
 This is NOT a CRUD app.
@@ -51,7 +53,7 @@ class IncidentState(str, Enum):
     FAILED_ANALYSIS = "FAILED_ANALYSIS"
     FAILED_EXECUTION = "FAILED_EXECUTION"
     FAILED_VERIFICATION = "FAILED_VERIFICATION"
-    ESCALATED = "ESCALATED"
+    REJECTED = "REJECTED"
 ```
 **No additional states allowed.**
 
@@ -59,14 +61,17 @@ class IncidentState(str, Enum):
 ```python
 ALLOWED_TRANSITIONS = {
     RECEIVED: [INVESTIGATING],
-    INVESTIGATING: [RECOMMENDATION_READY, FAILED_ANALYSIS, ESCALATED],
-    RECOMMENDATION_READY: [AWAITING_APPROVAL, ESCALATED],
-    AWAITING_APPROVAL: [EXECUTING, ESCALATED],
-    EXECUTING: [VERIFYING, FAILED_EXECUTION],
-    VERIFYING: [RESOLVED, FAILED_VERIFICATION, ESCALATED],
-    FAILED_VERIFICATION: [ESCALATED], # Or retry logic
+    INVESTIGATING: [RECOMMENDATION_READY, FAILED_ANALYSIS, REJECTED],
+    RECOMMENDATION_READY: [AWAITING_APPROVAL, REJECTED],
+    AWAITING_APPROVAL: [EXECUTING, REJECTED],
+    EXECUTING: [VERIFYING, FAILED_EXECUTION, REJECTED],
+    VERIFYING: [RESOLVED, FAILED_VERIFICATION, REJECTED],
+    FAILED_ANALYSIS: [REJECTED],
+    FAILED_EXECUTION: [REJECTED],
+    FAILED_VERIFICATION: [REJECTED],
 }
 ```
+> **Operator-only:** `REJECTED` is assigned exclusively by human action (`POST /api/v1/incidents/{id}/reject`). Backend services must leave automation failures in their respective `FAILED_*` states and set `_manual_review_required` in `incident.meta` instead of transitioning to `REJECTED` automatically.
 **Rule**: Any transition not in `ALLOWED_TRANSITIONS` is **REJECTED**.
 
 **Strict Rules for AI:**
@@ -101,8 +106,28 @@ ALLOWED_TRANSITIONS = {
   - Log failure.
   - Increment `investigation_retry_count`.
   - If `< MAX_INVESTIGATION_RETRY` (3) → Retry.
-  - Else → State = `ESCALATED`.
+  - Else → State = `REJECTED` (manual review).
 - **Prohibition**: **NO** side effects (ReadOnly actions only).
+
+| Plugin | Alert Type(s) | Notes |
+|--------|---------------|-------|
+| `CpuHighInvestigation` | `cpu_high` | Deterministic CPU + top-process snapshot |
+| `MemoryHighInvestigation` | `memory_high` | Heap/swap profile with leak suspects |
+| `DiskFullInvestigation` | `disk_full` | Filesystem usage + largest offenders |
+| `NetworkCheckInvestigation` | `network_issue` | Latency/packet-loss/traceroute summary |
+| `HealthCheckInvestigation` | `healthcheck` | Routes to CPU/MEM/DISK/NETWORK plugins with synthetic fallback |
+| `HttpCheckInvestigation` | `http_check` | Synthetic HTTP probe timeline |
+| `ApiCheckInvestigation` | `api_check` | REST call replay incl. upstream trace |
+| `CloudCheckInvestigation` | `cloud_check` | Cloud control-plane diagnostics (DescribeEvents) |
+| `DatabaseCheckInvestigation` | `database_check` | Test query timings + pg_stat_activity sample |
+| `LogAnomalyInvestigation` | `log_anomaly` | Highlighted error logs with trace IDs |
+| `PluginCheckInvestigation` | `plugin_check` | Custom plugin stdout/stderr/exit code |
+| `HeartbeatCheckInvestigation` | `heartbeat_check` | Missed heartbeat timeline |
+| `CronCheckInvestigation` | `cron_check` | Schedule + recent exit codes |
+| `PortCheckInvestigation` | `port_check` | TCP dial attempts + timeouts |
+| `SslCheckInvestigation` | `ssl_check` | Certificate chain + expiry snapshot |
+| `MailCheckInvestigation` | `mail_check` | SMTP handshake transcript |
+| `FtpCheckInvestigation` | `ftp_check` | FTP login transcript |
 
 ### 3.3 AI Recommendation Engine
 - **Strategy**:
@@ -154,7 +179,7 @@ ALLOWED_TRANSITIONS = {
 - **Rate Limiting**: Max concurrent incidents per tenant. Exceeding limit → Queue or Reject.
 - **Observability**:
   - **Structured JSON Logs**: `correlation_id`, `tenant_id`, `incident_id`.
-  - **Prometheus Metrics**: `incident_latency`, `investigation_duration`, `execution_duration`, `ai_failure_total`, `escalation_total`.
+  - **Prometheus Metrics**: `incident_latency`, `investigation_duration`, `execution_duration`, `ai_failure_total`, `manual_review_total`.
   - **Health**: `/health` endpoint.
 - **Tenant Isolation Enforcement**:
   - Every query MUST filter by `tenant_id`.

@@ -17,6 +17,7 @@ export interface Incident {
   verification_retry_count: number
   created_at: string
   updated_at: string
+  meta: Record<string, unknown> | null
 }
 
 export interface RelatedIncidentItem {
@@ -104,7 +105,7 @@ export type IncidentState =
   | 'FAILED_ANALYSIS'
   | 'FAILED_EXECUTION'
   | 'FAILED_VERIFICATION'
-  | 'ESCALATED'
+  | 'REJECTED'
 
 export type SeverityLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
 

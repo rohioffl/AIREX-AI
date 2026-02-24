@@ -40,10 +40,18 @@ async def verify_resolution(
 
     if action_type is None:
         log.error("no_action_type_for_verification")
+        from sqlalchemy.orm.attributes import flag_modified
+
+        meta = dict(incident.meta or {})
+        meta.setdefault("_manual_review_required", True)
+        meta["_manual_review_reason"] = "Cannot verify — missing action context"
+        incident.meta = meta
+        flag_modified(incident, "meta")
+        await session.flush()
         await transition_state(
             session,
             incident,
-            IncidentState.ESCALATED,
+            IncidentState.FAILED_VERIFICATION,
             reason="Cannot verify — no action type found",
         )
         return
@@ -61,7 +69,9 @@ async def verify_resolution(
 
             try:
                 await emit_verification_result(
-                    str(incident.tenant_id), str(incident.id), "RESOLVED",
+                    str(incident.tenant_id),
+                    str(incident.id),
+                    "RESOLVED",
                 )
             except Exception:
                 pass
@@ -74,18 +84,24 @@ async def verify_resolution(
             )
         else:
             await _handle_verification_failure(
-                session, incident, log,
+                session,
+                incident,
+                log,
                 f"Verification check returned False for {action_type}",
             )
 
     except asyncio.TimeoutError:
         await _handle_verification_failure(
-            session, incident, log,
+            session,
+            incident,
+            log,
             f"Verification timed out after {settings.VERIFICATION_TIMEOUT}s",
         )
     except Exception as exc:
         await _handle_verification_failure(
-            session, incident, log,
+            session,
+            incident,
+            log,
             f"Verification exception: {exc}",
         )
 
@@ -96,7 +112,7 @@ async def _handle_verification_failure(
     log: structlog.stdlib.BoundLogger,
     reason: str,
 ) -> None:
-    """Increment retry or escalate. Never re-run execution."""
+    """Increment retry or fall back to manual review. Never re-run execution."""
     incident.verification_retry_count += 1
     current_retries = incident.verification_retry_count
 
@@ -128,7 +144,9 @@ async def _handle_verification_failure(
 
     try:
         await emit_verification_result(
-            str(incident.tenant_id), str(incident.id), result_state,
+            str(incident.tenant_id),
+            str(incident.id),
+            result_state,
         )
     except Exception:
         pass

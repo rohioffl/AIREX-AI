@@ -122,7 +122,7 @@ test.describe('Incident Lifecycle', () => {
       const incident = await res.json()
       const terminalStates = [
         'RESOLVED',
-        'ESCALATED',
+        'REJECTED',
         'FAILED_EXECUTION',
         'FAILED_VERIFICATION',
         'AWAITING_APPROVAL',

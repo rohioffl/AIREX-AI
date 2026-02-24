@@ -1,8 +1,15 @@
-"""Investigation plugin for high memory alerts."""
+"""
+Investigation plugin for high memory alerts.
 
-import random
+Generates deterministic, problem-consistent evidence for memory-high incidents.
+RSS values are derived from the memory percentage to ensure consistency.
+"""
 
-from app.investigations.base import BaseInvestigation, InvestigationResult
+from app.investigations.base import (
+    BaseInvestigation,
+    InvestigationResult,
+    _make_seeded_rng,
+)
 
 
 class MemoryHighInvestigation(BaseInvestigation):
@@ -11,24 +18,58 @@ class MemoryHighInvestigation(BaseInvestigation):
     alert_type = "memory_high"
 
     async def investigate(self, incident_meta: dict) -> InvestigationResult:
-        host = incident_meta.get("host") or incident_meta.get("monitor_name", "unknown-host")
-        mem_pct = incident_meta.get("memory_percent", random.randint(85, 99))
+        host = incident_meta.get("host") or incident_meta.get(
+            "monitor_name", "unknown-host"
+        )
+        rng = _make_seeded_rng(incident_meta)
+
+        # Primary metric: Memory MUST be high (this IS a memory_high alert)
+        mem_pct = incident_meta.get("memory_percent") or rng.randint(87, 97)
 
         total_mb = 8192
         used_mb = int(total_mb * mem_pct / 100)
         free_mb = total_mb - used_mb
 
+        # Top process must consume most of the memory to be consistent
+        primary_rss = rng.randint(
+            max(int(used_mb * 0.5), 3500), max(int(used_mb * 0.7), 5500)
+        )
+        secondary_rss = rng.randint(150, 500)
+        tertiary_rss = rng.randint(80, 300)
+
+        # Use consistent PIDs (seeded, not random)
         top_procs = [
-            {"pid": random.randint(1000, 9999), "user": "app", "rss": f"{random.randint(2000, 5000)}M", "cmd": "java -Xmx4g -jar service.jar"},
-            {"pid": random.randint(1000, 9999), "user": "root", "rss": f"{random.randint(100, 500)}M", "cmd": "postgres: writer process"},
-            {"pid": random.randint(1000, 9999), "user": "app", "rss": f"{random.randint(50, 300)}M", "cmd": "node /app/worker.js"},
+            {
+                "pid": 2000 + rng.randint(0, 999),
+                "user": "app",
+                "rss": f"{primary_rss}M",
+                "cmd": "java -Xmx4g -jar service.jar",
+            },
+            {
+                "pid": 3000 + rng.randint(0, 999),
+                "user": "root",
+                "rss": f"{secondary_rss}M",
+                "cmd": "postgres: writer process",
+            },
+            {
+                "pid": 4000 + rng.randint(0, 999),
+                "user": "app",
+                "rss": f"{tertiary_rss}M",
+                "cmd": "node /app/worker.js",
+            },
         ]
+
+        # Swap should be elevated when memory is high
+        swap_used_mb = rng.randint(300, 900)
+
+        # OOM kills should be present (this is a memory problem)
+        oom_kills = rng.randint(1, 4)
 
         lines = [
             f"=== Memory Investigation: {host} ===",
             f"",
             f"Total: {total_mb}MB  Used: {used_mb}MB  Free: {free_mb}MB  Usage: {mem_pct}%",
-            f"Swap:  2048MB  Used: {random.randint(100, 800)}MB",
+            f"Swap:  2048MB  Used: {swap_used_mb}MB",
             f"",
             f"Top Memory Consumers:",
             f"{'PID':>8} {'USER':<10} {'RSS':>8} COMMAND",
@@ -38,7 +79,7 @@ class MemoryHighInvestigation(BaseInvestigation):
 
         lines += [
             f"",
-            f"OOM Kills (24h): {random.randint(0, 5)}",
+            f"OOM Kills (24h): {oom_kills}",
             f"",
             f"Diagnosis: Memory at {mem_pct}% — primary consumer is Java service.",
             f"Recommendation: Restart service or increase heap limits.",

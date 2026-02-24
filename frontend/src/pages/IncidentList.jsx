@@ -1,8 +1,19 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Bell, AlertOctagon, CheckCircle, Clock,
-  LayoutGrid, List as ListIcon
+  Bell,
+  AlertOctagon,
+  CheckCircle,
+  Clock,
+  Repeat,
+  LayoutGrid,
+  List as ListIcon,
+  Activity,
+  AlertTriangle,
+  GaugeCircle,
+  Radio,
+  ArrowUpRight,
+  ChevronRight,
 } from 'lucide-react'
 import useIncidents from '../hooks/useIncidents'
 import IncidentCard from '../components/incident/IncidentCard'
@@ -11,23 +22,23 @@ import SystemGraph from '../components/common/SystemGraph'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import StateBadge from '../components/common/StateBadge'
 import SeverityBadge from '../components/common/SeverityBadge'
-import { formatTimestamp, truncateId } from '../utils/formatters'
+import { formatTimestamp, truncateId, formatDuration } from '../utils/formatters'
 
 const STATES = [
   'RECEIVED', 'INVESTIGATING', 'RECOMMENDATION_READY', 'AWAITING_APPROVAL',
   'EXECUTING', 'VERIFYING', 'RESOLVED', 'FAILED_ANALYSIS', 'FAILED_EXECUTION',
-  'FAILED_VERIFICATION', 'ESCALATED',
+  'FAILED_VERIFICATION', 'REJECTED',
 ]
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
 
-export default function IncidentList() {
-  const { incidents, loading, error, connected, reconnecting, filters, setFilters } = useIncidents()
+export default function IncidentList({ initialFilters = {}, title = 'Dashboard' }) {
+  const { incidents, loading, error, connected, reconnecting, filters, setFilters } = useIncidents(initialFilters)
   const [view, setView] = useState('list')
   const [graphType, setGraphType] = useState('area')
 
   const stats = useMemo(() => ({
     total: incidents.length,
-    active: incidents.filter(i => !['RESOLVED', 'ESCALATED'].includes(i.state)).length,
+    active: incidents.filter(i => !['RESOLVED', 'REJECTED'].includes(i.state)).length,
     critical: incidents.filter(i => i.severity === 'CRITICAL').length,
     resolved: incidents.filter(i => i.state === 'RESOLVED').length,
   }), [incidents])
@@ -39,7 +50,7 @@ export default function IncidentList() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            Dashboard
+            {title}
             <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? '#10b981' : '#f43f5e' }}>
               {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: '#10b981', opacity: 0.3 }} />}
             </span>
@@ -156,34 +167,10 @@ export default function IncidentList() {
             {incidents.map(inc => <IncidentCard key={inc.id} incident={inc} />)}
           </div>
         ) : (
-          <div className="glass rounded-xl overflow-hidden">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['ID', 'Severity', 'Title', 'State', 'Created'].map(h => (
-                    <th key={h} className={`px-5 py-3 ${h === 'Created' ? 'text-right' : ''}`} style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {incidents.map(inc => (
-                  <tr key={inc.id} className="group transition-colors" style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-5 py-3.5" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                      <Link to={`/incidents/${inc.id}`} style={{ color: '#818cf8' }}>{truncateId(inc.id)}</Link>
-                    </td>
-                    <td className="px-5 py-3.5"><SeverityBadge severity={inc.severity} /></td>
-                    <td className="px-5 py-3.5">
-                      <Link to={`/incidents/${inc.id}`} className="block">
-                        <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{inc.title}</span>
-                        <span className="block mt-0.5" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{inc.alert_type}</span>
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5"><StateBadge state={inc.state} /></td>
-                    <td className="px-5 py-3.5 text-right" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{formatTimestamp(inc.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {incidents.map(inc => (
+              <IncidentListRow key={inc.id} incident={inc} />
+            ))}
           </div>
         )
       )}
@@ -213,5 +200,98 @@ function Select({ value, onChange, options, placeholder }) {
         <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
       </div>
     </div>
+  )
+}
+
+const SEVERITY_SHADES = {
+  CRITICAL: '#f43f5e',
+  HIGH: '#fb923c',
+  MEDIUM: '#22d3ee',
+  LOW: '#10b981',
+}
+
+function IncidentListRow({ incident }) {
+  const meta = incident.meta || {}
+  const alertCount = meta._alert_count != null ? Number(meta._alert_count) : 1
+  const durationSec = meta._alert_duration_seconds != null ? Number(meta._alert_duration_seconds) : null
+  const unstable = Boolean(meta._unstable)
+  const cloud = meta._cloud || meta.cloud
+  const tenant = meta._tenant_name || meta.tenant
+  const manualReason = typeof meta._manual_review_reason === 'string' ? meta._manual_review_reason.trim() : ''
+  const manualReview = Boolean(meta._manual_review_required || manualReason)
+  const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
+  const accent = manualReview ? '#f87171' : (SEVERITY_SHADES[incident.severity] || '#6366f1')
+
+  return (
+    <Link
+      to={`/incidents/${incident.id}`}
+      className="block rounded-2xl relative overflow-hidden"
+      style={{ border: '1px solid rgba(255,255,255,0.04)', background: 'var(--bg-card)' }}
+    >
+      <div
+        className="absolute inset-y-3 left-3 w-[3px] rounded-full"
+        style={{ background: accent, opacity: 0.85 }}
+      />
+      <div className="pl-6 pr-4 py-3 flex items-center gap-4">
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+            <span>{truncateId(incident.id)}</span>
+            <span>• {formatTimestamp(incident.created_at)}</span>
+            {tenant && <span>• tenant {tenant}</span>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SeverityBadge severity={incident.severity} />
+            <StateBadge state={incident.state} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{incident.alert_type}</span>
+            {cloud && (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <Radio size={11} /> {cloud}
+              </span>
+            )}
+            {manualReview && (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: '#f87171', background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.25)' }}>
+                Manual Review
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2" style={{ color: 'var(--text-heading)', fontWeight: 600, fontSize: 15 }}>
+            {incident.title}
+            <ArrowUpRight size={16} />
+          </div>
+          <div className="flex flex-wrap gap-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+            <span className="rounded-md px-2 py-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+              <Repeat size={10} /> {alertCount}x
+            </span>
+            {durationSec && (
+              <span className="rounded-md px-2 py-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                <Clock size={10} /> {formatDuration(durationSec)}
+              </span>
+            )}
+            {unstable && (
+              <span className="rounded-md px-2 py-0.5" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', color: '#fbbf24' }}>
+                <AlertTriangle size={10} /> flapping
+              </span>
+            )}
+            {meta.recommendation?.confidence && (
+              <span className="rounded-md px-2 py-0.5" style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', color: '#38bdf8' }}>
+                <GaugeCircle size={10} /> {Math.round(meta.recommendation.confidence * 100)}% AI
+              </span>
+            )}
+            {meta.recommendation?.proposed_action && (
+              <span className="rounded-md px-2 py-0.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#fb7185' }}>
+                <Activity size={10} /> {meta.recommendation.proposed_action}
+              </span>
+            )}
+          </div>
+          {manualReason && (
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              <span style={{ color: '#f87171', fontWeight: 600 }}>Operator note:</span> {manualReason}
+              {manualAt && <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>({manualAt})</span>}
+            </p>
+          )}
+        </div>
+        <ChevronRight size={18} style={{ color: 'var(--text-muted)' }} />
+      </div>
+    </Link>
   )
 }

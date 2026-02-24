@@ -52,7 +52,9 @@ async def generate_recommendation(
 
     if recommendation is None:
         log.warning("ai_disabled_or_failed")
-        ai_failure_total.labels(model="all", error_type="circuit_breaker_or_failure").inc()
+        ai_failure_total.labels(
+            model="all", error_type="circuit_breaker_or_failure"
+        ).inc()
         from sqlalchemy.orm.attributes import flag_modified
 
         meta = dict(incident.meta or {})
@@ -74,11 +76,21 @@ async def generate_recommendation(
             "invalid_proposed_action",
             action=recommendation.proposed_action,
         )
+        from sqlalchemy.orm.attributes import flag_modified as _flag_modified
+
+        meta = dict(incident.meta or {})
+        meta.setdefault("_manual_review_required", True)
+        meta["_manual_review_reason"] = (
+            f"LLM proposed unregistered action: {recommendation.proposed_action}"
+        )
+        incident.meta = meta
+        _flag_modified(incident, "meta")
+        await session.flush()
         await transition_state(
             session,
             incident,
-            IncidentState.ESCALATED,
-            reason=f"LLM proposed unregistered action: {recommendation.proposed_action}",
+            IncidentState.FAILED_ANALYSIS,
+            reason=f"Manual review required: invalid action {recommendation.proposed_action}",
         )
         return
 
@@ -88,11 +100,19 @@ async def generate_recommendation(
     )
     if not allowed:
         log.error("policy_rejected", reason=reason)
+        from sqlalchemy.orm.attributes import flag_modified as _flag_modified
+
+        meta = dict(incident.meta or {})
+        meta.setdefault("_manual_review_required", True)
+        meta["_manual_review_reason"] = f"Policy rejected: {reason}"
+        incident.meta = meta
+        _flag_modified(incident, "meta")
+        await session.flush()
         await transition_state(
             session,
             incident,
-            IncidentState.ESCALATED,
-            reason=f"Policy rejected: {reason}",
+            IncidentState.FAILED_ANALYSIS,
+            reason=f"Manual review required: policy rejected ({reason})",
         )
         return
 
@@ -101,7 +121,11 @@ async def generate_recommendation(
 
     meta = dict(incident.meta or {})
     rec_dict = recommendation.model_dump()
-    rec_dict["risk_level"] = rec_dict["risk_level"].value if hasattr(rec_dict["risk_level"], "value") else rec_dict["risk_level"]
+    rec_dict["risk_level"] = (
+        rec_dict["risk_level"].value
+        if hasattr(rec_dict["risk_level"], "value")
+        else rec_dict["risk_level"]
+    )
     meta["recommendation"] = rec_dict
     incident.meta = meta
     flag_modified(incident, "meta")

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, func, select
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.dependencies import Redis, TenantId, TenantSession
 from app.core.rate_limit import approval_rate_limit
@@ -17,11 +18,15 @@ from app.models.enums import IncidentState, SeverityLevel
 from app.models.incident import Incident
 from app.schemas.incident import (
     ApproveRequest,
+    EvidenceResponse,
+    ExecutionResponse,
     IncidentCreatedResponse,
     IncidentDetail,
     IncidentListItem,
     PaginatedIncidents,
+    RejectRequest,
     RelatedIncidentItem,
+    StateTransitionResponse,
 )
 
 logger = structlog.get_logger()
@@ -37,7 +42,9 @@ async def list_incidents(
     severity: SeverityLevel | None = None,
     alert_type: str | None = None,
     limit: int = Query(default=50, le=200),
-    cursor: str | None = Query(default=None, description="ISO timestamp cursor for keyset pagination"),
+    cursor: str | None = Query(
+        default=None, description="ISO timestamp cursor for keyset pagination"
+    ),
     offset: int = Query(default=0, ge=0, description="Legacy offset-based pagination"),
 ) -> PaginatedIncidents:
     """
@@ -154,6 +161,12 @@ async def get_incident(
                 )
             )
 
+    evidence = [EvidenceResponse.model_validate(e) for e in incident.evidence]
+    transitions = [
+        StateTransitionResponse.model_validate(t) for t in incident.state_transitions
+    ]
+    executions = [ExecutionResponse.model_validate(ex) for ex in incident.executions]
+
     return IncidentDetail(
         id=incident.id,
         tenant_id=incident.tenant_id,
@@ -166,9 +179,9 @@ async def get_incident(
         verification_retry_count=incident.verification_retry_count,
         created_at=incident.created_at,
         updated_at=incident.updated_at,
-        evidence=incident.evidence,
-        state_transitions=incident.state_transitions,
-        executions=incident.executions,
+        evidence=evidence,
+        state_transitions=transitions,
+        executions=executions,
         recommendation=recommendation,
         meta=incident.meta,
         related_incidents=related,
@@ -224,7 +237,72 @@ async def approve_incident(
             tenant_id=str(tenant_id),
             incident_id=str(incident_id),
         )
-        return IncidentCreatedResponse(incident_id=incident.id)
+    return IncidentCreatedResponse(incident_id=incident.id)
+
+
+@router.post(
+    "/{incident_id}/reject",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=IncidentCreatedResponse,
+)
+async def reject_incident(
+    incident_id: uuid.UUID,
+    tenant_id: TenantId,
+    session: TenantSession,
+    body: RejectRequest,
+) -> IncidentCreatedResponse:
+    """
+    Reject (skip) an incident.
+
+    Moves the incident to REJECTED state (terminal).
+    """
+    result = await session.execute(
+        select(Incident).where(
+            Incident.tenant_id == tenant_id,
+            Incident.id == incident_id,
+        )
+    )
+    incident = result.scalar_one_or_none()
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    manual_reason = (body.reason or "").strip()
+    transition_reason = manual_reason or "Manually rejected by operator"
+
+    meta = dict(incident.meta or {})
+    meta["_manual_review_required"] = True
+    meta["_manual_review_reason"] = transition_reason
+    meta["_manual_review_actor"] = "human_rejection"
+    meta["_manual_review_at"] = datetime.now(timezone.utc).isoformat()
+    incident.meta = meta
+    flag_modified(incident, "meta")
+    session.add(incident)
+    await session.flush()
+
+    try:
+        await transition_state(
+            session,
+            incident,
+            IncidentState.REJECTED,
+            reason=transition_reason,
+            actor="human_rejection",
+        )
+    except IllegalStateTransition as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    logger.info(
+        "incident_rejected",
+        tenant_id=str(tenant_id),
+        incident_id=str(incident_id),
+    )
+
+    return IncidentCreatedResponse(incident_id=incident.id)
 
     # Acquire distributed lock
     lock_key = f"lock:incident:{tenant_id}:{incident_id}"
@@ -286,7 +364,11 @@ async def approve_incident(
                 body.action,
             )
             await pool.aclose()
-            logger.info("execution_task_enqueued", incident_id=str(incident_id), action=body.action)
+            logger.info(
+                "execution_task_enqueued",
+                incident_id=str(incident_id),
+                action=body.action,
+            )
         except Exception as enq_exc:
             logger.error("execution_enqueue_failed", error=str(enq_exc))
 

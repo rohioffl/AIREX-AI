@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Activity, Settings,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
-  X, ChevronRight, Clock, Zap
+  X, ChevronRight, Clock, Zap, Ban
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
@@ -11,16 +11,15 @@ import { fetchIncidents } from '../../services/api'
 import { createSSEConnection } from '../../services/sse'
 import ToastContainer from '../common/ToastContainer'
 
-const TENANT_ID = localStorage.getItem('tenant_id') || '00000000-0000-0000-0000-000000000000'
-
 const ACTIVE_STATES = [
   'RECEIVED', 'INVESTIGATING', 'RECOMMENDATION_READY',
   'AWAITING_APPROVAL', 'EXECUTING', 'VERIFYING',
 ]
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/incidents', icon: LayoutDashboard },
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Alerts', path: '/alerts', icon: AlertTriangle, showBadge: true },
+  { label: 'Rejected', path: '/rejected', icon: Ban },
   { label: 'Live Feed', path: '/live', icon: Activity },
   { label: 'Settings', path: '/settings', icon: Settings },
 ]
@@ -79,7 +78,6 @@ export default function Layout({ children }) {
     let sse = null
     try {
       sse = createSSEConnection(
-        TENANT_ID,
         {
           incident_created(data) {
             setAlertCount(c => c + 1)
@@ -95,7 +93,7 @@ export default function Layout({ children }) {
             }, ...prev].slice(0, 20))
           },
           state_changed(data) {
-            const resolvedStates = ['RESOLVED', 'ESCALATED', 'FAILED_ANALYSIS', 'FAILED_EXECUTION']
+            const resolvedStates = ['RESOLVED', 'FAILED_ANALYSIS', 'FAILED_EXECUTION', 'REJECTED']
             if (resolvedStates.includes(data.new_state)) {
               setAlertCount(c => Math.max(0, c - 1))
             }

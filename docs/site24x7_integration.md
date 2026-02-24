@@ -10,7 +10,7 @@ Connect Site24x7 monitoring to AIREX for automated incident investigation and re
 ## Your Webhook URL
 
 ```
-https://airex.ankercloud.com/api/v1/webhooks/site24x7
+https://airex.rohitpt.online/api/v1/webhooks/site24x7
 ```
 
 ---
@@ -26,21 +26,18 @@ https://airex.ankercloud.com/api/v1/webhooks/site24x7
 | Field | Value |
 |-------|-------|
 | **Integration Name** | `AIREX Incident Engine` |
-| **Hook URL** | `https://airex.ankercloud.com/api/v1/webhooks/site24x7` |
+| **Hook URL** | `https://airex.rohitpt.online/api/v1/webhooks/site24x7` |
 | **HTTP Method** | `POST` |
 | **Content Type** | `application/json` |
 | **Send Incident Parameters** | `JSON` |
 
-### 2. Add Custom Headers
+### 2. Add Custom Headers (optional)
 
-Click **+ Add Header** and add:
+Single-tenant mode no longer requires tenant headers. Ensure the request sends JSON:
 
 | Header | Value |
 |--------|-------|
-| `X-Tenant-Id` | `00000000-0000-0000-0000-000000000000` |
 | `Content-Type` | `application/json` |
-
-> Replace the tenant ID with your actual tenant UUID if using multi-tenancy.
 
 ### 3. Select JSON Payload Format
 
@@ -233,7 +230,7 @@ Deterministic action executes
     ↓
 Verification confirms fix
     ↓
-RESOLVED (or ESCALATED if auto-fix fails)
+RESOLVED (or REJECTED for manual review if auto-fix fails)
 ```
 
 ---
@@ -244,7 +241,7 @@ RESOLVED (or ESCALATED if auto-fix fails)
 
 Check recent incidents:
 ```bash
-curl -s https://airex.ankercloud.com/api/v1/incidents/ \
+curl -s https://airex.rohitpt.online/api/v1/incidents/ \
   -H "X-Tenant-Id: 00000000-0000-0000-0000-000000000000" | python3 -m json.tool
 ```
 
@@ -257,7 +254,7 @@ curl -s https://airex.ankercloud.com/api/v1/incidents/ \
 ### Test Webhook Manually
 
 ```bash
-curl -X POST https://airex.ankercloud.com/api/v1/webhooks/site24x7 \
+curl -X POST https://airex.rohitpt.online/api/v1/webhooks/site24x7 \
   -H "Content-Type: application/json" \
   -H "X-Tenant-Id: 00000000-0000-0000-0000-000000000000" \
   -d '{

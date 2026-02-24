@@ -28,8 +28,4 @@ describe('VerificationResult', () => {
     expect(screen.getByText('Verification Failed')).toBeInTheDocument()
   })
 
-  it('shows escalated for ESCALATED state', () => {
-    render(<VerificationResult state="ESCALATED" />)
-    expect(screen.getByText('Escalated')).toBeInTheDocument()
-  })
 })

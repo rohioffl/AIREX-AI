@@ -13,7 +13,7 @@ const INITIAL_RETRY_DELAY = 300
 const MAX_JITTER = 200
 const STALE_THRESHOLD_MS = 45000
 
-export function createSSEConnection(tenantId, handlers, onConnectionChange) {
+export function createSSEConnection(handlers, onConnectionChange) {
   let eventSource = null
   let retryDelay = INITIAL_RETRY_DELAY
   let closed = false
@@ -30,8 +30,6 @@ export function createSSEConnection(tenantId, handlers, onConnectionChange) {
 
     if (token) {
       params.set('token', token)
-    } else {
-      params.set('x_tenant_id', tenantId)
     }
 
     const url = `/api/v1/events/stream?${params.toString()}`

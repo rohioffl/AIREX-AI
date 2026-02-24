@@ -15,6 +15,7 @@ import asyncio
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.core.events import emit_evidence_added
@@ -45,7 +46,7 @@ async def run_investigation(
     Routing priority:
       1. If meta has _cloud=gcp/aws + target → CloudInvestigation (real SSH/SSM)
       2. If alert_type matches INVESTIGATION_REGISTRY → simulated plugin
-      3. Otherwise → ESCALATED
+      3. Otherwise → REJECTED (manual review)
 
     Timeouts: INVESTIGATION_TIMEOUT seconds.
     Retries: MAX_INVESTIGATION_RETRIES.
@@ -61,6 +62,7 @@ async def run_investigation(
     # Route to cloud-aware or simulated plugin
     if _should_use_cloud_investigation(meta):
         from app.investigations.cloud_investigation import CloudInvestigation
+
         plugin = CloudInvestigation()
         # Inject alert_type into meta so cloud plugin knows what commands to run
         meta["alert_type"] = incident.alert_type
@@ -74,11 +76,21 @@ async def run_investigation(
         plugin_cls = INVESTIGATION_REGISTRY.get(incident.alert_type)
         if plugin_cls is None:
             log.warning("no_investigation_plugin", alert_type=incident.alert_type)
+            meta = dict(meta)
+            meta.setdefault("_manual_review_required", True)
+            meta.setdefault(
+                "_manual_review_reason",
+                f"No automation plugin for alert_type {incident.alert_type}",
+            )
+            incident.meta = meta
+            flag_modified(incident, "meta")
+            session.add(incident)
+            await session.flush()
             await transition_state(
                 session,
                 incident,
-                IncidentState.ESCALATED,
-                reason=f"No investigation plugin for alert_type: {incident.alert_type}",
+                IncidentState.FAILED_ANALYSIS,
+                reason=f"Manual review required: no plugin for {incident.alert_type}",
             )
             return
         plugin = plugin_cls()
@@ -124,13 +136,9 @@ async def run_investigation(
         await _enqueue_recommendation(incident, log)
 
     except asyncio.TimeoutError:
-        await _handle_failure(
-            session, incident, log, "Investigation timed out"
-        )
+        await _handle_failure(session, incident, log, "Investigation timed out")
     except Exception as exc:
-        await _handle_failure(
-            session, incident, log, f"Investigation failed: {exc}"
-        )
+        await _handle_failure(session, incident, log, f"Investigation failed: {exc}")
 
 
 async def _enqueue_recommendation(
@@ -160,7 +168,7 @@ async def _handle_failure(
     log: structlog.stdlib.BoundLogger,
     reason: str,
 ) -> None:
-    """Increment retry counter or escalate if max retries exceeded."""
+    """Increment retry counter or mark for manual review if retries exhausted."""
     incident.investigation_retry_count += 1
     current_retries = incident.investigation_retry_count
 
@@ -169,11 +177,18 @@ async def _handle_failure(
             "investigation_max_retries_exceeded",
             retries=current_retries,
         )
+        meta = dict(incident.meta or {})
+        meta.setdefault("_manual_review_required", True)
+        meta["_manual_review_reason"] = f"Investigation retries exhausted: {reason}"
+        incident.meta = meta
+        flag_modified(incident, "meta")
+        session.add(incident)
+        await session.flush()
         await transition_state(
             session,
             incident,
-            IncidentState.ESCALATED,
-            reason=f"Max investigation retries ({current_retries}) exceeded: {reason}",
+            IncidentState.FAILED_ANALYSIS,
+            reason=f"Investigation retries exhausted ({current_retries}): {reason}",
         )
     else:
         log.warning(

@@ -5,9 +5,10 @@ import { AuthProvider } from './context/AuthContext'
 import Layout from './components/layout/Layout'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
-import IncidentList from './pages/IncidentList'
 import IncidentDetail from './pages/IncidentDetail'
 import AlertsPage from './pages/AlertsPage'
+import RejectedPage from './pages/RejectedPage'
+import DashboardPage from './pages/DashboardPage'
 import LiveFeed from './pages/LiveFeed'
 import SettingsPage from './pages/SettingsPage'
 
@@ -23,9 +24,11 @@ export default function App() {
               <Route path="/*" element={
                 <Layout>
                   <Routes>
-                    <Route path="/incidents" element={<IncidentList />} />
+                    <Route path="/incidents" element={<Navigate to="/alerts" replace />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/incidents/:id" element={<IncidentDetail />} />
                     <Route path="/alerts" element={<AlertsPage />} />
+                    <Route path="/rejected" element={<RejectedPage />} />
                     <Route path="/live" element={<LiveFeed />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Routes>

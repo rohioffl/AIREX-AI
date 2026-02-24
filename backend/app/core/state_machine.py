@@ -22,35 +22,40 @@ ALLOWED_TRANSITIONS: dict[IncidentState, list[IncidentState]] = {
     IncidentState.INVESTIGATING: [
         IncidentState.RECOMMENDATION_READY,
         IncidentState.FAILED_ANALYSIS,
-        IncidentState.ESCALATED,
+        IncidentState.REJECTED,
     ],
     IncidentState.RECOMMENDATION_READY: [
         IncidentState.AWAITING_APPROVAL,
-        IncidentState.ESCALATED,
+        IncidentState.REJECTED,
     ],
     IncidentState.AWAITING_APPROVAL: [
         IncidentState.EXECUTING,
-        IncidentState.ESCALATED,
+        IncidentState.REJECTED,
     ],
     IncidentState.EXECUTING: [
         IncidentState.VERIFYING,
         IncidentState.FAILED_EXECUTION,
+        IncidentState.REJECTED,
     ],
     IncidentState.VERIFYING: [
         IncidentState.RESOLVED,
         IncidentState.FAILED_VERIFICATION,
-        IncidentState.ESCALATED,
+        IncidentState.REJECTED,
     ],
     IncidentState.FAILED_VERIFICATION: [
-        IncidentState.ESCALATED,
+        IncidentState.REJECTED,
+    ],
+    IncidentState.FAILED_ANALYSIS: [
+        IncidentState.REJECTED,
+    ],
+    IncidentState.FAILED_EXECUTION: [
+        IncidentState.REJECTED,
     ],
 }
 
 TERMINAL_STATES: set[IncidentState] = {
     IncidentState.RESOLVED,
-    IncidentState.FAILED_ANALYSIS,
-    IncidentState.FAILED_EXECUTION,
-    IncidentState.ESCALATED,
+    IncidentState.REJECTED,
 }
 
 
@@ -60,9 +65,7 @@ class IllegalStateTransition(Exception):
     def __init__(self, current: IncidentState, target: IncidentState) -> None:
         self.current = current
         self.target = target
-        super().__init__(
-            f"Illegal transition: {current.value} -> {target.value}"
-        )
+        super().__init__(f"Illegal transition: {current.value} -> {target.value}")
 
 
 def _compute_hash(
@@ -143,6 +146,7 @@ async def transition_state(
     # SSE event (fire-and-forget, don't fail transition if Redis is down)
     try:
         from app.core.events import emit_state_changed
+
         await emit_state_changed(
             tenant_id=str(incident.tenant_id),
             incident_id=str(incident.id),

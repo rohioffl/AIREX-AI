@@ -6,6 +6,8 @@ license: Private
 
 # Database Skill — AIREX
 
+> **Single-tenant mode:** Although the schema still includes `tenant_id` columns for future scalability, the running system now fixes every row to the primary DEV tenant. RLS `SET app.tenant_id` calls always use `00000000-0000-0000-0000-000000000000` until multi-tenancy is reintroduced.
+
 This skill defines the data persistence rules for the autonomous SRE system.
 
 This is NOT a schema-less playground.
@@ -54,19 +56,19 @@ The Database must be:
 ### 2.2 Strict State Management
 - **PostgreSQL Enums**: Do NOT rely solely on Python Enums.
   ```sql
-  CREATE TYPE incident_state AS ENUM (
-      'RECEIVED',
-      'INVESTIGATING',
-      'RECOMMENDATION_READY',
-      'AWAITING_APPROVAL',
-      'EXECUTING',
-      'VERIFYING',
-      'RESOLVED',
-      'FAILED_ANALYSIS',
-      'FAILED_EXECUTION',
-      'FAILED_VERIFICATION',
-      'ESCALATED'
-  );
+CREATE TYPE incident_state AS ENUM (
+    'RECEIVED',
+    'INVESTIGATING',
+    'RECOMMENDATION_READY',
+    'AWAITING_APPROVAL',
+    'EXECUTING',
+    'VERIFYING',
+    'RESOLVED',
+    'FAILED_ANALYSIS',
+    'FAILED_EXECUTION',
+    'FAILED_VERIFICATION',
+    'REJECTED'
+);
   CREATE TYPE severity_level AS ENUM ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW');
   ```
 - **Validation**: `state` column must be `incident_state NOT NULL`.
@@ -85,7 +87,7 @@ The Database must be:
     - `created_at` (Timestamp, Default NOW(), Indexed)
     - `updated_at` (Timestamp, Default NOW())
     - `deleted_at` (Timestamp, Nullable) - **Soft Delete**
-    - **Constraint**: `CHECK (deleted_at IS NULL OR state IN ('RESOLVED', 'ESCALATED', 'FAILED_EXECUTION', 'FAILED_VERIFICATION'))`
+    - **Constraint**: `CHECK (deleted_at IS NULL OR state IN ('RESOLVED', 'FAILED_EXECUTION', 'FAILED_VERIFICATION', 'REJECTED'))`
     # Retry Logic Split (With Safety Checks)
     - `investigation_retry_count` (Integer, Default 0, CHECK >= 0 AND <= 3)
     - `execution_retry_count` (Integer, Default 0, CHECK >= 0 AND <= 3)

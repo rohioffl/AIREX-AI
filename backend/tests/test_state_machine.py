@@ -30,32 +30,35 @@ class TestAllowedTransitions:
         allowed = ALLOWED_TRANSITIONS[IncidentState.INVESTIGATING]
         assert IncidentState.RECOMMENDATION_READY in allowed
         assert IncidentState.FAILED_ANALYSIS in allowed
-        assert IncidentState.ESCALATED in allowed
+        assert IncidentState.REJECTED in allowed
         assert len(allowed) == 3
 
     def test_executing_cannot_skip_to_resolved(self):
         allowed = ALLOWED_TRANSITIONS[IncidentState.EXECUTING]
         assert IncidentState.RESOLVED not in allowed
+        assert IncidentState.REJECTED in allowed
 
     def test_awaiting_approval_transitions(self):
         allowed = ALLOWED_TRANSITIONS[IncidentState.AWAITING_APPROVAL]
         assert IncidentState.EXECUTING in allowed
-        assert IncidentState.ESCALATED in allowed
+        assert IncidentState.REJECTED in allowed
         assert IncidentState.RESOLVED not in allowed
 
     def test_verifying_can_resolve(self):
         allowed = ALLOWED_TRANSITIONS[IncidentState.VERIFYING]
         assert IncidentState.RESOLVED in allowed
         assert IncidentState.FAILED_VERIFICATION in allowed
-        assert IncidentState.ESCALATED in allowed
+        assert IncidentState.REJECTED in allowed
 
-    def test_failed_verification_can_only_escalate(self):
+    def test_failed_verification_flows_to_rejected(self):
         allowed = ALLOWED_TRANSITIONS[IncidentState.FAILED_VERIFICATION]
-        assert allowed == [IncidentState.ESCALATED]
+        assert set(allowed) == {IncidentState.REJECTED}
 
     def test_terminal_states_have_no_transitions(self):
         for state in TERMINAL_STATES:
-            assert state not in ALLOWED_TRANSITIONS or ALLOWED_TRANSITIONS.get(state) == []
+            assert (
+                state not in ALLOWED_TRANSITIONS or ALLOWED_TRANSITIONS.get(state) == []
+            )
 
     def test_no_state_can_skip_investigation(self):
         """RECEIVED -> EXECUTING is BANNED."""
@@ -106,8 +109,11 @@ class TestTransitionState:
         session.execute.return_value = mock_result
 
         transition = await transition_state(
-            session, incident, IncidentState.INVESTIGATING,
-            reason="Webhook received", actor="test",
+            session,
+            incident,
+            IncidentState.INVESTIGATING,
+            reason="Webhook received",
+            actor="test",
         )
 
         assert transition.from_state == IncidentState.RECEIVED
@@ -129,7 +135,9 @@ class TestTransitionState:
 
         with pytest.raises(IllegalStateTransition) as exc_info:
             await transition_state(
-                session, incident, IncidentState.EXECUTING,
+                session,
+                incident,
+                IncidentState.EXECUTING,
                 reason="Skip attempt",
             )
 
@@ -148,7 +156,9 @@ class TestTransitionState:
 
         with pytest.raises(IllegalStateTransition):
             await transition_state(
-                session, incident, IncidentState.RESOLVED,
+                session,
+                incident,
+                IncidentState.RESOLVED,
                 reason="Magic fix",
             )
 
@@ -169,7 +179,9 @@ class TestTransitionState:
         session.execute.return_value = mock_result
 
         transition = await transition_state(
-            session, incident, IncidentState.RECOMMENDATION_READY,
+            session,
+            incident,
+            IncidentState.RECOMMENDATION_READY,
             reason="Investigation complete",
         )
 

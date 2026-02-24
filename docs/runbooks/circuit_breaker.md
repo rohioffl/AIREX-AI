@@ -6,8 +6,9 @@
 ## What it means
 The circuit breaker opens when the LLM provider fails more than
 `LLM_CIRCUIT_BREAKER_THRESHOLD` (default: 3) consecutive times.
-While open, all recommendation requests are fast-failed and incidents
-escalate immediately rather than waiting for AI responses.
+While open, all recommendation requests are fast-failed and incidents are
+flagged for manual review (remains in `FAILED_ANALYSIS` with `_manual_review_required`)
+rather than waiting for AI responses.
 
 ## Diagnosis
 

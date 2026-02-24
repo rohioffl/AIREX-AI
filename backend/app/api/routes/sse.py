@@ -13,7 +13,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.dependencies import Redis, TenantId
+from app.api.dependencies import Redis
 from app.core.config import settings
 from app.core.security import decode_access_token
 
@@ -22,31 +22,15 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
-def _resolve_tenant(
-    x_tenant_id: str | None = None,
-    token: str | None = None,
-) -> uuid.UUID:
-    """
-    Resolve tenant from JWT token or fallback header/query.
-    SSE uses query params since EventSource API cannot set headers.
-    """
+def _resolve_tenant(token: str | None = None) -> uuid.UUID:
+    """Single-tenant mode: optionally validate token, always return default tenant."""
     if token:
         try:
-            data = decode_access_token(token)
-            return data.tenant_id
+            decode_access_token(token)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=str(exc),
-            ) from exc
-
-    if x_tenant_id:
-        try:
-            return uuid.UUID(x_tenant_id)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid tenant ID",
             ) from exc
 
     return uuid.UUID(settings.DEV_TENANT_ID)
@@ -56,7 +40,6 @@ def _resolve_tenant(
 async def event_stream(
     request: Request,
     redis: Redis,
-    x_tenant_id: str | None = Query(None),
     token: str | None = Query(None),
 ) -> EventSourceResponse:
     """
@@ -71,7 +54,7 @@ async def event_stream(
 
     Auth: pass `token` query param with JWT, or `x_tenant_id` for dev.
     """
-    tenant_id = _resolve_tenant(x_tenant_id, token)
+    tenant_id = _resolve_tenant(token)
 
     async def generate():
         channel = f"tenant:{tenant_id}:events"
