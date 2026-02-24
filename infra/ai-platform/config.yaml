@@ -1,0 +1,17 @@
+model_list:
+  - model_name: vertex_ai/gemini-2.0-flash
+    litellm_params:
+      model: vertex_ai/gemini-2.0-flash
+  - model_name: text-embedding-3-large
+    litellm_params:
+      model: text-embedding-3-large
+      # Add API base or keys below if using OpenAI, Azure, etc.
+
+litellm_settings:
+  # Enable Langfuse tracing
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+  # Optional: cache settings if needed
+  # cache: true
+  # cache_params:
+  #   type: redis

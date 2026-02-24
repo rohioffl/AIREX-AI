@@ -42,6 +42,9 @@ services:
       - DATABASE_URL=your_passwordql+asyncpg://your_password:your_password@db:5432/airex
       - REDIS_URL=redis://redis:6379/0
       - CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
+      - LLM_BASE_URL=http://ai-platform:4000/v1
+      - LLM_API_KEY=sk-proxy-dummy
+      - LLM_EMBEDDING_MODEL=text-embedding-3-large
     depends_on:
       db:
         condition: service_healthy
@@ -58,6 +61,9 @@ services:
     environment:
       - DATABASE_URL=your_passwordql+asyncpg://your_password:your_password@db:5432/airex
       - REDIS_URL=redis://redis:6379/0
+      - LLM_BASE_URL=http://ai-platform:4000/v1
+      - LLM_API_KEY=sk-proxy-dummy
+      - LLM_EMBEDDING_MODEL=text-embedding-3-large
     depends_on:
       db:
         condition: service_healthy
@@ -85,6 +91,25 @@ services:
       - "5173:80"
     depends_on:
       - backend
+
+  ai-platform:
+    image: ghcr.io/berriai/litellm:main-v1.60.0
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./infra/ai-platform/config.yaml:/app/config.yaml
+    environment:
+      # Use same DB if you want to store LiteLLM budgets/keys, or an ephemeral run
+      # - DATABASE_URL=your_passwordql://your_password:your_password@db:5432/airex
+      # If using Vertex AI / GCP:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-sa.json
+      # If using OpenAI / Anthropic:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Langfuse Observability Credentials
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
 
 volumes:
   your_password_data:
