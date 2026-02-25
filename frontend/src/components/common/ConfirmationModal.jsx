@@ -25,7 +25,7 @@ export default function ConfirmationModal({
     : <div style={{ marginTop: 12 }}>{message}</div>
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : 'Confirmation dialog'}>
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onCancel} />
       <div className="relative w-full max-w-md mx-4 glass rounded-2xl p-6 animate-slide-up glow-indigo">
         <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}>{title}</h3>

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { Activity } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -85,6 +85,34 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function SystemGraph({ incidents = [], type = 'area' }) {
   const data = useMemo(() => buildSeries(incidents), [incidents])
 
+  const containerRef = useRef(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const element = containerRef.current
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect()
+      const width = rect.width || 0
+      const height = rect.height || 0
+      if (width !== containerSize.width || height !== containerSize.height) {
+        setContainerSize({ width, height })
+      }
+    }
+
+    updateSize()
+
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(element)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [containerSize.width, containerSize.height])
+
+  const hasSize = containerSize.width > 0 && containerSize.height > 0
+
   const mini = useMemo(() => {
     const created24h = data.reduce((acc, r) => acc + (r.incidents || 0), 0)
     const resolved24h = data.reduce((acc, r) => acc + (r.resolved || 0), 0)
@@ -117,10 +145,11 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
         </div>
       </div>
 
-      <div style={{ width: '100%', height: 220 }}>
-        <ResponsiveContainer>
-          {type === 'area' ? (
-            <AreaChart data={data}>
+      <div ref={containerRef} style={{ width: '100%', minHeight: 220, height: 220 }}>
+        {hasSize && (
+          <ResponsiveContainer width="100%" height="100%">
+            {type === 'area' ? (
+              <AreaChart data={data}>
               <defs>
                 <linearGradient id="gradIncident" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
@@ -139,7 +168,7 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
               <Area type="monotone" dataKey="resolved" name="Resolved" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#gradResolved)" />
             </AreaChart>
           ) : (
-            <BarChart data={data}>
+              <BarChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
@@ -147,8 +176,9 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
               <Bar dataKey="incidents" name="Incidents" fill="#6366f1" radius={[4, 4, 0, 0]} />
               <Bar dataKey="resolved" name="Resolved" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
-          )}
-        </ResponsiveContainer>
+            )}
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* Mini stats */}

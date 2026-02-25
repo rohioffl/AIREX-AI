@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { Shield, Mail, Lock, Eye, EyeOff, User, ArrowRight, Loader, CheckCircle2, Activity, Zap } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { register } from '../services/auth'
+import { extractErrorMessage } from '../utils/errorHandler'
 import landFinalBg from '../assets/land_final.jpg'
 
 export default function LoginPage() {
@@ -47,7 +48,7 @@ export default function LoginPage() {
         navigate('/incidents', { replace: true })
       }
     } catch (err) {
-      const msg = err?.response?.data?.detail || err.message || 'Something went wrong'
+      const msg = extractErrorMessage(err) || err.message || 'Something went wrong'
       setError(msg)
     } finally {
       setLoading(false)
@@ -186,6 +187,7 @@ export default function LoginPage() {
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder=""
                         required
+                        autoComplete="email"
                         className="w-full bg-black/40 hover:bg-black/50 focus:bg-black/50 border border-white/5 focus:border-blue-500/50 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder-slate-600 outline-none transition-all duration-300 focus:shadow-[0_0_30px_rgba(59,130,246,0.15)]"
                       />
                     </div>
@@ -204,6 +206,7 @@ export default function LoginPage() {
                         placeholder="••••••••••••"
                         required
                         minLength={6}
+                        autoComplete="current-password"
                         className="w-full bg-black/40 hover:bg-black/50 focus:bg-black/50 border border-white/5 focus:border-blue-500/50 rounded-2xl py-3.5 pl-12 pr-12 text-white placeholder-slate-600 outline-none transition-all duration-300 focus:shadow-[0_0_30px_rgba(59,130,246,0.15)]"
                       />
                       <button
@@ -283,15 +286,6 @@ export default function LoginPage() {
 
         </div>
 
-        {/* Bypass Dev */}
-        <div className="mt-12 text-center">
-          <button
-            onClick={() => navigate('/incidents', { replace: true })}
-            className="text-[10px] text-white/10 hover:text-white/40 transition-colors font-mono tracking-[0.2em]"
-          >
-            // BYPASS_AUTH_SECURE_GATEWAY
-          </button>
-        </div>
       </div>
 
       <style>{`

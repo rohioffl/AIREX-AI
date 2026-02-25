@@ -1,34 +1,74 @@
 import { useState, useEffect } from 'react'
 import {
   Settings, Server, Brain, Shield, Clock, Database,
-  CheckCircle, AlertTriangle, RefreshCw
+  CheckCircle, AlertTriangle, RefreshCw, Save
 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { fetchSettings, updateSettings } from '../services/api'
 import ConnectionBanner from '../components/common/ConnectionBanner'
+import { FALLBACK_TENANT_ID } from '../utils/constants'
+import { extractErrorMessage } from '../utils/errorHandler'
 
 export default function SettingsPage() {
+  const { user } = useAuth()
   const [health, setHealth] = useState(null)
+  const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     fetchHealth()
-  }, [])
+    if (user?.role === 'admin') {
+      loadSettings()
+    }
+  }, [user])
 
   async function fetchHealth() {
-    setLoading(true)
     try {
-      const res = await fetch('/api/../health', { credentials: 'include' })
+      // In dev, `/api` is proxied to the backend; backend health lives at `/health`
+      const res = await fetch('/api/health', { credentials: 'include' })
+
+      // Expected case in dev when backend is not running
+      if (res.status === 404) {
+        setHealth({ status: 'dev_backend_missing' })
+        return
+      }
+
       if (!res.ok) throw new Error('health check failed')
       const data = await res.json()
       setHealth(data)
     } catch (err) {
-      console.warn('health check failed', err)
+      // Only log unexpected failures (network issues, 5xx, etc.)
+      console.error('health check failed', err)
       setHealth(null)
     } finally {
       setLoading(false)
     }
   }
 
-  const tenantId = '00000000-0000-0000-0000-000000000000'
+  async function loadSettings() {
+    try {
+      const data = await fetchSettings()
+      setSettings(data)
+    } catch (err) {
+      console.error('Failed to load settings:', err)
+    }
+  }
+
+  async function handleSave() {
+    if (!settings) return
+    setSaving(true)
+    setError(null)
+    try {
+      await updateSettings(settings)
+      alert('Settings updated. Note: Some settings require service restart to take effect.')
+    } catch (err) {
+      setError(extractErrorMessage(err) || err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const configs = [
     {
@@ -70,8 +110,16 @@ export default function SettingsPage() {
       icon: Server,
       color: '#34d399',
       items: [
-        { label: 'Backend', value: health?.status === 'ok' ? 'Healthy' : 'Unknown' },
-        { label: 'Tenant ID', value: tenantId.slice(0, 8) + '...' },
+        {
+          label: 'Backend',
+          value:
+            health?.status === 'ok'
+              ? 'Healthy'
+              : health?.status === 'dev_backend_missing'
+                ? 'Backend not running (Dev Mode)'
+                : 'Unknown',
+        },
+        { label: 'Tenant ID', value: (user?.tenant_id || FALLBACK_TENANT_ID).slice(0, 8) + '...' },
         { label: 'Database', value: 'PostgreSQL 15+ (RLS)' },
         { label: 'Queue', value: 'Redis + ARQ' },
         { label: 'SSE', value: 'Real-time events' },
@@ -107,7 +155,14 @@ export default function SettingsPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
-            { label: 'Backend API', ok: health?.status === 'ok', detail: 'FastAPI + Uvicorn' },
+            {
+              label: 'Backend API',
+              ok: health?.status === 'ok',
+              detail:
+                health?.status === 'dev_backend_missing'
+                  ? 'Backend not running (Dev Mode)'
+                  : 'FastAPI + Uvicorn',
+            },
             { label: 'Database', ok: true, detail: 'PostgreSQL + Alembic' },
             { label: 'Redis / Queue', ok: true, detail: 'ARQ Worker' },
             { label: 'AI Engine', ok: true, detail: 'Gemini 2.0 Flash' },
@@ -129,6 +184,12 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244,63,94,0.03)', fontSize: 14, color: '#fb7185' }}>
+          <span style={{ fontWeight: 700, marginRight: 8 }}>Error:</span>{error}
+        </div>
+      )}
+
       {/* Config Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {configs.map(section => (
@@ -138,16 +199,45 @@ export default function SettingsPage() {
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{section.section}</span>
             </div>
             <div className="space-y-2">
-              {section.items.map(item => (
-                <div key={item.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item.label}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-heading)' }}>{item.value}</span>
-                </div>
-              ))}
+              {section.items.map(item => {
+                const displayValue = section.section === 'Pipeline' && settings
+                  ? (item.label.includes('Timeout')
+                    ? `${settings[item.label.toLowerCase().replace(/\s+/g, '_').replace('timeout', 'timeout')] || item.value}s`
+                    : item.label.includes('Retries')
+                      ? String(settings[item.label.toLowerCase().replace(/\s+/g, '_').replace('max_', 'max_')] || item.value)
+                      : item.value)
+                  : item.value
+                return (
+                  <div key={item.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item.label}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-heading)' }}>{displayValue}</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         ))}
       </div>
+
+      {user?.role === 'admin' && settings && (
+        <div className="glass rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Settings Management</span>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all disabled:opacity-50"
+              style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+            >
+              <Save size={14} />
+              {saving ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Note: Most settings are environment variables and require service restart to take effect.
+          </p>
+        </div>
+      )}
 
       {/* Tenant Info */}
       <div className="glass rounded-xl p-5">
@@ -158,7 +248,7 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tenant ID</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-heading)', marginTop: 4, wordBreak: 'break-all' }}>{tenantId}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-heading)', marginTop: 4, wordBreak: 'break-all' }}>{user?.tenant_id || FALLBACK_TENANT_ID}</div>
           </div>
           <div className="p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mode</div>

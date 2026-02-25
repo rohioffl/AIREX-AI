@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { AlertTriangle, RefreshCcw, TrendingUp, Bell, Activity, Clock, CheckCircle } from 'lucide-react'
 import useIncidents from '../hooks/useIncidents'
+import { fetchMetrics } from '../services/api'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import MetricCard from '../components/common/MetricCard'
 import SystemGraph from '../components/common/SystemGraph'
 import AlertRow from '../components/alert/AlertRow'
-import { formatTimestamp } from '../utils/formatters'
+import { formatTimestamp, formatDuration } from '../utils/formatters'
 
 const ACTIVE_STATES = [
   'RECEIVED',
@@ -21,6 +22,26 @@ const TERMINAL_STATES = ['RESOLVED', 'FAILED_EXECUTION', 'FAILED_VERIFICATION', 
 export default function DashboardPage() {
   const { incidents, loading, error, connected, reconnecting, reload } = useIncidents()
   const [graphType, setGraphType] = useState('area')
+  const [metrics, setMetrics] = useState(null)
+  const [metricsLoading, setMetricsLoading] = useState(true)
+
+  useEffect(() => {
+    loadMetrics()
+    const interval = setInterval(loadMetrics, 60000) // Refresh every minute
+    return () => clearInterval(interval)
+  }, [])
+
+  const loadMetrics = async () => {
+    try {
+      setMetricsLoading(true)
+      const data = await fetchMetrics()
+      setMetrics(data)
+    } catch (err) {
+      console.error('Failed to load metrics:', err)
+    } finally {
+      setMetricsLoading(false)
+    }
+  }
 
   const latestFive = useMemo(() => {
     const sorted = [...incidents].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -72,11 +93,17 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard title="Active" value={String(summary.active)} trend="Awaiting resolution" trendType="neutral" icon={Bell} />
         <MetricCard title="Critical" value={String(summary.critical)} trend={summary.critical ? 'Needs attention' : 'Stable'} trendType={summary.critical ? 'negative' : 'positive'} icon={AlertTriangle} isCritical={summary.critical > 0} />
         <MetricCard title="Resolved (24h)" value={String(summary.resolvedToday)} trend="Closed in last day" trendType="positive" icon={CheckCircle} />
-        <MetricCard title="Live Sessions" value={connected ? '1' : '0'} trend={connected ? 'Online' : 'Offline'} trendType={connected ? 'positive' : 'negative'} icon={Activity} />
+        <MetricCard
+          title="Live Sessions"
+          value={connected ? 'Connected' : reconnecting ? 'Reconnecting' : 'Disconnected'}
+          trend={connected ? 'SSE connected' : reconnecting ? 'Attempting reconnect' : 'SSE disconnected'}
+          trendType={connected ? 'positive' : reconnecting ? 'neutral' : 'negative'}
+          icon={Activity}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -87,10 +114,32 @@ export default function DashboardPage() {
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Telemetry</span>
           <div className="flex-1 flex flex-col gap-3">
             {[
-              { label: 'MTTR', value: '4m 23s', color: '#10b981' },
-              { label: 'Avg Investigation', value: '45s', color: '#6366f1' },
-              { label: 'AI Confidence', value: '87%', color: '#a855f7' },
-              { label: 'Auto-resolved', value: `${summary.resolvedToday}`, color: '#22d3ee' },
+              {
+                label: 'MTTR',
+                value: metrics?.mttr_seconds
+                  ? formatDuration(metrics.mttr_seconds)
+                  : '—',
+                color: '#10b981'
+              },
+              {
+                label: 'Avg Investigation',
+                value: metrics?.avg_investigation_seconds
+                  ? formatDuration(metrics.avg_investigation_seconds)
+                  : '—',
+                color: '#6366f1'
+              },
+              {
+                label: 'AI Confidence',
+                value: metrics?.ai_confidence_avg
+                  ? `${Math.round(metrics.ai_confidence_avg * 100)}%`
+                  : '—',
+                color: '#a855f7'
+              },
+              {
+                label: 'Auto-resolved',
+                value: metrics ? String(metrics.auto_resolved_count) : String(summary.resolvedToday),
+                color: '#22d3ee'
+              },
             ].map((s) => (
               <div key={s.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{s.label}</span>
