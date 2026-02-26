@@ -203,19 +203,33 @@ class LLMClient:
         try:
             import litellm
 
+            # When routing through a LiteLLM proxy, use the openai/
+            # prefix so the local litellm SDK treats it as an
+            # OpenAI-compatible endpoint and forwards to the proxy.
+            effective_model = model
+            if settings.LLM_BASE_URL:
+                if not model.startswith("openai/"):
+                    effective_model = f"openai/{model}"
+
             call_kwargs: dict[str, Any] = {
-                "model": model,
+                "model": effective_model,
                 "messages": messages,
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1,
             }
 
+            # Pass proxy base URL and API key when configured
+            if settings.LLM_BASE_URL:
+                call_kwargs["api_base"] = settings.LLM_BASE_URL
+            if settings.LLM_API_KEY:
+                call_kwargs["api_key"] = settings.LLM_API_KEY
+
             headers = build_llm_headers()
             if headers:
                 call_kwargs["extra_headers"] = headers
 
-            # Vertex AI requires project and location
-            if model.startswith("vertex_ai/"):
+            # Vertex AI requires project and location (direct mode only)
+            if model.startswith("vertex_ai/") and not settings.LLM_BASE_URL:
                 call_kwargs["vertex_project"] = settings.VERTEX_PROJECT
                 call_kwargs["vertex_location"] = settings.VERTEX_LOCATION
 

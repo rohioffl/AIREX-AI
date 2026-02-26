@@ -1,25 +1,25 @@
 model_list:
-  # Primary model: Gemini directly via Google AI Studio API
+  # Primary model: Gemini 2.0 Flash via Google AI Studio API
   - model_name: gemini-2.0-flash
     litellm_params:
       model: gemini/gemini-2.0-flash
-  
-  # Fallback model: Gemini 2.0 Flash Lite via Google AI Studio API
-  - model_name: gemini-2.0-flash-lite
-    litellm_params:
-      model: gemini/gemini-2.0-flash-lite
 
-  # Bedrock Models (if you want to use Anthropic/Llama via AWS)
-  - model_name: bedrock-claude-3-5-sonnet
+  # Fallback model: Amazon Nova Lite via AWS Bedrock
+  - model_name: nova-lite
     litellm_params:
-      model: bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0
-      
-  # Embedding Model: text-embedding-3-large (OpenAI) or swap for Bedrock Titan
-  - model_name: text-embedding-3-large
+      model: bedrock/amazon.nova-lite-v1:0
+
+  # Amazon Nova Pro (higher quality fallback)
+  - model_name: nova-pro
     litellm_params:
-      model: text-embedding-3-large
+      model: bedrock/amazon.nova-pro-v1:0
+
+  # Embedding Model: Bedrock Titan Text Embeddings v2
+  - model_name: text-embedding
+    litellm_params:
+      model: bedrock/amazon.titan-embed-text-v2:0
 
 litellm_settings:
-  # Enable Langfuse tracing
-  success_callback: ["langfuse"]
-  failure_callback: ["langfuse"]
+  # Disable callbacks that require external keys we don't have
+  success_callback: []
+  failure_callback: []

@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   db:
-    image: your_password:15-alpine
+    image: ankane/pgvector:latest
     restart: always
     environment:
       - POSTGRES_USER=your_password
@@ -23,6 +23,9 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -45,8 +48,8 @@ services:
       - LLM_BASE_URL=http://ai-platform:4000/v1
       - LLM_API_KEY=sk-proxy-dummy
       - LLM_PRIMARY_MODEL=gemini-2.0-flash
-      - LLM_FALLBACK_MODEL=gemini-2.0-flash-lite
-      - LLM_EMBEDDING_MODEL=text-embedding-3-large
+      - LLM_FALLBACK_MODEL=nova-lite
+      - LLM_EMBEDDING_MODEL=text-embedding
     depends_on:
       db:
         condition: service_healthy
@@ -66,8 +69,8 @@ services:
       - LLM_BASE_URL=http://ai-platform:4000/v1
       - LLM_API_KEY=sk-proxy-dummy
       - LLM_PRIMARY_MODEL=gemini-2.0-flash
-      - LLM_FALLBACK_MODEL=gemini-2.0-flash-lite
-      - LLM_EMBEDDING_MODEL=text-embedding-3-large
+      - LLM_FALLBACK_MODEL=nova-lite
+      - LLM_EMBEDDING_MODEL=text-embedding
     depends_on:
       db:
         condition: service_healthy
@@ -117,5 +120,54 @@ services:
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
     command: ["--config", "/app/config.yaml", "--port", "4000"]
 
+  prometheus:
+    image: prom/prometheus:latest
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infra/prometheus/alerting_rules.yml:/etc/prometheus/alerting_rules.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - backend
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/airex-dashboard.json:/etc/grafana/provisioning/dashboards/airex.json
+    depends_on:
+      - prometheus
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    restart: always
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    depends_on:
+      - backend
+
 volumes:
   your_password_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
