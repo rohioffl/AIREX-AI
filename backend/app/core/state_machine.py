@@ -44,9 +44,13 @@ ALLOWED_TRANSITIONS: dict[IncidentState, list[IncidentState]] = {
         IncidentState.REJECTED,
     ],
     IncidentState.FAILED_VERIFICATION: [
+        IncidentState.RESOLVED,  # verification retry succeeds
+        IncidentState.FAILED_VERIFICATION,  # verification retry fails again
         IncidentState.REJECTED,
     ],
     IncidentState.FAILED_ANALYSIS: [
+        IncidentState.RECOMMENDATION_READY,  # investigation retry succeeds
+        IncidentState.FAILED_ANALYSIS,  # investigation retry fails again
         IncidentState.REJECTED,
     ],
     IncidentState.FAILED_EXECUTION: [
@@ -57,6 +61,8 @@ ALLOWED_TRANSITIONS: dict[IncidentState, list[IncidentState]] = {
 TERMINAL_STATES: set[IncidentState] = {
     IncidentState.RESOLVED,
     IncidentState.REJECTED,
+    # Note: FAILED_ANALYSIS and FAILED_VERIFICATION are NOT terminal
+    # They can be retried via the retry scheduler
 }
 
 
@@ -160,6 +166,22 @@ async def transition_state(
         )
     except Exception:
         pass
+
+    # Send notifications for critical state changes (fire-and-forget)
+    try:
+        from app.services.notification_service import notify_incident_state_change
+
+        await notify_incident_state_change(
+            session=session,
+            incident_id=str(incident.id),
+            tenant_id=str(incident.tenant_id),
+            old_state=old_state,
+            new_state=new_state,
+            severity=incident.severity,
+            title=incident.title,
+        )
+    except Exception:
+        pass  # Don't fail state transition if notifications fail
 
     if new_state in TERMINAL_STATES:
         try:

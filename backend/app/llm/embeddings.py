@@ -44,12 +44,29 @@ class EmbeddingsClient:
 
         ai_request_total.labels(model=self._model).inc()
 
+        # When routing through a LiteLLM proxy, use the openai/
+        # prefix so the local litellm SDK treats it as an
+        # OpenAI-compatible endpoint and forwards to the proxy.
+        effective_model = self._model
+        if settings.LLM_BASE_URL:
+            if not self._model.startswith("openai/"):
+                effective_model = f"openai/{self._model}"
+
         kwargs: dict[str, object] = {
-            "model": self._model,
+            "model": effective_model,
             "input": payload,
         }
-        if self._dimensions:
+        # Skip dimensions when routing through a proxy — the litellm SDK
+        # rejects it for openai/-prefixed models, and the proxy config
+        # already passes dimensions to the upstream provider.
+        if self._dimensions and not settings.LLM_BASE_URL:
             kwargs["dimensions"] = self._dimensions
+
+        # Pass proxy base URL and API key when configured
+        if settings.LLM_BASE_URL:
+            kwargs["api_base"] = settings.LLM_BASE_URL
+        if settings.LLM_API_KEY:
+            kwargs["api_key"] = settings.LLM_API_KEY
 
         headers = build_llm_headers()
         if headers:

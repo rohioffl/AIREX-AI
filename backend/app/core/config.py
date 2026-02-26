@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AIREX"
 
     # Security
+    # SECRET_KEY must be set via environment variable in production
+    # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
     SECRET_KEY: str = "CHANGE_THIS_IN_PRODUCTION_TO_A_SECURE_RANDOM_STRING"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 11520
     ALGORITHM: str = "HS256"
@@ -33,7 +35,7 @@ class Settings(BaseSettings):
     LLM_CORRELATION_HEADER: str = "X-Correlation-ID"
     LLM_EMBEDDING_MODEL: str = "text-embedding-3-large"
     LLM_EMBEDDING_TIMEOUT: int = 15
-    LLM_EMBEDDING_DIMENSION: int = 3072
+    LLM_EMBEDDING_DIMENSION: int = 1024
     VERTEX_PROJECT: str = "smartops-automation"
     VERTEX_LOCATION: str = "us-central1"
 
@@ -84,6 +86,14 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+
+    # Notifications
+    SLACK_WEBHOOK_URL: str = ""
+    EMAIL_SMTP_HOST: str = ""
+    EMAIL_SMTP_PORT: int = 587
+    EMAIL_SMTP_USER: str = ""
+    EMAIL_SMTP_PASSWORD: str = ""
+    EMAIL_FROM: str = ""
 
     model_config = {"env_file": ".env", "case_sensitive": True}
 

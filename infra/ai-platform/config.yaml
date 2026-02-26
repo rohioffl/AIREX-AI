@@ -14,10 +14,11 @@ model_list:
     litellm_params:
       model: bedrock/amazon.nova-pro-v1:0
 
-  # Embedding Model: Bedrock Titan Text Embeddings v2
+  # Embedding Model: Bedrock Titan Text Embeddings v2 (max 1024 dims)
   - model_name: text-embedding
     litellm_params:
       model: bedrock/amazon.titan-embed-text-v2:0
+      dimensions: 1024
 
 litellm_settings:
   # Disable callbacks that require external keys we don't have
