@@ -20,6 +20,13 @@ class RestartContainerAction(BaseAction):
     """Restart a Docker or ECS container."""
 
     action_type = "restart_container"
+    DESCRIPTION = (
+        "Restart a Docker container or Kubernetes pod that is OOMKilled, crashed, or "
+        "in a degraded state. Use when container-level issues are causing failures. "
+        "Blast radius: single container/pod. Risk: brief downtime during restart; "
+        "in-flight requests may be lost. Verification: container running, health check "
+        "passing."
+    )
 
     async def execute(self, incident_meta: dict) -> ActionResult:
         cloud = (incident_meta.get("_cloud") or "").lower()
@@ -40,18 +47,22 @@ class RestartContainerAction(BaseAction):
         if cloud == "aws" and instance_id:
             return await self._execute_aws(instance_id, commands, region, incident_meta)
         elif cloud == "gcp" and private_ip:
-            return await self._execute_gcp(private_ip, commands, instance_id, incident_meta)
+            return await self._execute_gcp(
+                private_ip, commands, instance_id, incident_meta
+            )
 
         return await self._simulate(host, container_name)
 
     async def _execute_aws(self, instance_id, commands, region, meta):
         try:
             from app.cloud.aws_ssm import ssm_run_command
+
             aws_config = None
             tenant_name = meta.get("_tenant_name", "")
             if tenant_name:
                 try:
                     from app.cloud.tenant_config import get_tenant_config
+
                     tc = get_tenant_config(tenant_name)
                     aws_config = tc.aws if tc else None
                 except Exception:
@@ -63,8 +74,16 @@ class RestartContainerAction(BaseAction):
                 region=region,
                 aws_config=aws_config,
             )
-            success = "true" in output.lower() or "complete" in output.lower() or container_name in output
-            return ActionResult(success=success, logs=f"[SSM:{instance_id}]\n{output}", exit_code=0 if success else 1)
+            success = (
+                "true" in output.lower()
+                or "complete" in output.lower()
+                or container_name in output
+            )
+            return ActionResult(
+                success=success,
+                logs=f"[SSM:{instance_id}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("restart_container_ssm_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSM] Failed: {exc}", exit_code=1)
@@ -80,8 +99,16 @@ class RestartContainerAction(BaseAction):
                 project=meta.get("_project", ""),
                 zone=meta.get("_zone", ""),
             )
-            success = "true" in output.lower() or "complete" in output.lower() or container_name in output
-            return ActionResult(success=success, logs=f"[SSH:{private_ip}]\n{output}", exit_code=0 if success else 1)
+            success = (
+                "true" in output.lower()
+                or "complete" in output.lower()
+                or container_name in output
+            )
+            return ActionResult(
+                success=success,
+                logs=f"[SSH:{private_ip}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("restart_container_ssh_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSH] Failed: {exc}", exit_code=1)
@@ -107,18 +134,26 @@ class RestartContainerAction(BaseAction):
         private_ip = incident_meta.get("_private_ip", "")
         container_name = incident_meta.get("container_name", "application")
 
-        commands = [f"docker inspect --format='{{{{.State.Running}}}}' {container_name} 2>/dev/null || echo 'false'"]
+        commands = [
+            f"docker inspect --format='{{{{.State.Running}}}}' {container_name} 2>/dev/null || echo 'false'"
+        ]
 
         if cloud == "aws" and instance_id:
             try:
                 from app.cloud.aws_ssm import ssm_run_command
-                output = await ssm_run_command(instance_id=instance_id, commands=commands, region=incident_meta.get("_region", ""))
+
+                output = await ssm_run_command(
+                    instance_id=instance_id,
+                    commands=commands,
+                    region=incident_meta.get("_region", ""),
+                )
                 return "true" in output.lower()
             except Exception:
                 pass
         elif cloud == "gcp" and private_ip:
             try:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+
                 output = await ssh_run_command(private_ip=private_ip, commands=commands)
                 return "true" in output.lower()
             except Exception:

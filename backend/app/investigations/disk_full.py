@@ -7,7 +7,8 @@ File sizes are derived from the disk usage percentage to ensure consistency.
 
 from app.investigations.base import (
     BaseInvestigation,
-    InvestigationResult,
+    ProbeCategory,
+    ProbeResult,
     _make_seeded_rng,
 )
 
@@ -17,7 +18,7 @@ class DiskFullInvestigation(BaseInvestigation):
 
     alert_type = "disk_full"
 
-    async def investigate(self, incident_meta: dict) -> InvestigationResult:
+    async def investigate(self, incident_meta: dict) -> ProbeResult:
         host = incident_meta.get("host") or incident_meta.get(
             "monitor_name", "unknown-host"
         )
@@ -69,7 +70,19 @@ class DiskFullInvestigation(BaseInvestigation):
             f"Recommendation: Rotate/clear old log files to free space.",
         ]
 
-        return InvestigationResult(
+        return ProbeResult(
             tool_name="disk_diagnostics",
             raw_output="\n".join(output_lines),
+            category=ProbeCategory.SYSTEM,
+            probe_type="primary",
+            metrics={
+                "disk_percent": int(disk_pct),
+                "total_gb": total_gb,
+                "used_gb": used_gb,
+                "avail_gb": avail_gb,
+                "inode_percent": inode_pct,
+                "largest_file_path": "/var/log/app/application.log",
+                "largest_file_gb": main_log_gb,
+                "total_log_gb": main_log_gb + syslog_gb + nginx_log_gb,
+            },
         )

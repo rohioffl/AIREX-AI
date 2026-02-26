@@ -7,6 +7,8 @@ from typing import Iterable
 from app.investigations.base import (
     BaseInvestigation,
     InvestigationResult,
+    ProbeCategory,
+    ProbeResult,
     _make_seeded_rng,
 )
 from app.investigations.cpu_high import CpuHighInvestigation
@@ -79,7 +81,11 @@ class HealthCheckInvestigation(BaseInvestigation):
             derived_meta = dict(incident_meta)
             derived_meta.setdefault("_healthcheck_inferred_type", target_alert_type)
             plugin = plugin_cls()
-            return await plugin.investigate(derived_meta)
+            result = await plugin.investigate(derived_meta)
+            # If delegated plugin returned a ProbeResult, tag it
+            if isinstance(result, ProbeResult):
+                result.probe_type = "primary"
+            return result
 
         return self._fallback_probe(incident_meta)
 
@@ -119,7 +125,7 @@ class HealthCheckInvestigation(BaseInvestigation):
                 return target, plugin_cls
         return None
 
-    def _fallback_probe(self, meta: dict) -> InvestigationResult:
+    def _fallback_probe(self, meta: dict) -> ProbeResult:
         host = meta.get("host") or meta.get("monitor_name") or "unknown-host"
         rng = _make_seeded_rng(meta)
 
@@ -138,6 +144,9 @@ class HealthCheckInvestigation(BaseInvestigation):
                 f"Attempt {success_count + 2}: TCP handshake failed after {rng.uniform(150, 250):.0f}ms"
             )
 
+        total_attempts = success_count + failure_count
+        error_rate = round((failure_count / total_attempts) * 100, 1)
+
         output = [
             f"=== Synthetic Health Check: {host} ===",
             "Probe URL: /health",
@@ -149,7 +158,18 @@ class HealthCheckInvestigation(BaseInvestigation):
             "Recommendation: Validate upstream service health and review recent deploys.",
         ]
 
-        return InvestigationResult(
+        return ProbeResult(
             tool_name="healthcheck_probe",
             raw_output="\n".join(output),
+            category=ProbeCategory.APPLICATION,
+            probe_type="primary",
+            metrics={
+                "response_time_ms": round(response_ms, 1),
+                "success_count": success_count,
+                "failure_count": failure_count,
+                "total_attempts": total_attempts,
+                "error_rate_percent": error_rate,
+                "http_status": 503,
+                "probe_url": "/health",
+            },
         )

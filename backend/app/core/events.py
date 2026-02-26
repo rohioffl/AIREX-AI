@@ -36,66 +36,155 @@ async def _publish(tenant_id: str, event_type: str, payload: dict) -> None:
     await redis.publish(channel, message)
 
 
-async def emit_incident_created(tenant_id: str, incident_id: str, title: str, state: str, severity: str, alert_type: str) -> None:
-    await _publish(tenant_id, "incident_created", {
-        "incident_id": incident_id,
-        "title": title,
-        "state": state,
-        "severity": severity,
-        "alert_type": alert_type,
-    })
+async def emit_incident_created(
+    tenant_id: str,
+    incident_id: str,
+    title: str,
+    state: str,
+    severity: str,
+    alert_type: str,
+) -> None:
+    await _publish(
+        tenant_id,
+        "incident_created",
+        {
+            "incident_id": incident_id,
+            "title": title,
+            "state": state,
+            "severity": severity,
+            "alert_type": alert_type,
+        },
+    )
 
 
-async def emit_state_changed(tenant_id: str, incident_id: str, from_state: str, to_state: str, reason: str) -> None:
-    await _publish(tenant_id, "state_changed", {
-        "incident_id": incident_id,
-        "from_state": from_state,
-        "to_state": to_state,
-        "reason": reason,
-    })
+async def emit_state_changed(
+    tenant_id: str, incident_id: str, from_state: str, to_state: str, reason: str
+) -> None:
+    await _publish(
+        tenant_id,
+        "state_changed",
+        {
+            "incident_id": incident_id,
+            "from_state": from_state,
+            "to_state": to_state,
+            "reason": reason,
+        },
+    )
 
 
-async def emit_evidence_added(tenant_id: str, incident_id: str, tool_name: str, evidence_id: str) -> None:
-    await _publish(tenant_id, "evidence_added", {
-        "incident_id": incident_id,
-        "tool_name": tool_name,
-        "evidence_id": evidence_id,
-    })
+async def emit_evidence_added(
+    tenant_id: str, incident_id: str, tool_name: str, evidence_id: str
+) -> None:
+    await _publish(
+        tenant_id,
+        "evidence_added",
+        {
+            "incident_id": incident_id,
+            "tool_name": tool_name,
+            "evidence_id": evidence_id,
+        },
+    )
 
 
-async def emit_execution_started(tenant_id: str, incident_id: str, action_type: str, execution_id: str) -> None:
-    await _publish(tenant_id, "execution_started", {
-        "incident_id": incident_id,
-        "action_type": action_type,
-        "execution_id": execution_id,
-    })
+async def emit_execution_started(
+    tenant_id: str, incident_id: str, action_type: str, execution_id: str
+) -> None:
+    await _publish(
+        tenant_id,
+        "execution_started",
+        {
+            "incident_id": incident_id,
+            "action_type": action_type,
+            "execution_id": execution_id,
+        },
+    )
 
 
 async def emit_execution_log(tenant_id: str, incident_id: str, log_line: str) -> None:
-    await _publish(tenant_id, "execution_log", {
-        "incident_id": incident_id,
-        "log": log_line,
-    })
+    await _publish(
+        tenant_id,
+        "execution_log",
+        {
+            "incident_id": incident_id,
+            "log": log_line,
+        },
+    )
 
 
-async def emit_execution_completed(tenant_id: str, incident_id: str, action_type: str, status: str, duration: float | None = None) -> None:
-    await _publish(tenant_id, "execution_completed", {
-        "incident_id": incident_id,
-        "action_type": action_type,
-        "status": status,
-        "duration_seconds": duration,
-    })
+async def emit_execution_completed(
+    tenant_id: str,
+    incident_id: str,
+    action_type: str,
+    status: str,
+    duration: float | None = None,
+) -> None:
+    await _publish(
+        tenant_id,
+        "execution_completed",
+        {
+            "incident_id": incident_id,
+            "action_type": action_type,
+            "status": status,
+            "duration_seconds": duration,
+        },
+    )
 
 
-async def emit_verification_result(tenant_id: str, incident_id: str, result: str) -> None:
-    await _publish(tenant_id, "verification_result", {
-        "incident_id": incident_id,
-        "result": result,
-    })
+async def emit_verification_result(
+    tenant_id: str, incident_id: str, result: str
+) -> None:
+    await _publish(
+        tenant_id,
+        "verification_result",
+        {
+            "incident_id": incident_id,
+            "result": result,
+        },
+    )
 
 
-async def emit_recommendation_ready(tenant_id: str, incident_id: str, recommendation: dict) -> None:
-    await _publish(tenant_id, "recommendation_ready", {
-        "incident_id": incident_id,
-        "recommendation": recommendation,
-    })
+async def emit_recommendation_ready(
+    tenant_id: str, incident_id: str, recommendation: dict
+) -> None:
+    await _publish(
+        tenant_id,
+        "recommendation_ready",
+        {
+            "incident_id": incident_id,
+            "recommendation": recommendation,
+        },
+    )
+
+
+async def emit_investigation_progress(
+    tenant_id: str,
+    incident_id: str,
+    probe_name: str,
+    status: str,
+    step: int,
+    total_steps: int,
+    category: str = "",
+    duration_ms: float = 0.0,
+    anomaly_count: int = 0,
+) -> None:
+    """Emit a live investigation progress event for frontend timeline.
+
+    Args:
+        status: One of "started", "completed", "failed", "anomalies_detected"
+        step: Current probe step number (1-indexed)
+        total_steps: Total number of probes being run
+    """
+    await _publish(
+        tenant_id,
+        "investigation_progress",
+        {
+            "incident_id": incident_id,
+            "probe_name": probe_name,
+            "status": status,
+            "step": step,
+            "total_steps": total_steps,
+            "category": category,
+            "duration_ms": duration_ms,
+            "anomaly_count": anomaly_count,
+        },
+    )

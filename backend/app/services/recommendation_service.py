@@ -18,7 +18,10 @@ from app.llm.client import LLMClient
 from app.models.enums import IncidentState
 from app.models.incident import Incident
 from app.schemas.recommendation import Recommendation
-from app.services.rag_context import build_recommendation_context
+from app.services.rag_context import (
+    build_recommendation_context,
+    build_structured_context,
+)
 
 logger = structlog.get_logger()
 
@@ -46,13 +49,26 @@ async def generate_recommendation(
     meta = dict(incident.meta or {})
 
     context: str | None = None
+    structured_context = None
     try:
-        context = await build_recommendation_context(session, incident, evidence_text)
+        structured_context = await build_structured_context(
+            session, incident, evidence_text
+        )
+        if structured_context:
+            context = structured_context["text"] or None
     except Exception as exc:  # pragma: no cover - defensive logging
         log.warning("rag_context_failed", error=str(exc))
 
-    if context:
-        meta["rag_context"] = context
+    if structured_context:
+        # Store structured version for frontend (cards, not raw text)
+        meta["rag_context"] = structured_context.get("text", "")
+        meta["rag_structured"] = {
+            "runbooks": structured_context.get("runbooks", []),
+            "similar_incidents": structured_context.get("similar_incidents", []),
+            "pattern_analysis": structured_context.get("pattern_analysis"),
+            "runbook_count": structured_context.get("runbook_count", 0),
+            "incident_count": structured_context.get("incident_count", 0),
+        }
         incident.meta = meta
         flag_modified(incident, "meta")
 
@@ -126,13 +142,9 @@ async def generate_recommendation(
         )
         return
 
-    # Store recommendation in incident meta
+    # Store recommendation in incident meta (serialize enums to strings)
     rec_dict = recommendation.model_dump()
-    rec_dict["risk_level"] = (
-        rec_dict["risk_level"].value
-        if hasattr(rec_dict["risk_level"], "value")
-        else rec_dict["risk_level"]
-    )
+    rec_dict = _serialize_recommendation(rec_dict)
     meta["recommendation"] = rec_dict
     incident.meta = meta
     flag_modified(incident, "meta")
@@ -200,3 +212,23 @@ async def generate_recommendation(
             log.info("auto_execution_enqueued", action=recommendation.proposed_action)
         except Exception as exc:
             log.error("auto_execution_enqueue_failed", error=str(exc))
+
+
+def _serialize_recommendation(rec_dict: dict) -> dict:
+    """Recursively convert enum values to strings for JSON storage.
+
+    Handles the top-level risk_level and nested risk_level in alternatives.
+    """
+    # Top-level risk_level
+    if "risk_level" in rec_dict:
+        rl = rec_dict["risk_level"]
+        rec_dict["risk_level"] = rl.value if hasattr(rl, "value") else rl
+
+    # Alternatives contain nested risk_level enums
+    if "alternatives" in rec_dict and isinstance(rec_dict["alternatives"], list):
+        for alt in rec_dict["alternatives"]:
+            if isinstance(alt, dict) and "risk_level" in alt:
+                arl = alt["risk_level"]
+                alt["risk_level"] = arl.value if hasattr(arl, "value") else arl
+
+    return rec_dict

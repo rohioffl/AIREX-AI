@@ -16,7 +16,12 @@ from __future__ import annotations
 
 import structlog
 
-from app.investigations.base import BaseInvestigation, InvestigationResult
+from app.investigations.base import (
+    BaseInvestigation,
+    InvestigationResult,
+    ProbeCategory,
+    ProbeResult,
+)
 from app.cloud.diagnostics import get_diagnostic_commands
 
 logger = structlog.get_logger()
@@ -50,6 +55,7 @@ class CloudInvestigation(BaseInvestigation):
         if tenant_name:
             try:
                 from app.cloud.tenant_config import get_tenant_config
+
                 tenant_config = get_tenant_config(tenant_name)
             except Exception:
                 pass
@@ -80,7 +86,9 @@ class CloudInvestigation(BaseInvestigation):
             # Prefer SSM; only use EC2 Instance Connect when SSM is not available.
             log.info("investigating_via_aws_ssm")
             sections.append("--- Diagnostics via AWS SSM ---")
-            ssh_output = await self._run_aws_ssm(instance_id, commands, region, aws_config)
+            ssh_output = await self._run_aws_ssm(
+                instance_id, commands, region, aws_config
+            )
             sections.append(ssh_output)
 
             # SSM failed (agent not installed / not managed) → fall back to EC2 Instance Connect (no stored keys).
@@ -90,8 +98,12 @@ class CloudInvestigation(BaseInvestigation):
                 )
                 if zone_for_connect:
                     sections.append("")
-                    sections.append("--- Diagnostics via EC2 Instance Connect (no keys stored) ---")
-                    os_user = (tenant_config.ssh.user if tenant_config else "") or "ubuntu"
+                    sections.append(
+                        "--- Diagnostics via EC2 Instance Connect (no keys stored) ---"
+                    )
+                    os_user = (
+                        tenant_config.ssh.user if tenant_config else ""
+                    ) or "ubuntu"
                     try:
                         ec2_out = await self._run_aws_ec2_connect_ssh(
                             private_ip=private_ip,
@@ -106,7 +118,9 @@ class CloudInvestigation(BaseInvestigation):
                     except Exception as exc:
                         sections.append(f"EC2 Instance Connect ERROR: {exc}")
                 else:
-                    sections.append("(EC2 Instance Connect requires instance AZ; discovery may not have run.)")
+                    sections.append(
+                        "(EC2 Instance Connect requires instance AZ; discovery may not have run.)"
+                    )
 
         elif cloud == "gcp" and (private_ip or instance_id):
             log.info("investigating_via_gcp_ssh")
@@ -120,8 +134,12 @@ class CloudInvestigation(BaseInvestigation):
                 )
                 sections.append(ssh_output)
             else:
-                sections.append("WARNING: Could not resolve private IP for GCP instance")
-                sections.append(f"Instance: {instance_id}, Project: {project}, Zone: {zone}")
+                sections.append(
+                    "WARNING: Could not resolve private IP for GCP instance"
+                )
+                sections.append(
+                    f"Instance: {instance_id}, Project: {project}, Zone: {zone}"
+                )
 
         else:
             sections.append(
@@ -157,20 +175,37 @@ class CloudInvestigation(BaseInvestigation):
         # Optimize the output before returning
         raw_output = "\n".join(sections)
         from app.investigations.evidence_optimizer import optimize_evidence_output
+
         raw_output = optimize_evidence_output(raw_output, alert_type=alert_type)
 
-        return InvestigationResult(
+        return ProbeResult(
             tool_name=f"cloud_investigation_{cloud or 'fallback'}",
             raw_output=raw_output,
+            category=ProbeCategory.INFRASTRUCTURE,
+            probe_type="primary",
+            metrics={
+                "cloud_provider": cloud.upper() or "UNKNOWN",
+                "alert_type": alert_type,
+                "instance_id": instance_id or "N/A",
+                "private_ip": private_ip or "N/A",
+                "region": region or "N/A",
+                "has_ssh_output": "Diagnostics via" in raw_output,
+                "has_cloud_logs": "Log Explorer" in raw_output
+                or "CloudWatch" in raw_output,
+            },
         )
 
     async def _run_aws_ssm(
-        self, instance_id: str, commands: list[str], region: str,
+        self,
+        instance_id: str,
+        commands: list[str],
+        region: str,
         aws_config=None,
     ) -> str:
         """Execute diagnostic commands via AWS SSM."""
         try:
             from app.cloud.aws_ssm import ssm_run_command
+
             return await ssm_run_command(
                 instance_id=instance_id,
                 commands=commands,
@@ -185,6 +220,7 @@ class CloudInvestigation(BaseInvestigation):
     ) -> str:
         """Resolve instance to Availability Zone for EC2 Instance Connect."""
         from app.cloud.aws_ssh import get_instance_availability_zone
+
         return await get_instance_availability_zone(
             instance_id=instance_id, region=region, aws_config=aws_config
         )
@@ -201,6 +237,7 @@ class CloudInvestigation(BaseInvestigation):
     ) -> str:
         """Execute diagnostic commands via EC2 Instance Connect (no stored keys)."""
         from app.cloud.aws_ssh import aws_ec2_connect_run_command
+
         return await aws_ec2_connect_run_command(
             private_ip=private_ip,
             instance_id=instance_id,
@@ -223,6 +260,7 @@ class CloudInvestigation(BaseInvestigation):
         """Execute diagnostic commands via GCP OS Login SSH."""
         try:
             from app.cloud.gcp_ssh import gcp_ssh_run_command
+
             return await gcp_ssh_run_command(
                 private_ip=private_ip,
                 commands=commands,
@@ -233,24 +271,27 @@ class CloudInvestigation(BaseInvestigation):
         except Exception as exc:
             return f"SSH ERROR: {exc}"
 
-    async def _resolve_gcp_ip(
-        self, instance_name: str, project: str, zone: str
-    ) -> str:
+    async def _resolve_gcp_ip(self, instance_name: str, project: str, zone: str) -> str:
         """Resolve GCP instance name to private IP via Compute API."""
         try:
             from app.cloud.gcp_ssh import gcp_resolve_private_ip
+
             ip = await gcp_resolve_private_ip(instance_name, project, zone)
             return ip or ""
         except Exception:
             return ""
 
     async def _query_gcp_logs(
-        self, project: str, instance_id: str, private_ip: str,
+        self,
+        project: str,
+        instance_id: str,
+        private_ip: str,
         sa_key_path: str = "",
     ) -> str:
         """Query GCP Log Explorer."""
         try:
             from app.cloud.gcp_logging import query_gcp_logs
+
             return await query_gcp_logs(
                 project=project,
                 instance_id=instance_id,
@@ -263,12 +304,15 @@ class CloudInvestigation(BaseInvestigation):
             return f"Log Explorer ERROR: {exc}"
 
     async def _query_aws_logs(
-        self, instance_id: str, region: str,
+        self,
+        instance_id: str,
+        region: str,
         aws_config=None,
     ) -> str:
         """Query AWS CloudWatch Logs."""
         try:
             from app.cloud.aws_logs import query_cloudwatch_logs
+
             return await query_cloudwatch_logs(
                 instance_id=instance_id,
                 region=region,

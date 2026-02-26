@@ -21,6 +21,13 @@ class RollbackDeploymentAction(BaseAction):
     """Roll back a deployment to a previous version."""
 
     action_type = "rollback_deployment"
+    DESCRIPTION = (
+        "Roll back to the previous deployment version using kubectl rollout undo or "
+        "cloud-specific rollback mechanisms. Use when a recent deployment caused errors, "
+        "crashes, or performance degradation. Blast radius: entire service/deployment. "
+        "Risk: reverts all changes including intentional ones. Verification: error rate "
+        "returns to pre-deployment baseline."
+    )
 
     async def execute(self, incident_meta: dict) -> ActionResult:
         cloud = (incident_meta.get("_cloud") or "").lower()
@@ -41,18 +48,22 @@ class RollbackDeploymentAction(BaseAction):
         if cloud == "aws" and instance_id:
             return await self._execute_aws(instance_id, commands, region, incident_meta)
         elif cloud == "gcp" and private_ip:
-            return await self._execute_gcp(private_ip, commands, instance_id, incident_meta)
+            return await self._execute_gcp(
+                private_ip, commands, instance_id, incident_meta
+            )
 
         return await self._simulate(host, deployment_name)
 
     async def _execute_aws(self, instance_id, commands, region, meta):
         try:
             from app.cloud.aws_ssm import ssm_run_command
+
             aws_config = None
             tenant_name = meta.get("_tenant_name", "")
             if tenant_name:
                 try:
                     from app.cloud.tenant_config import get_tenant_config
+
                     tc = get_tenant_config(tenant_name)
                     aws_config = tc.aws if tc else None
                 except Exception:
@@ -64,8 +75,16 @@ class RollbackDeploymentAction(BaseAction):
                 region=region,
                 aws_config=aws_config,
             )
-            success = "rolled back" in output.lower() or "successfully" in output.lower() or "complete" in output.lower()
-            return ActionResult(success=success, logs=f"[SSM:{instance_id}]\n{output}", exit_code=0 if success else 1)
+            success = (
+                "rolled back" in output.lower()
+                or "successfully" in output.lower()
+                or "complete" in output.lower()
+            )
+            return ActionResult(
+                success=success,
+                logs=f"[SSM:{instance_id}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("rollback_deployment_ssm_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSM] Failed: {exc}", exit_code=1)
@@ -81,8 +100,16 @@ class RollbackDeploymentAction(BaseAction):
                 project=meta.get("_project", ""),
                 zone=meta.get("_zone", ""),
             )
-            success = "rolled back" in output.lower() or "successfully" in output.lower() or "complete" in output.lower()
-            return ActionResult(success=success, logs=f"[SSH:{private_ip}]\n{output}", exit_code=0 if success else 1)
+            success = (
+                "rolled back" in output.lower()
+                or "successfully" in output.lower()
+                or "complete" in output.lower()
+            )
+            return ActionResult(
+                success=success,
+                logs=f"[SSH:{private_ip}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("rollback_deployment_ssh_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSH] Failed: {exc}", exit_code=1)
@@ -95,7 +122,7 @@ class RollbackDeploymentAction(BaseAction):
             f"[SIM] Rolling back deployment/{deployment_name}...",
             f"[SIM] deployment.apps/{deployment_name} rolled back to revision {prev_rev}",
             f"[SIM] Waiting for rollout to complete...",
-            f"[SIM] deployment \"{deployment_name}\" successfully rolled out",
+            f'[SIM] deployment "{deployment_name}" successfully rolled out',
             f"[SIM] Rollback action complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
@@ -108,18 +135,26 @@ class RollbackDeploymentAction(BaseAction):
         deployment_name = incident_meta.get("deployment_name", "application")
         namespace = incident_meta.get("namespace", "default")
 
-        commands = [f"kubectl rollout status deployment/{deployment_name} -n {namespace} --timeout=30s 2>/dev/null || echo 'status check'"]
+        commands = [
+            f"kubectl rollout status deployment/{deployment_name} -n {namespace} --timeout=30s 2>/dev/null || echo 'status check'"
+        ]
 
         if cloud == "aws" and instance_id:
             try:
                 from app.cloud.aws_ssm import ssm_run_command
-                output = await ssm_run_command(instance_id=instance_id, commands=commands, region=incident_meta.get("_region", ""))
+
+                output = await ssm_run_command(
+                    instance_id=instance_id,
+                    commands=commands,
+                    region=incident_meta.get("_region", ""),
+                )
                 return "successfully rolled out" in output.lower()
             except Exception:
                 pass
         elif cloud == "gcp" and private_ip:
             try:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+
                 output = await ssh_run_command(private_ip=private_ip, commands=commands)
                 return "successfully rolled out" in output.lower()
             except Exception:

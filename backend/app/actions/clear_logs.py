@@ -19,6 +19,12 @@ class ClearLogsAction(BaseAction):
     """Clear old log files via SSM RunCommand or GCP SSH."""
 
     action_type = "clear_logs"
+    DESCRIPTION = (
+        "Truncate or rotate large log files consuming disk space. Use when disk usage "
+        "is high due to log accumulation (not application data). Blast radius: log files "
+        "only on one host. Risk: loss of historical log data. Verification: disk usage "
+        "drops below threshold after cleanup."
+    )
 
     async def execute(self, incident_meta: dict) -> ActionResult:
         cloud = (incident_meta.get("_cloud") or "").lower()
@@ -36,34 +42,61 @@ class ClearLogsAction(BaseAction):
         ]
 
         if cloud == "aws" and instance_id:
-            return await self._execute_cloud("aws", instance_id, private_ip, commands, region, incident_meta)
+            return await self._execute_cloud(
+                "aws", instance_id, private_ip, commands, region, incident_meta
+            )
         elif cloud == "gcp" and private_ip:
-            return await self._execute_cloud("gcp", instance_id, private_ip, commands, region, incident_meta)
+            return await self._execute_cloud(
+                "gcp", instance_id, private_ip, commands, region, incident_meta
+            )
 
         return await self._simulate(host, log_path)
 
-    async def _execute_cloud(self, cloud, instance_id, private_ip, commands, region, meta):
+    async def _execute_cloud(
+        self, cloud, instance_id, private_ip, commands, region, meta
+    ):
         try:
             if cloud == "aws":
                 from app.cloud.aws_ssm import ssm_run_command
+
                 aws_config = self._get_aws_config(meta)
-                output = await ssm_run_command(instance_id=instance_id, commands=commands, region=region, aws_config=aws_config)
+                output = await ssm_run_command(
+                    instance_id=instance_id,
+                    commands=commands,
+                    region=region,
+                    aws_config=aws_config,
+                )
             else:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+
                 sa_key = self._get_sa_key(meta)
-                output = await ssh_run_command(private_ip=private_ip, commands=commands, instance_name=instance_id, project=meta.get("_project", ""), zone=meta.get("_zone", ""), sa_key_path=sa_key)
+                output = await ssh_run_command(
+                    private_ip=private_ip,
+                    commands=commands,
+                    instance_name=instance_id,
+                    project=meta.get("_project", ""),
+                    zone=meta.get("_zone", ""),
+                    sa_key_path=sa_key,
+                )
 
             success = "cleaned" in output.lower() or "%" in output
-            return ActionResult(success=success, logs=f"[{cloud.upper()}:{instance_id or private_ip}]\n{output}", exit_code=0 if success else 1)
+            return ActionResult(
+                success=success,
+                logs=f"[{cloud.upper()}:{instance_id or private_ip}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("clear_logs_cloud_failed", error=str(exc), cloud=cloud)
-            return ActionResult(success=False, logs=f"[{cloud.upper()}] Failed: {exc}", exit_code=1)
+            return ActionResult(
+                success=False, logs=f"[{cloud.upper()}] Failed: {exc}", exit_code=1
+            )
 
     def _get_aws_config(self, meta):
         tenant_name = meta.get("_tenant_name", "")
         if tenant_name:
             try:
                 from app.cloud.tenant_config import get_tenant_config
+
                 tc = get_tenant_config(tenant_name)
                 return tc.aws if tc else None
             except Exception:
@@ -75,6 +108,7 @@ class ClearLogsAction(BaseAction):
         if tenant_name:
             try:
                 from app.cloud.tenant_config import get_tenant_config
+
                 tc = get_tenant_config(tenant_name)
                 return tc.gcp.service_account_key if tc else ""
             except Exception:
@@ -105,7 +139,12 @@ class ClearLogsAction(BaseAction):
         if cloud == "aws" and instance_id:
             try:
                 from app.cloud.aws_ssm import ssm_run_command
-                output = await ssm_run_command(instance_id=instance_id, commands=commands, region=incident_meta.get("_region", ""))
+
+                output = await ssm_run_command(
+                    instance_id=instance_id,
+                    commands=commands,
+                    region=incident_meta.get("_region", ""),
+                )
                 usage = int(output.strip())
                 return usage < 90
             except Exception:
@@ -113,6 +152,7 @@ class ClearLogsAction(BaseAction):
         elif cloud == "gcp" and private_ip:
             try:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+
                 output = await ssh_run_command(private_ip=private_ip, commands=commands)
                 usage = int(output.strip())
                 return usage < 90

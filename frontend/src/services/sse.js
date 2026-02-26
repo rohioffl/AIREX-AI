@@ -87,6 +87,7 @@ export function createSSEConnection(handlers, onConnectionChange) {
       'execution_log',
       'execution_completed',
       'verification_result',
+      'investigation_progress',
     ]
 
     eventTypes.forEach((type) => {

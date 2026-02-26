@@ -138,6 +138,21 @@ export async function deleteIncident(id) {
   await api.delete(`/incidents/${id}`)
 }
 
+// Incident AI Chat
+export async function sendChatMessage(incidentId, message) {
+  const res = await api.post(`/incidents/${incidentId}/chat`, { message })
+  return res.data
+}
+
+export async function fetchChatHistory(incidentId) {
+  const res = await api.get(`/incidents/${incidentId}/chat/history`)
+  return res.data
+}
+
+export async function clearChatHistory(incidentId) {
+  await api.delete(`/incidents/${incidentId}/chat/history`)
+}
+
 // Settings (admin only)
 export async function fetchSettings() {
   const res = await api.get('/settings/')

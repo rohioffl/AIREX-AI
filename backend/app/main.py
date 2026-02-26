@@ -12,6 +12,7 @@ from starlette.responses import Response
 
 from app.api.routes import (
     auth,
+    chat,
     dlq,
     incidents,
     metrics as metrics_router,
@@ -36,9 +37,7 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle — manages Redis connection pool."""
-    redis_conn = aioredis.from_url(
-        settings.REDIS_URL, decode_responses=False
-    )
+    redis_conn = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
     app.state.redis = redis_conn
     set_redis(redis_conn)
     logger.info("startup_complete", redis_url=settings.REDIS_URL)
@@ -70,6 +69,7 @@ app.add_middleware(
 # CSRF protection
 app.add_middleware(CSRFMiddleware)
 
+
 # Prometheus middleware
 @app.middleware("http")
 async def prometheus_middleware(request: Request, call_next):
@@ -90,6 +90,7 @@ async def prometheus_middleware(request: Request, call_next):
 @app.middleware("http")
 async def correlation_id_middleware(request: Request, call_next):
     import uuid
+
     correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
@@ -128,6 +129,11 @@ app.include_router(
     incidents.router,
     prefix=f"{settings.API_V1_STR}/incidents",
     tags=["incidents"],
+)
+app.include_router(
+    chat.router,
+    prefix=f"{settings.API_V1_STR}/incidents",
+    tags=["chat"],
 )
 app.include_router(
     sse.router,

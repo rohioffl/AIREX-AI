@@ -8,7 +8,8 @@ an alert has already been triggered.
 
 from app.investigations.base import (
     BaseInvestigation,
-    InvestigationResult,
+    ProbeCategory,
+    ProbeResult,
     _make_seeded_rng,
 )
 
@@ -18,7 +19,7 @@ class NetworkCheckInvestigation(BaseInvestigation):
 
     alert_type = "network_issue"
 
-    async def investigate(self, incident_meta: dict) -> InvestigationResult:
+    async def investigate(self, incident_meta: dict) -> ProbeResult:
         host = incident_meta.get("host") or incident_meta.get(
             "monitor_name", "unknown-host"
         )
@@ -75,7 +76,24 @@ class NetworkCheckInvestigation(BaseInvestigation):
             f"Recommendation: Check network ACLs, firewall rules, or contact NOC.",
         ]
 
-        return InvestigationResult(
+        return ProbeResult(
             tool_name="network_diagnostics",
             raw_output="\n".join(lines),
+            category=ProbeCategory.NETWORK,
+            probe_type="primary",
+            metrics={
+                "packet_loss_percent": round(packet_loss, 1),
+                "avg_latency_ms": round(avg_latency, 1),
+                "min_latency_ms": round(avg_latency * 0.5, 1),
+                "max_latency_ms": round(avg_latency * 1.5, 1),
+                "dns_resolution_ms": round(dns_resolution_time, 1),
+                "packets_transmitted": transmitted,
+                "packets_received": received,
+                "port_443_status": port_443_status,
+                "port_80_status": port_80_status,
+                "traceroute_hops": total_hops,
+                "bottleneck_hop": bottleneck_hop,
+                "bottleneck_latency_ms": round(bottleneck_latency, 1),
+                "target_host": target,
+            },
         )

@@ -25,6 +25,7 @@ class BaseAction(abc.ABC):
     """
 
     action_type: str
+    DESCRIPTION: str = ""  # Human-readable description for LLM prompt
 
     @abc.abstractmethod
     async def execute(self, incident_meta: dict) -> ActionResult:

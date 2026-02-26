@@ -28,6 +28,9 @@ import AIAnalysisPanel from '../components/incident/AIAnalysisPanel'
 import AIRecommendationApproval from '../components/incident/AIRecommendationApproval'
 import ExecutionLogs from '../components/incident/ExecutionLogs'
 import VerificationResult from '../components/incident/VerificationResult'
+import InvestigationTimeline from '../components/incident/InvestigationTimeline'
+import IncidentChat from '../components/incident/IncidentChat'
+import ReasoningChain from '../components/incident/ReasoningChain'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import AcknowledgeRejectModal from '../components/incident/AcknowledgeRejectModal'
 import { formatTimestamp, formatDuration, formatRelativeTime } from '../utils/formatters'
@@ -44,7 +47,7 @@ const SEVERITY_ACCENT = {
 export default function IncidentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { incident, loading, error, connected, reconnecting, executionLogs } = useIncidentDetail(id)
+  const { incident, loading, error, connected, reconnecting, executionLogs, probeSteps } = useIncidentDetail(id)
   const { isDark } = useTheme()
   const [ackRejectModalOpen, setAckRejectModalOpen] = useState(false)
   const [rejectLoading, setRejectLoading] = useState(false)
@@ -445,6 +448,9 @@ export default function IncidentDetail() {
             </ul>
           </div>
         )}
+        {/* 0.5 Investigation Timeline (live probe progress) */}
+        <InvestigationTimeline probeSteps={probeSteps} />
+
         {/* 1. AI Investigation */}
         <AIAnalysisPanel ragContext={incident.rag_context} recommendation={incident.recommendation} />
 
@@ -457,11 +463,18 @@ export default function IncidentDetail() {
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>AI Recommendation & Approval</span>
           </div>
           <AIRecommendationApproval incident={incident} ragContext={incident.rag_context} />
+          <ReasoningChain
+            reasoningChain={meta.recommendation?.reasoning_chain}
+            verificationCriteria={meta.recommendation?.verification_criteria}
+          />
         </div>
+
+        {/* 4. AI Chat */}
+        <IncidentChat incidentId={id} />
 
         {/* Additional Info Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-          <VerificationResult state={incident.state} />
+          <VerificationResult state={incident.state} incident={incident} />
           <div className="space-y-6">
             <ExecutionLogs executions={incident.executions} state={incident.state} liveLogs={executionLogs} />
             {/* Diagnostics Terminal */}

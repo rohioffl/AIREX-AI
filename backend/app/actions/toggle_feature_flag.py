@@ -20,6 +20,12 @@ class ToggleFeatureFlagAction(BaseAction):
     """Toggle (disable) a feature flag causing issues."""
 
     action_type = "toggle_feature_flag"
+    DESCRIPTION = (
+        "Disable a feature flag to stop a problematic feature from causing errors or "
+        "latency. Use when a specific feature is identified as the root cause of "
+        "degradation. Blast radius: users of the specific feature. Risk: feature becomes "
+        "unavailable to users. Verification: error rate for the feature drops to zero."
+    )
 
     async def execute(self, incident_meta: dict) -> ActionResult:
         cloud = (incident_meta.get("_cloud") or "").lower()
@@ -33,7 +39,7 @@ class ToggleFeatureFlagAction(BaseAction):
         if flag_service == "configmap":
             commands = [
                 f"kubectl get configmap feature-flags -o jsonpath='{{.data.{flag_name}}}' 2>/dev/null || echo 'current: unknown'",
-                f"kubectl patch configmap feature-flags --type merge -p '{{\"data\":{{\"{flag_name}\":\"false\"}}}}' 2>/dev/null || echo 'Patch attempted'",
+                f'kubectl patch configmap feature-flags --type merge -p \'{{"data":{{"{flag_name}":"false"}}}}\' 2>/dev/null || echo \'Patch attempted\'',
                 "echo 'Feature flag toggle complete'",
             ]
         else:
@@ -46,18 +52,22 @@ class ToggleFeatureFlagAction(BaseAction):
         if cloud == "aws" and instance_id:
             return await self._execute_aws(instance_id, commands, region, incident_meta)
         elif cloud == "gcp" and private_ip:
-            return await self._execute_gcp(private_ip, commands, instance_id, incident_meta)
+            return await self._execute_gcp(
+                private_ip, commands, instance_id, incident_meta
+            )
 
         return await self._simulate(host, flag_name)
 
     async def _execute_aws(self, instance_id, commands, region, meta):
         try:
             from app.cloud.aws_ssm import ssm_run_command
+
             aws_config = None
             tenant_name = meta.get("_tenant_name", "")
             if tenant_name:
                 try:
                     from app.cloud.tenant_config import get_tenant_config
+
                     tc = get_tenant_config(tenant_name)
                     aws_config = tc.aws if tc else None
                 except Exception:
@@ -70,7 +80,11 @@ class ToggleFeatureFlagAction(BaseAction):
                 aws_config=aws_config,
             )
             success = "patched" in output.lower() or "complete" in output.lower()
-            return ActionResult(success=success, logs=f"[SSM:{instance_id}]\n{output}", exit_code=0 if success else 1)
+            return ActionResult(
+                success=success,
+                logs=f"[SSM:{instance_id}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("toggle_feature_flag_ssm_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSM] Failed: {exc}", exit_code=1)
@@ -87,7 +101,11 @@ class ToggleFeatureFlagAction(BaseAction):
                 zone=meta.get("_zone", ""),
             )
             success = "patched" in output.lower() or "complete" in output.lower()
-            return ActionResult(success=success, logs=f"[SSH:{private_ip}]\n{output}", exit_code=0 if success else 1)
+            return ActionResult(
+                success=success,
+                logs=f"[SSH:{private_ip}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("toggle_feature_flag_ssh_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSH] Failed: {exc}", exit_code=1)
@@ -110,18 +128,26 @@ class ToggleFeatureFlagAction(BaseAction):
         private_ip = incident_meta.get("_private_ip", "")
         flag_name = incident_meta.get("flag_name", "unknown_flag")
 
-        commands = [f"kubectl get configmap feature-flags -o jsonpath='{{.data.{flag_name}}}' 2>/dev/null || echo 'false'"]
+        commands = [
+            f"kubectl get configmap feature-flags -o jsonpath='{{.data.{flag_name}}}' 2>/dev/null || echo 'false'"
+        ]
 
         if cloud == "aws" and instance_id:
             try:
                 from app.cloud.aws_ssm import ssm_run_command
-                output = await ssm_run_command(instance_id=instance_id, commands=commands, region=incident_meta.get("_region", ""))
+
+                output = await ssm_run_command(
+                    instance_id=instance_id,
+                    commands=commands,
+                    region=incident_meta.get("_region", ""),
+                )
                 return "false" in output.lower()
             except Exception:
                 pass
         elif cloud == "gcp" and private_ip:
             try:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+
                 output = await ssh_run_command(private_ip=private_ip, commands=commands)
                 return "false" in output.lower()
             except Exception:

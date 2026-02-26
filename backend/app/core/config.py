@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     RAG_QUERY_MAX_CHARS: int = 2000
     RAG_SNIPPET_MAX_CHARS: int = 600
     RAG_INCIDENT_SUMMARY_MAX_CHARS: int = 1600
+    RAG_SIMILARITY_THRESHOLD: float = 0.7  # cosine distance; lower = more similar
 
     # Timeouts (seconds)
     INVESTIGATION_TIMEOUT: int = 60
@@ -83,6 +84,15 @@ class Settings(BaseSettings):
     SSH_USER: str = "ubuntu"
     SSH_PORT: int = 22
     SSH_TIMEOUT: int = 15
+
+    # ── Site24x7 Monitoring API ──────────────────────────────────
+    SITE24X7_ENABLED: bool = False
+    SITE24X7_CLIENT_ID: str = ""
+    SITE24X7_CLIENT_SECRET: str = ""
+    SITE24X7_REFRESH_TOKEN: str = ""
+    SITE24X7_BASE_URL: str = "https://www.site24x7.com/api"
+    SITE24X7_ACCOUNTS_URL: str = "https://accounts.zoho.com"
+    SITE24X7_TOKEN_CACHE_TTL: int = 3300  # seconds (55 min, tokens last 1hr)
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]

@@ -3,9 +3,64 @@ LLM prompt templates.
 
 All prompts are static templates. Dynamic command generation is PROHIBITED.
 LLM output must map to ACTION_REGISTRY keys only.
+
+Action descriptions are loaded dynamically from ACTION_REGISTRY so the
+prompt always stays in sync with available actions.
 """
 
-SYSTEM_PROMPT = """You are an experienced SRE incident analyst for the AIREX autonomous remediation platform.
+from __future__ import annotations
+
+from typing import Any
+
+
+def _build_action_descriptions() -> str:
+    """Build action list with descriptions from ACTION_REGISTRY.
+
+    Loads DESCRIPTION from each action class so the LLM prompt
+    always stays in sync with the registry.
+    """
+    try:
+        from app.actions.registry import ACTION_REGISTRY
+
+        lines: list[str] = []
+        for action_name, action_cls in sorted(ACTION_REGISTRY.items()):
+            desc = getattr(action_cls, "DESCRIPTION", "")
+            if desc:
+                lines.append(f'  - "{action_name}": {desc}')
+            else:
+                lines.append(f'  - "{action_name}"')
+        return "\n".join(lines)
+    except Exception:
+        # Fallback to static list if registry import fails
+        return (
+            '  - "restart_service", "clear_logs", "scale_instances", '
+            '"kill_process", "flush_cache", "rotate_credentials", '
+            '"rollback_deployment", "resize_disk", "drain_node", '
+            '"toggle_feature_flag", "restart_container", "block_ip"'
+        )
+
+
+def _get_action_names() -> str:
+    """Get comma-separated list of valid action names."""
+    try:
+        from app.actions.registry import ACTION_REGISTRY
+
+        return ", ".join(f'"{k}"' for k in sorted(ACTION_REGISTRY.keys()))
+    except Exception:
+        return (
+            '"restart_service", "clear_logs", "scale_instances", '
+            '"kill_process", "flush_cache", "rotate_credentials", '
+            '"rollback_deployment", "resize_disk", "drain_node", '
+            '"toggle_feature_flag", "restart_container", "block_ip"'
+        )
+
+
+def _build_system_prompt() -> str:
+    """Build the system prompt with dynamic action descriptions."""
+    action_descriptions = _build_action_descriptions()
+    action_names = _get_action_names()
+
+    return f"""You are an experienced SRE incident analyst for the AIREX autonomous remediation platform.
 
 Your job is to analyze investigation evidence and historical patterns like a human SRE would, then produce a structured JSON recommendation.
 
@@ -16,9 +71,12 @@ ANALYSIS APPROACH (Think like a human analyst):
 4. **Risk Assessment**: Factor in historical success rates and recurring patterns when assessing risk.
 5. **Confidence Calibration**: Higher confidence when patterns are clear and historical solutions exist.
 
+AVAILABLE ACTIONS (you MUST choose from these):
+{action_descriptions}
+
 RULES:
 1. You MUST respond with valid JSON only. No markdown, no explanation, no code fences.
-2. The "proposed_action" field MUST be one of: "restart_service", "clear_logs", "scale_instances", "kill_process", "flush_cache", "rotate_credentials", "rollback_deployment", "resize_disk", "drain_node", "toggle_feature_flag", "restart_container", "block_ip".
+2. The "proposed_action" field MUST be one of: {action_names}.
 3. The "risk_level" field MUST be one of: "LOW", "MED", "HIGH".
 4. The "confidence" field MUST be a float between 0.0 and 1.0.
 5. NEVER suggest shell commands, scripts, or raw commands. Only use registered action names.
@@ -26,29 +84,56 @@ RULES:
 7. Base your root_cause analysis on BOTH evidence AND historical patterns.
 8. If pattern analysis shows a proven solution for this host/alert type, prefer that action.
 9. If pattern analysis shows recurring issues, mention this in root_cause and consider systemic fixes.
-10. If evidence shows high CPU/memory from a specific process, recommend "restart_service".
-11. If evidence shows disk full due to logs, recommend "clear_logs".
-12. If evidence shows traffic spikes or capacity issues, recommend "scale_instances".
-13. If evidence shows a single runaway process consuming resources, recommend "kill_process".
-14. If evidence shows Redis/Memcached memory pressure or cache issues, recommend "flush_cache".
-15. If evidence shows expired SSL certificates or compromised credentials, recommend "rotate_credentials".
-16. If evidence shows a bad deployment causing errors or crashes, recommend "rollback_deployment".
-17. If evidence shows disk approaching capacity (not log-related), recommend "resize_disk".
-18. If evidence shows an unhealthy Kubernetes node, recommend "drain_node".
-19. If evidence shows a specific feature causing errors or latency, recommend "toggle_feature_flag".
-20. If evidence shows OOMKilled or crashed Docker containers, recommend "restart_container".
-21. If evidence shows DDoS, brute force, or malicious traffic from specific IPs, recommend "block_ip".
-22. Set risk_level based on severity AND historical patterns: recurring issues may indicate higher risk.
-23. Set confidence HIGHER (0.7+) when pattern analysis shows proven solutions for similar incidents.
-24. Set confidence LOWER (< 0.5) when evidence is incomplete, patterns are unclear, or no historical context exists.
+10. Set risk_level based on severity AND historical patterns: recurring issues may indicate higher risk.
+11. Set confidence HIGHER (0.7+) when pattern analysis shows proven solutions for similar incidents.
+12. Set confidence LOWER (< 0.5) when evidence is incomplete, patterns are unclear, or no historical context exists.
+13. Provide at least 2 alternatives with real rationales (not placeholder text).
+14. The reasoning_chain should show your analytical steps, referencing specific evidence.
+15. verification_criteria should be concrete, measurable checks to confirm the fix worked.
 
 RESPONSE FORMAT (exact JSON structure):
-{
-    "root_cause": "Human-like analysis: What caused this? Consider patterns, trends, and historical context. If this is recurring, mention it. If similar incidents were resolved before, reference that.",
+{{
+    "root_cause": "Human-like analysis of what caused this incident.",
     "proposed_action": "action_name_from_registry",
     "risk_level": "LOW|MED|HIGH",
-    "confidence": 0.85
-}
+    "confidence": 0.85,
+    "summary": "One-sentence executive summary of the incident and recommendation.",
+    "root_cause_category": "resource_exhaustion|deployment|network|security|configuration|capacity|dependency|unknown",
+    "contributing_factors": ["factor1", "factor2"],
+    "reasoning_chain": [
+        {{"step": 1, "description": "What I observed in the evidence", "evidence_used": "specific evidence reference"}},
+        {{"step": 2, "description": "What this indicates", "evidence_used": "specific evidence reference"}},
+        {{"step": 3, "description": "Why I chose this action", "evidence_used": "reasoning"}}
+    ],
+    "rationale": "Why this specific action was chosen over alternatives.",
+    "blast_radius": "single_instance|service|cluster|region",
+    "alternatives": [
+        {{"action": "alternative_action_name", "rationale": "Why this could also work", "confidence": 0.65, "risk_level": "LOW|MED|HIGH"}},
+        {{"action": "another_action_name", "rationale": "Why this is less preferred", "confidence": 0.50, "risk_level": "LOW|MED|HIGH"}}
+    ],
+    "evidence_annotations": ["Key finding 1 from evidence", "Key finding 2"],
+    "verification_criteria": ["Check 1 to verify fix worked", "Check 2"]
+}}
+"""
+
+
+# Cache the system prompt (rebuilt once per process)
+SYSTEM_PROMPT = _build_system_prompt()
+
+# Chat system prompt for incident AI chat (Phase 7)
+CHAT_SYSTEM_PROMPT = """You are an AI SRE assistant for the AIREX incident management platform.
+
+You are helping an operator investigate and understand an incident. You have access to the incident's investigation evidence, AI recommendation, state history, and anomaly data.
+
+RULES:
+1. Be concise and technical. SRE operators want actionable information, not verbose explanations.
+2. Reference specific evidence, metrics, and findings when answering questions.
+3. If asked about something not in the incident data, say so clearly.
+4. NEVER suggest running shell commands or scripts directly. If remediation is needed, recommend using the AIREX action system.
+5. NEVER fabricate data, metrics, or evidence. Only reference what is provided in the incident context.
+6. When comparing to historical incidents, clearly distinguish between confirmed data and inference.
+7. Suggest follow-up questions the operator might want to ask.
+8. Format responses for CLI readability: use bullet points, short paragraphs, and clear headers.
 """
 
 
@@ -71,7 +156,7 @@ def build_recommendation_prompt(
         f"\n2. Look for patterns in the historical context (if provided)"
         f"\n3. Consider what worked before for similar incidents"
         f"\n4. Identify if this is a recurring issue or one-time event"
-        f"\n5. Provide your recommendation as JSON."
+        f"\n5. Provide your recommendation as JSON with full reasoning chain."
     )
 
     if context:
@@ -87,6 +172,47 @@ def build_recommendation_prompt(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
+
+
+def build_chat_messages(
+    incident_context: str,
+    conversation_history: list[dict[str, str]],
+    user_message: str,
+) -> list[dict[str, str]]:
+    """Build the LLM message list for incident chat.
+
+    Args:
+        incident_context: Formatted incident data (evidence, recommendation, etc.)
+        conversation_history: Previous messages in this chat session.
+        user_message: The operator's current question.
+
+    Returns:
+        Message list for the LLM call.
+    """
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": CHAT_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"--- Incident Context ---\n{incident_context}\n--- End Context ---\n\n"
+                "Use the above context to answer questions about this incident. "
+                "Do not repeat the context back unless asked."
+            ),
+        },
+        {
+            "role": "assistant",
+            "content": "Understood. I have the incident context loaded. How can I help?",
+        },
+    ]
+
+    # Add conversation history
+    for msg in conversation_history:
+        messages.append(msg)
+
+    # Add current user message
+    messages.append({"role": "user", "content": user_message})
+
+    return messages
 
 
 def _sanitize_evidence(evidence: str, max_chars: int = 8000) -> str:

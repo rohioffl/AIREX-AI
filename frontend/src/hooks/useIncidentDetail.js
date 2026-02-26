@@ -9,6 +9,7 @@ export default function useIncidentDetail(id) {
   const [connected, setConnected] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [executionLogs, setExecutionLogs] = useState([])
+  const [probeSteps, setProbeSteps] = useState([])
   const sseRef = useRef(null)
 
   const load = useCallback(async (opts = {}) => {
@@ -79,6 +80,28 @@ export default function useIncidentDetail(id) {
             load()
           }
         },
+        investigation_progress(data) {
+          if (data.incident_id === id) {
+            setProbeSteps((prev) => {
+              const entry = {
+                probe_name: data.probe_name,
+                status: data.status,
+                step: data.step,
+                total_steps: data.total_steps,
+                category: data.category || 'primary',
+                duration_ms: data.duration_ms || 0,
+                anomaly_count: data.anomaly_count || 0,
+              }
+              const idx = prev.findIndex((s) => s.probe_name === data.probe_name)
+              if (idx >= 0) {
+                const updated = [...prev]
+                updated[idx] = entry
+                return updated
+              }
+              return [...prev, entry]
+            })
+          }
+        },
       },
       (status) => {
         setConnected(status.connected)
@@ -90,5 +113,5 @@ export default function useIncidentDetail(id) {
     return () => sse.close()
   }, [id, load])
 
-  return { incident, loading, error, connected, reconnecting, executionLogs, reload: load }
+  return { incident, loading, error, connected, reconnecting, executionLogs, probeSteps, reload: load }
 }

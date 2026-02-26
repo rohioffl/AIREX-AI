@@ -77,8 +77,17 @@ class VectorStore:
         )
 
         result = await session.execute(stmt)
+        threshold = settings.RAG_SIMILARITY_THRESHOLD
         matches: list[RunbookMatch] = []
         for row in result:
+            distance = _safe_float(row.distance)
+            if distance > threshold:
+                logger.debug(
+                    "rag_runbook_below_threshold",
+                    distance=distance,
+                    threshold=threshold,
+                )
+                continue
             matches.append(
                 RunbookMatch(
                     source_type=row.source_type,
@@ -86,7 +95,7 @@ class VectorStore:
                     chunk_index=row.chunk_index,
                     content=row.content,
                     metadata=row.meta or {},
-                    score=_safe_float(row.distance),
+                    score=distance,
                 )
             )
         return matches
@@ -124,13 +133,22 @@ class VectorStore:
         )
 
         result = await session.execute(stmt)
+        threshold = settings.RAG_SIMILARITY_THRESHOLD
         matches: list[IncidentMatch] = []
         for row in result:
+            distance = _safe_float(row.distance)
+            if distance > threshold:
+                logger.debug(
+                    "rag_incident_below_threshold",
+                    distance=distance,
+                    threshold=threshold,
+                )
+                continue
             matches.append(
                 IncidentMatch(
                     incident_id=row.incident_id,
                     summary=row.summary,
-                    score=_safe_float(row.distance),
+                    score=distance,
                 )
             )
         return matches

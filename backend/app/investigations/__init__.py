@@ -1,4 +1,4 @@
-from app.investigations.base import BaseInvestigation
+from app.investigations.base import BaseInvestigation, InvestigationResult, ProbeResult
 from app.investigations.cpu_high import CpuHighInvestigation
 from app.investigations.disk_full import DiskFullInvestigation
 from app.investigations.memory_high import MemoryHighInvestigation
@@ -41,5 +41,7 @@ INVESTIGATION_REGISTRY: dict[str, type[BaseInvestigation]] = {
 
 __all__ = [
     "BaseInvestigation",
+    "InvestigationResult",
+    "ProbeResult",
     "INVESTIGATION_REGISTRY",
 ]

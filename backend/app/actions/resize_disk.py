@@ -20,6 +20,13 @@ class ResizeDiskAction(BaseAction):
     """Extend a disk volume and resize the filesystem."""
 
     action_type = "resize_disk"
+    DESCRIPTION = (
+        "Extend an EBS volume (AWS) or Persistent Disk (GCP) and resize the filesystem. "
+        "Use when disk usage is high due to application data growth (not logs). "
+        "Blast radius: single volume on one host. Risk: filesystem resize requires "
+        "careful execution; increased storage cost. Verification: disk usage percentage "
+        "drops after resize."
+    )
 
     async def execute(self, incident_meta: dict) -> ActionResult:
         cloud = (incident_meta.get("_cloud") or "").lower()
@@ -41,18 +48,22 @@ class ResizeDiskAction(BaseAction):
         if cloud == "aws" and instance_id:
             return await self._execute_aws(instance_id, commands, region, incident_meta)
         elif cloud == "gcp" and private_ip:
-            return await self._execute_gcp(private_ip, commands, instance_id, incident_meta)
+            return await self._execute_gcp(
+                private_ip, commands, instance_id, incident_meta
+            )
 
         return await self._simulate(host, disk_device, mount_point)
 
     async def _execute_aws(self, instance_id, commands, region, meta):
         try:
             from app.cloud.aws_ssm import ssm_run_command
+
             aws_config = None
             tenant_name = meta.get("_tenant_name", "")
             if tenant_name:
                 try:
                     from app.cloud.tenant_config import get_tenant_config
+
                     tc = get_tenant_config(tenant_name)
                     aws_config = tc.aws if tc else None
                 except Exception:
@@ -65,7 +76,11 @@ class ResizeDiskAction(BaseAction):
                 aws_config=aws_config,
             )
             success = "resize" in output.lower() or "complete" in output.lower()
-            return ActionResult(success=success, logs=f"[SSM:{instance_id}]\n{output}", exit_code=0 if success else 1)
+            return ActionResult(
+                success=success,
+                logs=f"[SSM:{instance_id}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("resize_disk_ssm_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSM] Failed: {exc}", exit_code=1)
@@ -82,7 +97,11 @@ class ResizeDiskAction(BaseAction):
                 zone=meta.get("_zone", ""),
             )
             success = "resize" in output.lower() or "complete" in output.lower()
-            return ActionResult(success=success, logs=f"[SSH:{private_ip}]\n{output}", exit_code=0 if success else 1)
+            return ActionResult(
+                success=success,
+                logs=f"[SSH:{private_ip}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("resize_disk_ssh_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSH] Failed: {exc}", exit_code=1)
@@ -115,7 +134,12 @@ class ResizeDiskAction(BaseAction):
         if cloud == "aws" and instance_id:
             try:
                 from app.cloud.aws_ssm import ssm_run_command
-                output = await ssm_run_command(instance_id=instance_id, commands=commands, region=incident_meta.get("_region", ""))
+
+                output = await ssm_run_command(
+                    instance_id=instance_id,
+                    commands=commands,
+                    region=incident_meta.get("_region", ""),
+                )
                 usage = int(output.strip())
                 return usage < 85
             except Exception:
@@ -123,6 +147,7 @@ class ResizeDiskAction(BaseAction):
         elif cloud == "gcp" and private_ip:
             try:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+
                 output = await ssh_run_command(private_ip=private_ip, commands=commands)
                 usage = int(output.strip())
                 return usage < 85

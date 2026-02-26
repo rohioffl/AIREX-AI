@@ -7,7 +7,8 @@ RSS values are derived from the memory percentage to ensure consistency.
 
 from app.investigations.base import (
     BaseInvestigation,
-    InvestigationResult,
+    ProbeCategory,
+    ProbeResult,
     _make_seeded_rng,
 )
 
@@ -17,7 +18,7 @@ class MemoryHighInvestigation(BaseInvestigation):
 
     alert_type = "memory_high"
 
-    async def investigate(self, incident_meta: dict) -> InvestigationResult:
+    async def investigate(self, incident_meta: dict) -> ProbeResult:
         host = incident_meta.get("host") or incident_meta.get(
             "monitor_name", "unknown-host"
         )
@@ -85,7 +86,21 @@ class MemoryHighInvestigation(BaseInvestigation):
             f"Recommendation: Restart service or increase heap limits.",
         ]
 
-        return InvestigationResult(
+        return ProbeResult(
             tool_name="memory_diagnostics",
             raw_output="\n".join(lines),
+            category=ProbeCategory.SYSTEM,
+            probe_type="primary",
+            metrics={
+                "memory_percent": int(mem_pct),
+                "total_mb": total_mb,
+                "used_mb": used_mb,
+                "free_mb": free_mb,
+                "swap_used_mb": swap_used_mb,
+                "swap_total_mb": 2048,
+                "oom_kills_24h": oom_kills,
+                "top_process_name": "java -Xmx4g -jar service.jar",
+                "top_process_rss_mb": primary_rss,
+                "top_process_pid": top_procs[0]["pid"],
+            },
         )

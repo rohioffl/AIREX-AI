@@ -10,162 +10,6 @@ const RISK_THEME = {
   HIGH: { border: '#f43f5e', bg: 'rgba(244,63,94,0.06)', text: '#f43f5e' },
 }
 
-// Action descriptions and alternatives
-const ACTION_INFO = {
-  restart_service: {
-    name: 'Restart Service',
-    description: 'Gracefully restart the affected service to clear resource issues and restore normal operation.',
-    alternatives: ['scale_instances', 'kill_process'],
-    rationale: 'This action is recommended when the service is consuming excessive resources or has become unresponsive. A restart will clear memory leaks and reset the service state.',
-  },
-  clear_logs: {
-    name: 'Clear Log Files',
-    description: 'Remove old log files to free up disk space and prevent further disk-related issues.',
-    alternatives: ['resize_disk'],
-    rationale: 'Log files are consuming significant disk space. Clearing them will free up storage without affecting service functionality.',
-  },
-  scale_instances: {
-    name: 'Scale Instances',
-    description: 'Increase the number of running instances to handle increased load and distribute traffic.',
-    alternatives: ['restart_service'],
-    rationale: 'Current capacity is insufficient for the load. Scaling out will improve performance and reduce per-instance load.',
-  },
-  kill_process: {
-    name: 'Kill Process',
-    description: 'Terminate a specific runaway process that is consuming excessive resources.',
-    alternatives: ['restart_service'],
-    rationale: 'A specific process is causing resource exhaustion. Terminating it will free resources without affecting the entire service.',
-  },
-  flush_cache: {
-    name: 'Flush Cache',
-    description: 'Clear cache entries to free memory and resolve cache-related performance issues.',
-    alternatives: ['restart_service'],
-    rationale: 'Cache is consuming excessive memory or contains stale data. Flushing will free memory and force fresh data retrieval.',
-  },
-  rotate_credentials: {
-    name: 'Rotate Credentials',
-    description: 'Generate new authentication credentials to replace compromised or expired ones.',
-    alternatives: [],
-    rationale: 'Credentials have been compromised or are expiring soon. Rotation is required for security.',
-  },
-  rollback_deployment: {
-    name: 'Rollback Deployment',
-    description: 'Revert to the previous deployment version to restore service stability.',
-    alternatives: ['restart_service'],
-    rationale: 'The current deployment is causing issues. Rolling back will restore the previous stable version.',
-  },
-  resize_disk: {
-    name: 'Resize Disk',
-    description: 'Increase disk capacity to accommodate growing storage needs.',
-    alternatives: ['clear_logs'],
-    rationale: 'Disk space is insufficient for current operations. Resizing will provide additional capacity.',
-  },
-  drain_node: {
-    name: 'Drain Node',
-    description: 'Safely drain a Kubernetes node of workloads before maintenance or replacement.',
-    alternatives: [],
-    rationale: 'Node requires maintenance or is unhealthy. Draining will safely move workloads to other nodes.',
-  },
-  toggle_feature_flag: {
-    name: 'Toggle Feature Flag',
-    description: 'Disable a problematic feature flag to mitigate issues caused by the feature.',
-    alternatives: ['rollback_deployment'],
-    rationale: 'A specific feature is causing problems. Disabling it will immediately mitigate the issue.',
-  },
-  restart_container: {
-    name: 'Restart Container',
-    description: 'Restart a specific container to resolve container-level issues.',
-    alternatives: ['restart_service'],
-    rationale: 'Container is unresponsive or consuming excessive resources. Restarting will restore normal operation.',
-  },
-  block_ip: {
-    name: 'Block IP Address',
-    description: 'Block malicious or problematic IP addresses to prevent attacks or abuse.',
-    alternatives: [],
-    rationale: 'Specific IP addresses are causing security issues or abuse. Blocking will prevent further impact.',
-  },
-}
-
-// Generate alternative recommendations based on pattern analysis
-function generateAlternativeRecommendations(recommendation, ragContext) {
-  const alternatives = []
-  const primaryAction = recommendation?.proposed_action
-  
-  if (!primaryAction || !ACTION_INFO[primaryAction]) {
-    return alternatives
-  }
-
-  const actionInfo = ACTION_INFO[primaryAction]
-  
-  // Add primary recommendation
-  alternatives.push({
-    action: primaryAction,
-    name: actionInfo.name,
-    description: actionInfo.description,
-    rationale: actionInfo.rationale,
-    confidence: recommendation.confidence || 0.8,
-    riskLevel: recommendation.risk_level || 'MED',
-    isPrimary: true,
-  })
-
-  // Add alternative actions based on context
-  if (actionInfo.alternatives && actionInfo.alternatives.length > 0) {
-    actionInfo.alternatives.forEach((altAction, index) => {
-      if (ACTION_INFO[altAction]) {
-        const altInfo = ACTION_INFO[altAction]
-        // Lower confidence for alternatives
-        const altConfidence = Math.max(0.3, (recommendation.confidence || 0.8) - 0.2 - (index * 0.1))
-        alternatives.push({
-          action: altAction,
-          name: altInfo.name,
-          description: altInfo.description,
-          rationale: altInfo.rationale,
-          confidence: altConfidence,
-          riskLevel: recommendation.risk_level || 'MED',
-          isPrimary: false,
-        })
-      }
-    })
-  }
-
-  // Analyze pattern context to suggest additional alternatives
-  if (ragContext) {
-    const contextLower = ragContext.toLowerCase()
-    
-    // If pattern shows recurring issues, suggest more aggressive actions
-    if (contextLower.includes('recurring') || contextLower.includes('systemic')) {
-      if (primaryAction === 'restart_service' && !alternatives.find(a => a.action === 'scale_instances')) {
-        alternatives.push({
-          action: 'scale_instances',
-          name: ACTION_INFO.scale_instances.name,
-          description: ACTION_INFO.scale_instances.description + ' (Recommended for recurring issues)',
-          rationale: 'Pattern analysis indicates recurring issues. Scaling out may provide more permanent relief than restarting.',
-          confidence: 0.6,
-          riskLevel: 'MED',
-          isPrimary: false,
-        })
-      }
-    }
-
-    // If high CPU with memory pressure, suggest both restart and scale
-    if (contextLower.includes('cpu') && contextLower.includes('memory')) {
-      if (primaryAction === 'restart_service' && !alternatives.find(a => a.action === 'scale_instances')) {
-        alternatives.push({
-          action: 'scale_instances',
-          name: ACTION_INFO.scale_instances.name,
-          description: ACTION_INFO.scale_instances.description + ' (Alternative for resource pressure)',
-          rationale: 'Both CPU and memory are under pressure. Scaling may be more effective than restarting.',
-          confidence: 0.65,
-          riskLevel: 'MED',
-          isPrimary: false,
-        })
-      }
-    }
-  }
-
-  return alternatives
-}
-
 export default function AIRecommendationApproval({ incident, ragContext }) {
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -175,13 +19,22 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
   // Try multiple ways to get recommendation - handle both direct field and meta field
   const recommendation = incident.recommendation || incident.meta?.recommendation || null
   
-  // Normalize recommendation structure if it's a plain object
+  // Normalize recommendation structure — preserve all enhanced fields from backend
   const normalizedRecommendation = recommendation && typeof recommendation === 'object' && !Array.isArray(recommendation)
     ? {
         root_cause: recommendation.root_cause || '',
         proposed_action: recommendation.proposed_action || '',
         risk_level: recommendation.risk_level || 'MED',
         confidence: typeof recommendation.confidence === 'number' ? recommendation.confidence : 0.8,
+        summary: recommendation.summary || '',
+        rationale: recommendation.rationale || '',
+        blast_radius: recommendation.blast_radius || '',
+        root_cause_category: recommendation.root_cause_category || '',
+        contributing_factors: recommendation.contributing_factors || [],
+        alternatives: recommendation.alternatives || [],
+        verification_criteria: recommendation.verification_criteria || [],
+        reasoning_chain: recommendation.reasoning_chain || [],
+        evidence_annotations: recommendation.evidence_annotations || {},
       }
     : null
 
@@ -194,16 +47,11 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
   
   if (!shouldShow) return null
 
-  // Generate alternative recommendations
-  const allRecommendations = normalizedRecommendation 
-    ? generateAlternativeRecommendations(normalizedRecommendation, ragContext)
-    : []
-
-  const primaryRecommendation = allRecommendations.find(r => r.isPrimary) || allRecommendations[0]
-  const alternativeRecommendations = allRecommendations.filter(r => !r.isPrimary)
+  // Use real alternatives from backend AI recommendation
+  const alternativeRecommendations = normalizedRecommendation?.alternatives || []
 
   // Use selected action or default to primary
-  const actionToApprove = selectedAction || primaryRecommendation?.action || normalizedRecommendation?.proposed_action
+  const actionToApprove = selectedAction || normalizedRecommendation?.proposed_action
 
   async function handleApprove() {
     setModalOpen(false)
@@ -219,7 +67,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
   }
 
 
-  const risk = (primaryRecommendation?.riskLevel || normalizedRecommendation?.risk_level || 'MED').toUpperCase()
+  const risk = (normalizedRecommendation?.risk_level || 'MED').toUpperCase()
   const theme = RISK_THEME[risk] || RISK_THEME.MED
 
   return (
@@ -290,9 +138,9 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
               <Sparkles size={14} style={{ color: '#818cf8' }} />
               AI Recommendation & Approval
             </h3>
-            {primaryRecommendation && (
+            {normalizedRecommendation && (
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                CONFIDENCE: {(primaryRecommendation.confidence * 100).toFixed(1)}%
+                CONFIDENCE: {(normalizedRecommendation.confidence * 100).toFixed(1)}%
               </p>
             )}
           </div>
@@ -304,7 +152,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
           </span>
         </div>
 
-        {allRecommendations.length === 0 ? (
+        {!normalizedRecommendation ? (
           <div className="space-y-4">
             <div className="p-4 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
               <div className="flex items-start gap-3">
@@ -333,60 +181,82 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
         ) : (
           <div className="space-y-4">
             {/* Primary Recommendation */}
-            {primaryRecommendation && (
-              <div 
-                className="p-4 rounded-lg transition-all"
-                style={{ 
-                  background: selectedAction === primaryRecommendation.action ? 'rgba(99,102,241,0.1)' : 'var(--bg-input)',
-                  border: `2px solid ${selectedAction === primaryRecommendation.action ? '#818cf8' : 'var(--border)'}`,
-                  cursor: 'pointer'
-                }}
-                onClick={() => setSelectedAction(primaryRecommendation.action)}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} style={{ color: '#10b981' }} />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)' }}>
-                      Primary Recommendation
-                    </span>
-                    <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: '#10b981', background: 'rgba(16,185,129,0.1)' }}>
-                      {(primaryRecommendation.confidence * 100).toFixed(0)}% confidence
-                    </span>
-                  </div>
-                  {selectedAction === primaryRecommendation.action && (
-                    <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: '#818cf8', color: 'white' }}>
-                      <CheckCircle2 size={12} />
-                    </div>
-                  )}
+            <div 
+              className="p-4 rounded-lg transition-all"
+              style={{ 
+                background: !selectedAction || selectedAction === normalizedRecommendation.proposed_action ? 'rgba(99,102,241,0.1)' : 'var(--bg-input)',
+                border: `2px solid ${!selectedAction || selectedAction === normalizedRecommendation.proposed_action ? '#818cf8' : 'var(--border)'}`,
+                cursor: 'pointer'
+              }}
+              onClick={() => setSelectedAction(normalizedRecommendation.proposed_action)}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={16} style={{ color: '#10b981' }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)' }}>
+                    Primary Recommendation
+                  </span>
+                  <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: '#10b981', background: 'rgba(16,185,129,0.1)' }}>
+                    {(normalizedRecommendation.confidence * 100).toFixed(0)}% confidence
+                  </span>
                 </div>
-                <div className="mb-2">
-                  <div className="p-3 rounded-lg mb-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: '#818cf8', background: 'var(--terminal-bg)', border: '1px solid rgba(99,102,241,0.1)' }}>
-                    <span style={{ color: 'rgba(99,102,241,0.4)', marginRight: 4 }}>$</span>
-                    {primaryRecommendation.action}
+                {(!selectedAction || selectedAction === normalizedRecommendation.proposed_action) && (
+                  <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: '#818cf8', color: 'white' }}>
+                    <CheckCircle2 size={12} />
                   </div>
+                )}
+              </div>
+              <div className="mb-2">
+                <div className="p-3 rounded-lg mb-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: '#818cf8', background: 'var(--terminal-bg)', border: '1px solid rgba(99,102,241,0.1)' }}>
+                  <span style={{ color: 'rgba(99,102,241,0.4)', marginRight: 4 }}>$</span>
+                  {normalizedRecommendation.proposed_action}
+                </div>
+                {normalizedRecommendation.summary && (
                   <p style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 8, fontWeight: 500 }}>
-                    {primaryRecommendation.name}
+                    {normalizedRecommendation.summary}
                   </p>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 8 }}>
-                    {primaryRecommendation.description}
-                  </p>
+                )}
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 8 }}>
+                  <span style={{ fontWeight: 600 }}>Root cause:</span> {normalizedRecommendation.root_cause}
+                </p>
+                {normalizedRecommendation.contributing_factors.length > 0 && (
+                  <div className="mb-3">
+                    <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Contributing factors:</p>
+                    <ul className="space-y-1">
+                      {normalizedRecommendation.contributing_factors.map((f, i) => (
+                        <li key={i} style={{ fontSize: 11, color: 'var(--text-secondary)', paddingLeft: 8 }}>
+                          {'\u2022'} {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {normalizedRecommendation.rationale && (
                   <div className="p-3 rounded" style={{ background: 'rgba(129,140,248,0.05)', border: '1px solid rgba(129,140,248,0.1)' }}>
                     <p style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', marginBottom: 4 }}>Rationale:</p>
                     <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                      {primaryRecommendation.rationale}
+                      {normalizedRecommendation.rationale}
                     </p>
                   </div>
-                </div>
+                )}
+                {normalizedRecommendation.blast_radius && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Blast radius:</span>
+                    <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: theme.border, background: `${theme.border}15`, border: `1px solid ${theme.border}30` }}>
+                      {normalizedRecommendation.blast_radius}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
-            {/* Alternative Recommendations */}
+            {/* Alternative Recommendations from AI */}
             {alternativeRecommendations.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <AlertCircle size={14} style={{ color: 'var(--text-muted)' }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Alternative Options
+                    Alternative Options (AI-generated)
                   </span>
                 </div>
                 <div className="space-y-3">
@@ -409,6 +279,11 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                           <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: '#f59e0b', background: 'rgba(245,158,11,0.1)' }}>
                             {(alt.confidence * 100).toFixed(0)}% confidence
                           </span>
+                          {alt.risk_level && (
+                            <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: (RISK_THEME[alt.risk_level?.toUpperCase()] || RISK_THEME.MED).border, background: (RISK_THEME[alt.risk_level?.toUpperCase()] || RISK_THEME.MED).bg }}>
+                              {alt.risk_level} risk
+                            </span>
+                          )}
                         </div>
                         {selectedAction === alt.action && (
                           <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: '#818cf8', color: 'white' }}>
@@ -421,12 +296,6 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                           <span style={{ color: 'rgba(99,102,241,0.4)', marginRight: 4 }}>$</span>
                           {alt.action}
                         </div>
-                        <p style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: 6, fontWeight: 500 }}>
-                          {alt.name}
-                        </p>
-                        <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 6 }}>
-                          {alt.description}
-                        </p>
                         <div className="p-2 rounded" style={{ background: 'rgba(129,140,248,0.03)', border: '1px solid rgba(129,140,248,0.08)' }}>
                           <p style={{ fontSize: 10, fontWeight: 600, color: '#818cf8', marginBottom: 2 }}>Why this option:</p>
                           <p style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
@@ -476,9 +345,9 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
           message={
             <div className="space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
               <p>You are about to execute <strong style={{ fontFamily: 'var(--font-mono)', color: '#818cf8' }}>{actionToApprove}</strong> on this incident.</p>
-              {primaryRecommendation && selectedAction === primaryRecommendation.action && (
+              {normalizedRecommendation && (!selectedAction || selectedAction === normalizedRecommendation.proposed_action) && (
                 <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  This is the primary recommendation with {(primaryRecommendation.confidence * 100).toFixed(0)}% confidence.
+                  This is the primary recommendation with {(normalizedRecommendation.confidence * 100).toFixed(0)}% confidence.
                 </p>
               )}
               <p>This action will be logged and cannot be undone.</p>

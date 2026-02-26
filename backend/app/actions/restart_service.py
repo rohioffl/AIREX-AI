@@ -19,6 +19,12 @@ class RestartServiceAction(BaseAction):
     """Restart a system service via SSM RunCommand or GCP SSH."""
 
     action_type = "restart_service"
+    DESCRIPTION = (
+        "Restart a system service (e.g. nginx, mysql, app server) via systemctl. "
+        "Use when a service is unresponsive, consuming excessive resources, or in a "
+        "degraded state. Blast radius: single service on one host. Risk: brief downtime "
+        "during restart (~5-30s). Verification: service health check after restart."
+    )
 
     async def execute(self, incident_meta: dict) -> ActionResult:
         cloud = (incident_meta.get("_cloud") or "").lower()
@@ -38,7 +44,9 @@ class RestartServiceAction(BaseAction):
         if cloud == "aws" and instance_id:
             return await self._execute_aws(instance_id, commands, region, incident_meta)
         elif cloud == "gcp" and private_ip:
-            return await self._execute_gcp(private_ip, commands, instance_id, incident_meta)
+            return await self._execute_gcp(
+                private_ip, commands, instance_id, incident_meta
+            )
 
         # Simulation fallback
         return await self._simulate(host, service_name)
@@ -46,11 +54,13 @@ class RestartServiceAction(BaseAction):
     async def _execute_aws(self, instance_id, commands, region, meta):
         try:
             from app.cloud.aws_ssm import ssm_run_command
+
             aws_config = None
             tenant_name = meta.get("_tenant_name", "")
             if tenant_name:
                 try:
                     from app.cloud.tenant_config import get_tenant_config
+
                     tc = get_tenant_config(tenant_name)
                     aws_config = tc.aws if tc else None
                 except Exception:
@@ -62,8 +72,16 @@ class RestartServiceAction(BaseAction):
                 region=region,
                 aws_config=aws_config,
             )
-            success = "active" in output.lower() or "running" in output.lower() or "restart" in output.lower()
-            return ActionResult(success=success, logs=f"[SSM:{instance_id}]\n{output}", exit_code=0 if success else 1)
+            success = (
+                "active" in output.lower()
+                or "running" in output.lower()
+                or "restart" in output.lower()
+            )
+            return ActionResult(
+                success=success,
+                logs=f"[SSM:{instance_id}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("restart_ssm_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSM] Failed: {exc}", exit_code=1)
@@ -71,11 +89,13 @@ class RestartServiceAction(BaseAction):
     async def _execute_gcp(self, private_ip, commands, instance_name, meta):
         try:
             from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+
             sa_key = ""
             tenant_name = meta.get("_tenant_name", "")
             if tenant_name:
                 try:
                     from app.cloud.tenant_config import get_tenant_config
+
                     tc = get_tenant_config(tenant_name)
                     sa_key = tc.gcp.service_account_key if tc else ""
                 except Exception:
@@ -88,8 +108,16 @@ class RestartServiceAction(BaseAction):
                 project=meta.get("_project", ""),
                 zone=meta.get("_zone", ""),
             )
-            success = "active" in output.lower() or "running" in output.lower() or "restart" in output.lower()
-            return ActionResult(success=success, logs=f"[SSH:{private_ip}]\n{output}", exit_code=0 if success else 1)
+            success = (
+                "active" in output.lower()
+                or "running" in output.lower()
+                or "restart" in output.lower()
+            )
+            return ActionResult(
+                success=success,
+                logs=f"[SSH:{private_ip}]\n{output}",
+                exit_code=0 if success else 1,
+            )
         except Exception as exc:
             logger.warning("restart_ssh_failed", error=str(exc))
             return ActionResult(success=False, logs=f"[SSH] Failed: {exc}", exit_code=1)
@@ -116,7 +144,12 @@ class RestartServiceAction(BaseAction):
         if cloud == "aws" and instance_id:
             try:
                 from app.cloud.aws_ssm import ssm_run_command
-                output = await ssm_run_command(instance_id=instance_id, commands=commands, region=incident_meta.get("_region", ""))
+
+                output = await ssm_run_command(
+                    instance_id=instance_id,
+                    commands=commands,
+                    region=incident_meta.get("_region", ""),
+                )
                 load = float(output.split()[0]) if output.strip() else 99
                 return load < 5.0
             except Exception:
@@ -124,6 +157,7 @@ class RestartServiceAction(BaseAction):
         elif cloud == "gcp" and private_ip:
             try:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+
                 output = await ssh_run_command(private_ip=private_ip, commands=commands)
                 load = float(output.split()[0]) if output.strip() else 99
                 return load < 5.0

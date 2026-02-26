@@ -8,7 +8,8 @@ investigation would find: high CPU values consistent with the alert.
 
 from app.investigations.base import (
     BaseInvestigation,
-    InvestigationResult,
+    ProbeCategory,
+    ProbeResult,
     _make_seeded_rng,
 )
 
@@ -18,7 +19,7 @@ class CpuHighInvestigation(BaseInvestigation):
 
     alert_type = "cpu_high"
 
-    async def investigate(self, incident_meta: dict) -> InvestigationResult:
+    async def investigate(self, incident_meta: dict) -> ProbeResult:
         host = incident_meta.get("host") or incident_meta.get(
             "monitor_name", "unknown-host"
         )
@@ -90,7 +91,21 @@ class CpuHighInvestigation(BaseInvestigation):
             f"Recommendation: Restart the service or investigate memory leaks.",
         ]
 
-        return InvestigationResult(
+        return ProbeResult(
             tool_name="cpu_diagnostics",
             raw_output="\n".join(output_lines),
+            category=ProbeCategory.SYSTEM,
+            probe_type="primary",
+            metrics={
+                "cpu_percent": round(float(cpu_pct), 1),
+                "load_1m": load_1m,
+                "load_5m": load_5m,
+                "load_15m": load_15m,
+                "cores": cores,
+                "memory_percent": mem_pct,
+                "swap_percent": swap_pct,
+                "top_process_name": primary_process,
+                "top_process_cpu": round(primary_cpu, 1),
+                "top_process_pid": top_processes[0]["pid"],
+            },
         )

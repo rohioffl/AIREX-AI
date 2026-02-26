@@ -17,9 +17,13 @@ import structlog
 from app.core.config import settings
 from app.core.metrics import ai_failure_total, ai_request_total, circuit_breaker_state
 from app.llm import build_llm_headers, configure_litellm
-from app.llm.prompts import build_recommendation_prompt
+from app.llm.prompts import build_chat_messages, build_recommendation_prompt
 from app.models.enums import RiskLevel
-from app.schemas.recommendation import Recommendation
+from app.schemas.recommendation import (
+    AlternativeRecommendation,
+    Recommendation,
+    ReasoningStep,
+)
 
 logger = structlog.get_logger()
 
@@ -243,12 +247,7 @@ class LLMClient:
             content = cast(str, message["content"])
             data = json.loads(content)
 
-            recommendation = Recommendation(
-                root_cause=data["root_cause"],
-                proposed_action=data["proposed_action"],
-                risk_level=RiskLevel(data["risk_level"]),
-                confidence=float(data["confidence"]),
-            )
+            recommendation = _parse_recommendation(data)
 
             logger.info(
                 "llm_recommendation_generated",
@@ -256,6 +255,8 @@ class LLMClient:
                 action=recommendation.proposed_action,
                 risk=recommendation.risk_level.value,
                 confidence=recommendation.confidence,
+                has_reasoning=len(recommendation.reasoning_chain) > 0,
+                alternatives=len(recommendation.alternatives),
             )
 
             return recommendation
@@ -272,3 +273,179 @@ class LLMClient:
             logger.warning("llm_call_failed", model=model, error=str(exc))
             ai_failure_total.labels(model=model, error_type="call_failed").inc()
             return None
+
+    async def chat(
+        self,
+        incident_context: str,
+        conversation_history: list[dict[str, str]],
+        user_message: str,
+        redis: Any = None,
+    ) -> str | None:
+        """Send a chat message about an incident, returning the AI response text.
+
+        Uses the same circuit breaker and model fallback as recommendations.
+        Returns None if circuit breaker is open or all attempts fail.
+        """
+        await self.circuit_breaker.load_from_redis(redis)
+
+        if not self.circuit_breaker.can_attempt():
+            logger.warning("llm_chat_circuit_breaker_open")
+            return None
+
+        _ensure_vertex_credentials()
+
+        messages = build_chat_messages(
+            incident_context=incident_context,
+            conversation_history=conversation_history,
+            user_message=user_message,
+        )
+
+        # Attempt primary model
+        result = await self._call_chat_model(
+            settings.LLM_PRIMARY_MODEL,
+            messages,
+            timeout=settings.LLM_LOCAL_TIMEOUT,
+        )
+        if result is not None:
+            self.circuit_breaker.record_success()
+            await self.circuit_breaker.save_to_redis(redis)
+            return result
+
+        # Attempt fallback model
+        logger.info("llm_chat_primary_failed", fallback=settings.LLM_FALLBACK_MODEL)
+        result = await self._call_chat_model(
+            settings.LLM_FALLBACK_MODEL,
+            messages,
+            timeout=settings.LLM_FALLBACK_TIMEOUT,
+        )
+        if result is not None:
+            self.circuit_breaker.record_success()
+            await self.circuit_breaker.save_to_redis(redis)
+            return result
+
+        self.circuit_breaker.record_failure()
+        await self.circuit_breaker.save_to_redis(redis)
+        return None
+
+    async def _call_chat_model(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        timeout: int,
+    ) -> str | None:
+        """Call LLM for chat (returns raw text, not JSON)."""
+        try:
+            import litellm
+
+            effective_model = model
+            if settings.LLM_BASE_URL:
+                if not model.startswith("openai/"):
+                    effective_model = f"openai/{model}"
+
+            call_kwargs: dict[str, Any] = {
+                "model": effective_model,
+                "messages": messages,
+                "temperature": 0.3,
+            }
+
+            if settings.LLM_BASE_URL:
+                call_kwargs["api_base"] = settings.LLM_BASE_URL
+            if settings.LLM_API_KEY:
+                call_kwargs["api_key"] = settings.LLM_API_KEY
+
+            headers = build_llm_headers()
+            if headers:
+                call_kwargs["extra_headers"] = headers
+
+            if model.startswith("vertex_ai/") and not settings.LLM_BASE_URL:
+                call_kwargs["vertex_project"] = settings.VERTEX_PROJECT
+                call_kwargs["vertex_location"] = settings.VERTEX_LOCATION
+
+            raw_response = await asyncio.wait_for(
+                litellm.acompletion(**call_kwargs),
+                timeout=timeout,
+            )
+            response = cast(dict[str, Any], raw_response)
+            content = cast(str, response["choices"][0]["message"]["content"])
+            return content
+
+        except asyncio.TimeoutError:
+            logger.warning("llm_chat_timeout", model=model, timeout=timeout)
+            return None
+        except Exception as exc:
+            logger.warning("llm_chat_failed", model=model, error=str(exc))
+            return None
+
+
+def _parse_recommendation(data: dict[str, Any]) -> Recommendation:
+    """Parse LLM JSON response into a Recommendation, handling both
+    legacy (4-field) and enhanced (full) response formats gracefully.
+    """
+    # Core fields (required)
+    core = {
+        "root_cause": data["root_cause"],
+        "proposed_action": data["proposed_action"],
+        "risk_level": RiskLevel(data["risk_level"]),
+        "confidence": float(data["confidence"]),
+    }
+
+    # Enhanced fields (optional — graceful fallback)
+    enhanced: dict[str, Any] = {}
+
+    if "summary" in data:
+        enhanced["summary"] = str(data["summary"])
+    if "root_cause_category" in data:
+        enhanced["root_cause_category"] = str(data["root_cause_category"])
+    if "contributing_factors" in data and isinstance(
+        data["contributing_factors"], list
+    ):
+        enhanced["contributing_factors"] = [
+            str(f) for f in data["contributing_factors"]
+        ]
+    if "rationale" in data:
+        enhanced["rationale"] = str(data["rationale"])
+    if "blast_radius" in data:
+        enhanced["blast_radius"] = str(data["blast_radius"])
+    if "evidence_annotations" in data and isinstance(
+        data["evidence_annotations"], list
+    ):
+        enhanced["evidence_annotations"] = [
+            str(a) for a in data["evidence_annotations"]
+        ]
+    if "verification_criteria" in data and isinstance(
+        data["verification_criteria"], list
+    ):
+        enhanced["verification_criteria"] = [
+            str(c) for c in data["verification_criteria"]
+        ]
+
+    # Parse reasoning chain
+    if "reasoning_chain" in data and isinstance(data["reasoning_chain"], list):
+        steps = []
+        for raw_step in data["reasoning_chain"]:
+            if isinstance(raw_step, dict):
+                steps.append(
+                    ReasoningStep(
+                        step=int(raw_step.get("step", len(steps) + 1)),
+                        description=str(raw_step.get("description", "")),
+                        evidence_used=str(raw_step.get("evidence_used", "")),
+                    )
+                )
+        enhanced["reasoning_chain"] = steps
+
+    # Parse alternatives
+    if "alternatives" in data and isinstance(data["alternatives"], list):
+        alts = []
+        for raw_alt in data["alternatives"]:
+            if isinstance(raw_alt, dict) and "action" in raw_alt:
+                alts.append(
+                    AlternativeRecommendation(
+                        action=str(raw_alt["action"]),
+                        rationale=str(raw_alt.get("rationale", "")),
+                        confidence=float(raw_alt.get("confidence", 0.5)),
+                        risk_level=RiskLevel(raw_alt.get("risk_level", "MED")),
+                    )
+                )
+        enhanced["alternatives"] = alts
+
+    return Recommendation(**core, **enhanced)
