@@ -5,6 +5,7 @@ Receives external alerts, deduplicates via idempotency key,
 creates incidents, and queues async investigation.
 """
 
+import asyncio
 import hashlib
 import json as _json
 import re
@@ -596,9 +597,11 @@ async def ingest_site24x7(
 
     # Auto-discover instance details (zone, name, region) from cloud APIs
     # Uses the private IP from tags + project from tenant config
+    # Timeout after 3s to avoid blocking the webhook response on slow region scans
     try:
-        cloud_ctx = await discover_and_enrich(cloud_ctx, redis=redis)
-    except Exception as exc:
+        async with asyncio.timeout(3):
+            cloud_ctx = await discover_and_enrich(cloud_ctx, redis=redis)
+    except (TimeoutError, Exception) as exc:
         logger.warning("auto_discovery_skipped", error=str(exc))
 
     # Override host with instance/IP from tags if available
@@ -629,6 +632,16 @@ async def ingest_site24x7(
         host_key = str(host_key)
     if host_key and len(host_key) > 512:
         host_key = host_key[:512]
+
+    # Check tenant limits before creating incident
+    from app.core.tenant_limits import check_concurrent_incidents
+
+    allowed, current, max_allowed = await check_concurrent_incidents(session, tenant_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Tenant limit exceeded: {current}/{max_allowed} concurrent incidents. Please resolve existing incidents or contact support.",
+        )
 
     # Create incident
     title = f"[{status_str.upper()}] {monitor_name}"
@@ -744,6 +757,60 @@ async def ingest_generic(
         return IncidentCreatedResponse(incident_id=existing_id)
 
     meta = payload.meta or {}
+
+    # Parse cloud tags from meta.TAGS (if present)
+    raw_tags = meta.get("TAGS") or meta.get("tags") or ""
+    if isinstance(raw_tags, list):
+        raw_tags = ",".join(str(t) for t in raw_tags)
+    cloud_ctx = parse_tags(str(raw_tags) if raw_tags else "")
+
+    # Auto-fill IP from meta fields if not in tags
+    if not cloud_ctx.private_ip:
+        # Try common IP fields in meta
+        for ip_field in ["ip", "ipaddress", "ip_address", "private_ip", "host"]:
+            ip_value = meta.get(ip_field)
+            if ip_value and isinstance(ip_value, str):
+                # Check if it looks like an IP
+                import re
+
+                ip_re = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
+                if ip_re.match(ip_value.strip()):
+                    cloud_ctx.private_ip = ip_value.strip()
+                    logger.info(
+                        "ip_extracted_from_meta",
+                        ip=cloud_ctx.private_ip,
+                        field=ip_field,
+                    )
+                    break
+
+    # Auto-discover instance details (zone, name, region) from cloud APIs
+    # Timeout after 3s to avoid blocking the webhook response on slow region scans
+    try:
+        async with asyncio.timeout(3):
+            cloud_ctx = await discover_and_enrich(cloud_ctx, redis=redis)
+    except (TimeoutError, Exception) as exc:
+        logger.warning("auto_discovery_skipped", error=str(exc))
+
+    # Override host with instance/IP from tags if available
+    if cloud_ctx.instance_id:
+        meta["host"] = cloud_ctx.instance_id
+    elif cloud_ctx.private_ip and not meta.get("host"):
+        meta["host"] = cloud_ctx.private_ip
+
+    # Inject structured cloud context into meta for investigation plugins
+    merge_context_into_meta(meta, cloud_ctx)
+
+    logger.info(
+        "generic_webhook_cloud_context",
+        cloud=cloud_ctx.cloud,
+        tenant_tag=cloud_ctx.tenant,
+        private_ip=cloud_ctx.private_ip,
+        instance_id=cloud_ctx.instance_id,
+        zone=cloud_ctx.zone,
+        region=cloud_ctx.region,
+        has_target=cloud_ctx.has_target,
+    )
+
     host_key = (
         meta.get("_private_ip") or meta.get("_instance_id") or meta.get("host") or None
     )
@@ -751,6 +818,16 @@ async def ingest_generic(
         host_key = str(host_key)
     if host_key and len(host_key) > 512:
         host_key = host_key[:512]
+
+    # Check tenant limits before creating incident
+    from app.core.tenant_limits import check_concurrent_incidents
+
+    allowed, current, max_allowed = await check_concurrent_incidents(session, tenant_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Tenant limit exceeded: {current}/{max_allowed} concurrent incidents. Please resolve existing incidents or contact support.",
+        )
 
     incident = Incident(
         tenant_id=tenant_id,
