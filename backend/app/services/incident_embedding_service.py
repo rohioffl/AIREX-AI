@@ -38,6 +38,16 @@ async def upsert_incident_embedding(
         )
         return
 
+    expected_dim = settings.LLM_EMBEDDING_DIMENSION
+    if expected_dim and len(vector) != expected_dim:
+        logger.warning(
+            "incident_embedding_dim_mismatch",
+            incident_id=str(incident.id),
+            expected_dim=expected_dim,
+            actual_dim=len(vector),
+        )
+        return
+
     existing = await session.execute(
         select(IncidentEmbedding).where(
             IncidentEmbedding.tenant_id == incident.tenant_id,
