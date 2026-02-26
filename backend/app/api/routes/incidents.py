@@ -283,14 +283,82 @@ async def approve_incident(
             detail=f"Incident is in state {incident.state.value}, expected AWAITING_APPROVAL",
         )
 
-    # Idempotency check
-    idem_exists = await redis.get(f"approve:{tenant_id}:{body.idempotency_key}")
+    # Idempotency check — return early if already processed
+    idem_key = f"approve:{tenant_id}:{body.idempotency_key}"
+    idem_exists = await redis.get(idem_key)
     if idem_exists:
         logger.info(
             "duplicate_approval_rejected",
             tenant_id=str(tenant_id),
             incident_id=str(incident_id),
         )
+        return IncidentCreatedResponse(incident_id=incident.id)
+
+    # Acquire distributed lock to prevent double-execution
+    lock_key = f"lock:exec:{tenant_id}:{incident_id}"
+    lock_acquired = await redis.set(
+        lock_key,
+        f"approve:{datetime.now(timezone.utc).isoformat()}",
+        nx=True,
+        ex=settings.LOCK_TTL,
+    )
+    if not lock_acquired:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Another approval is already being processed for this incident",
+        )
+
+    try:
+        # Transition to EXECUTING
+        try:
+            await transition_state(
+                session,
+                incident,
+                IncidentState.EXECUTING,
+                reason=f"Approved by operator — action: {body.action}",
+                actor="operator",
+            )
+        except IllegalStateTransition as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+
+        # Mark idempotency key (24h TTL)
+        await redis.set(idem_key, "1", ex=86400)
+
+        # Queue async execution task via ARQ
+        try:
+            from arq import create_pool
+            from arq.connections import RedisSettings
+
+            pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
+            await pool.enqueue_job(
+                "execute_action_task",
+                str(tenant_id),
+                str(incident_id),
+                body.action,
+            )
+            await pool.aclose()
+        except Exception:
+            logger.exception(
+                "failed_to_enqueue_execution",
+                tenant_id=str(tenant_id),
+                incident_id=str(incident_id),
+                action=body.action,
+            )
+            # Execution enqueue failure is non-fatal; the worker retry
+            # scheduler will pick it up. Don't roll back the state transition.
+
+        logger.info(
+            "incident_approved",
+            tenant_id=str(tenant_id),
+            incident_id=str(incident_id),
+            action=body.action,
+        )
+    finally:
+        await redis.delete(lock_key)
+
     return IncidentCreatedResponse(incident_id=incident.id)
 
 
