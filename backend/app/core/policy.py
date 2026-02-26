@@ -42,6 +42,60 @@ ACTION_POLICIES: dict[str, ActionPolicy] = {
         requires_senior_approval=True,
         max_allowed_risk=RiskLevel.HIGH,
     ),
+    "kill_process": ActionPolicy(
+        action_type="kill_process",
+        auto_approve=False,
+        requires_senior_approval=False,
+        max_allowed_risk=RiskLevel.MED,
+    ),
+    "flush_cache": ActionPolicy(
+        action_type="flush_cache",
+        auto_approve=True,
+        requires_senior_approval=False,
+        max_allowed_risk=RiskLevel.LOW,
+    ),
+    "rotate_credentials": ActionPolicy(
+        action_type="rotate_credentials",
+        auto_approve=False,
+        requires_senior_approval=True,
+        max_allowed_risk=RiskLevel.HIGH,
+    ),
+    "rollback_deployment": ActionPolicy(
+        action_type="rollback_deployment",
+        auto_approve=False,
+        requires_senior_approval=True,
+        max_allowed_risk=RiskLevel.HIGH,
+    ),
+    "resize_disk": ActionPolicy(
+        action_type="resize_disk",
+        auto_approve=False,
+        requires_senior_approval=False,
+        max_allowed_risk=RiskLevel.MED,
+    ),
+    "drain_node": ActionPolicy(
+        action_type="drain_node",
+        auto_approve=False,
+        requires_senior_approval=True,
+        max_allowed_risk=RiskLevel.HIGH,
+    ),
+    "toggle_feature_flag": ActionPolicy(
+        action_type="toggle_feature_flag",
+        auto_approve=True,
+        requires_senior_approval=False,
+        max_allowed_risk=RiskLevel.LOW,
+    ),
+    "restart_container": ActionPolicy(
+        action_type="restart_container",
+        auto_approve=False,
+        requires_senior_approval=False,
+        max_allowed_risk=RiskLevel.MED,
+    ),
+    "block_ip": ActionPolicy(
+        action_type="block_ip",
+        auto_approve=False,
+        requires_senior_approval=True,
+        max_allowed_risk=RiskLevel.HIGH,
+    ),
 }
 
 

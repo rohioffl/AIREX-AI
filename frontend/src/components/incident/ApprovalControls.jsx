@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, Ban, Loader } from 'lucide-react'
 import { approveIncident, rejectIncident } from '../../services/api'
 import ConfirmationModal from '../common/ConfirmationModal'
+import { extractErrorMessage } from '../../utils/errorHandler'
 
 export default function ApprovalControls({ incident }) {
   const [loading, setLoading] = useState(false)
@@ -28,7 +29,7 @@ export default function ApprovalControls({ incident }) {
     try {
       await approveIncident(incident.id, actionType, idempotencyKey)
     } catch (err) {
-      setError(err.response?.data?.detail || err.message)
+      setError(extractErrorMessage(err) || err.message)
       setLoading(false)
     }
   }
@@ -48,7 +49,7 @@ export default function ApprovalControls({ incident }) {
       await rejectIncident(incident.id, trimmedNote)
       navigate('/rejected', { replace: true })
     } catch (err) {
-      setError(err.response?.data?.detail || err.message)
+      setError(extractErrorMessage(err) || err.message)
       setLoading(false)
       return
     }

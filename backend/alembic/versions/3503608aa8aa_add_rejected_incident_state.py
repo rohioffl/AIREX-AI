@@ -19,27 +19,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Add the new REJECTED state to the incident_state enum.
+    #
+    # Important: do not reference the new enum value in constraints here.
+    # Postgres (via asyncpg) requires a commit between adding a new enum
+    # label and using it in a CHECK constraint. The later migration
+    # dbf34187c3db_remove_escalated_state rewrites the enum and updates
+    # ck_incidents_soft_delete to include REJECTED in a separate
+    # transaction-safe step.
     op.execute("ALTER TYPE incident_state ADD VALUE IF NOT EXISTS 'REJECTED'")
-
-    op.execute(
-        "ALTER TABLE incidents DROP CONSTRAINT IF EXISTS ck_incidents_soft_delete"
-    )
-    op.execute(
-        """
-        ALTER TABLE incidents
-        ADD CONSTRAINT ck_incidents_soft_delete
-        CHECK (
-            deleted_at IS NULL
-            OR state IN (
-                'RESOLVED',
-                'ESCALATED',
-                'FAILED_EXECUTION',
-                'FAILED_VERIFICATION',
-                'REJECTED'
-            )
-        )
-        """
-    )
 
 
 def downgrade() -> None:

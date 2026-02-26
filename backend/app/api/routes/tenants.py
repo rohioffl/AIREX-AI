@@ -6,8 +6,10 @@ for operators to refresh the config without restarting the server.
 """
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from app.api.dependencies import RequireAdmin
 
 from app.cloud.tenant_config import (
     get_tenant_config,
@@ -74,9 +76,9 @@ async def get_tenant_detail(tenant_name: str):
     )
 
 
-@router.post("/reload")
+@router.post("/reload", dependencies=[Depends(RequireAdmin)])
 async def reload_tenant_config():
-    """Reload tenant config from disk without restarting the server."""
+    """Reload tenant config from disk without restarting the server (admin only)."""
     reload_config()
     names = list_tenants()
     logger.info("tenant_config_reloaded_via_api", count=len(names))

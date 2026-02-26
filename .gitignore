@@ -61,3 +61,30 @@ backend/alembic/versions/__pycache__/
 coverage/
 htmlcov/
 .pytest_cache/
+
+# MCP Server runtime
+.mcp-server/.venv/
+.mcp-server/__pycache__/
+
+# Playwright reports & test results
+playwright-report/
+test-results/
+e2e/playwright-report/
+e2e/test-results/
+frontend/playwright-report/
+frontend/test-results/
+
+# Screenshots (dev artifacts)
+*.png
+*.mp4
+
+# MCP config (local dev)
+.playwright-mcp/
+mcp-cli-config.json
+
+# Virtualenv binaries (stale symlinks)
+backend/.venv/bin/f2py
+backend/.venv/bin/numpy-config
+
+# Home dir artifacts
+~/

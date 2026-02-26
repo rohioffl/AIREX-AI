@@ -154,9 +154,14 @@ class CloudInvestigation(BaseInvestigation):
             )
             sections.append(log_output)
 
+        # Optimize the output before returning
+        raw_output = "\n".join(sections)
+        from app.investigations.evidence_optimizer import optimize_evidence_output
+        raw_output = optimize_evidence_output(raw_output, alert_type=alert_type)
+
         return InvestigationResult(
             tool_name=f"cloud_investigation_{cloud or 'fallback'}",
-            raw_output="\n".join(sections),
+            raw_output=raw_output,
         )
 
     async def _run_aws_ssm(

@@ -62,7 +62,7 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard title="Total Alerts" value={String(stats.total)} trend="All time" trendType="neutral" icon={Bell} />
         <MetricCard title="Critical" value={String(stats.critical)} trend={stats.critical > 0 ? 'Needs attention' : 'All clear'} trendType={stats.critical > 0 ? 'negative' : 'positive'} isCritical={stats.critical > 0} icon={AlertOctagon} />
         <MetricCard title="Active" value={String(stats.active)} trend="Awaiting action" trendType="neutral" icon={Clock} />
@@ -78,9 +78,9 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Quick Stats</span>
           <div className="flex-1 flex flex-col gap-3">
             {[
-              { label: 'MTTR', value: '4m 23s', color: '#10b981' },
-              { label: 'Avg Investigation', value: '45s', color: '#6366f1' },
-              { label: 'AI Confidence', value: '87%', color: '#a855f7' },
+              { label: 'MTTR', value: '—', color: '#10b981' }, // Will be populated from metrics API
+              { label: 'Avg Investigation', value: '—', color: '#6366f1' },
+              { label: 'AI Confidence', value: '—', color: '#a855f7' },
               { label: 'Auto-resolved', value: `${stats.resolved}`, color: '#22d3ee' },
             ].map(s => (
               <div key={s.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -205,8 +205,8 @@ function Select({ value, onChange, options, placeholder }) {
 
 const SEVERITY_SHADES = {
   CRITICAL: '#f43f5e',
-  HIGH: '#fb923c',
-  MEDIUM: '#22d3ee',
+  HIGH: '#f97316',
+  MEDIUM: '#f59e0b',
   LOW: '#10b981',
 }
 
@@ -220,13 +220,13 @@ function IncidentListRow({ incident }) {
   const manualReason = typeof meta._manual_review_reason === 'string' ? meta._manual_review_reason.trim() : ''
   const manualReview = Boolean(meta._manual_review_required || manualReason)
   const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
-  const accent = manualReview ? '#f87171' : (SEVERITY_SHADES[incident.severity] || '#6366f1')
+  const accent = manualReview ? '#f87171' : (SEVERITY_SHADES[incident.severity] || '#f97316')
 
   return (
     <Link
       to={`/incidents/${incident.id}`}
-      className="block rounded-2xl relative overflow-hidden"
-      style={{ border: '1px solid rgba(255,255,255,0.04)', background: 'var(--bg-card)' }}
+      className="block rounded-2xl relative overflow-hidden glass backdrop-blur-sm transition-all hover:bg-white/5"
+      style={{ border: '1px solid rgba(255,255,255,0.05)' }}
     >
       <div
         className="absolute inset-y-3 left-3 w-[3px] rounded-full"

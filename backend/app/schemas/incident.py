@@ -67,6 +67,7 @@ class IncidentListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta: dict | None = None
+    host_key: str | None = None
 
 
 class RelatedIncidentItem(BaseModel):
@@ -87,6 +88,7 @@ class IncidentDetail(IncidentListItem):
     recommendation: RecommendationResponse | None = None
     related_incidents: list[RelatedIncidentItem] = []
     rag_context: str | None = None
+    host_key: str | None = None
 
 
 # --- Request models ---

@@ -51,11 +51,13 @@ api.interceptors.response.use(
   }
 )
 
-export async function fetchIncidents({ state, severity, alertType, limit = 50, cursor, offset = 0 } = {}) {
+export async function fetchIncidents({ state, severity, alertType, search, host_key, limit = 50, cursor, offset = 0 } = {}) {
   const params = { limit }
   if (state) params.state = state
   if (severity) params.severity = severity
   if (alertType) params.alert_type = alertType
+  if (search && search.trim()) params.search = search.trim()
+  if (host_key) params.host_key = host_key
   if (cursor) params.cursor = cursor
   else if (offset) params.offset = offset
   const res = await api.get('/incidents/', { params })
@@ -63,12 +65,12 @@ export async function fetchIncidents({ state, severity, alertType, limit = 50, c
 }
 
 export async function fetchIncident(id) {
-  const res = await api.get(`/incidents/${id}/`)
+  const res = await api.get(`/incidents/${id}`)
   return res.data
 }
 
 export async function approveIncident(id, action, idempotencyKey) {
-  const res = await api.post(`/incidents/${id}/approve/`, {
+  const res = await api.post(`/incidents/${id}/approve`, {
     action,
     idempotency_key: idempotencyKey,
   })
@@ -80,7 +82,70 @@ export async function rejectIncident(id, reason) {
   if (reason && reason.trim()) {
     payload.reason = reason.trim()
   }
-  const res = await api.post(`/incidents/${id}/reject/`, payload)
+  const res = await api.post(`/incidents/${id}/reject`, payload)
+  return res.data
+}
+
+// User management (admin only)
+export async function fetchUsers({ limit = 100, offset = 0 } = {}) {
+  const res = await api.get('/users/', { params: { limit, offset } })
+  return res.data
+}
+
+export async function fetchUser(id) {
+  const res = await api.get(`/users/${id}/`)
+  return res.data
+}
+
+export async function createUser(data) {
+  const res = await api.post('/users/', data)
+  return res.data
+}
+
+export async function updateUser(id, data) {
+  const res = await api.patch(`/users/${id}/`, data)
+  return res.data
+}
+
+export async function deleteUser(id) {
+  await api.delete(`/users/${id}/`)
+}
+
+// Metrics
+export async function fetchMetrics() {
+  const res = await api.get('/metrics/')
+  return res.data
+}
+
+// DLQ (admin only)
+export async function fetchDLQ({ limit = 100, offset = 0 } = {}) {
+  const res = await api.get('/dlq/', { params: { limit, offset } })
+  return res.data
+}
+
+export async function replayDLQEntry(entryIndex) {
+  const res = await api.post(`/dlq/${entryIndex}/replay`)
+  return res.data
+}
+
+export async function clearDLQ() {
+  const res = await api.delete('/dlq/')
+  return res.data
+}
+
+// Incident soft delete
+export async function deleteIncident(id) {
+  await api.delete(`/incidents/${id}`)
+}
+
+// Settings (admin only)
+export async function fetchSettings() {
+  const res = await api.get('/settings/')
+  return res.data
+}
+
+export async function updateSettings(data) {
+  const res = await api.patch('/settings/', data)
   return res.data
 }
 

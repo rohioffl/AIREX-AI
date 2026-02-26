@@ -20,7 +20,8 @@ describe('EvidencePanel', () => {
     ]
     render(<EvidencePanel evidence={evidence} />)
     expect(screen.getByText('cpu_check')).toBeInTheDocument()
-    expect(screen.queryByText('CPU at 95%')).not.toBeInTheDocument()
+    // Collapsed view should not show the Raw Output panel yet
+    expect(screen.queryByText('Raw Output')).not.toBeInTheDocument()
   })
 
   it('expands evidence on click', async () => {

@@ -7,9 +7,14 @@ from typing import Sequence
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from typing import TYPE_CHECKING
+
 from app.core.config import settings
 from app.models.incident import Incident
 from app.rag.vector_store import IncidentMatch, RunbookMatch, VectorStore
+
+if TYPE_CHECKING:
+    from app.services.pattern_analysis import PatternAnalysis
 
 logger = structlog.get_logger()
 
@@ -38,16 +43,29 @@ async def build_recommendation_context(
         limit=settings.RAG_INCIDENT_LIMIT,
     )
 
-    return format_context_sections(runbooks, incidents)
+    # Add pattern analysis for human-like insights
+    try:
+        from app.services.pattern_analysis import analyze_patterns
+        pattern_analysis = await analyze_patterns(session, incident, lookback_days=30)
+    except Exception as exc:
+        logger.warning("pattern_analysis_failed", error=str(exc))
+        pattern_analysis = None
+
+    return format_context_sections(runbooks, incidents, pattern_analysis)
 
 
 def format_context_sections(
     runbooks: Sequence[RunbookMatch],
     incidents: Sequence[IncidentMatch],
+    pattern_analysis: PatternAnalysis | None = None,
 ) -> str | None:
     """Convert matches into a bounded text block for prompts."""
 
     sections: list[str] = []
+
+    # Pattern analysis first (most important for human-like analysis)
+    if pattern_analysis and pattern_analysis.historical_context:
+        sections.append(pattern_analysis.historical_context)
 
     if runbooks:
         sections.append(_format_runbook_section(runbooks))

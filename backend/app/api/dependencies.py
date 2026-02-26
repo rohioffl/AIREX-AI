@@ -12,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_tenant_session
+from app.core.rbac import Permission, has_permission, has_any_permission
 from app.core.security import TokenData, decode_access_token
+from app.models.enums import UserRole
 
 
 async def get_tenant_id() -> uuid.UUID:
@@ -41,9 +43,10 @@ async def get_current_user(
 
 def require_role(*allowed_roles: str):
     """
-    RBAC dependency factory. Usage:
+    RBAC dependency factory for role-based access. Usage:
 
         @router.post("/admin-only", dependencies=[Depends(require_role("admin"))])
+        @router.post("/operator-or-admin", dependencies=[Depends(require_role("operator", "admin"))])
     """
 
     async def _check(
@@ -60,10 +63,48 @@ def require_role(*allowed_roles: str):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=str(exc),
             ) from exc
-        if data.role not in allowed_roles:
+        
+        # Normalize role names (case-insensitive)
+        user_role = data.role.lower()
+        allowed_normalized = [r.lower() for r in allowed_roles]
+        
+        if user_role not in allowed_normalized:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{data.role}' is not authorized. Required: {', '.join(allowed_roles)}",
+            )
+
+    return _check
+
+
+def require_permission(*permissions: Permission):
+    """
+    RBAC dependency factory for permission-based access. Usage:
+
+        @router.post("/delete", dependencies=[Depends(require_permission(Permission.INCIDENT_DELETE))])
+        @router.get("/users", dependencies=[Depends(require_permission(Permission.USER_LIST))])
+    """
+
+    async def _check(
+        authorization: str | None = Header(None),
+    ):
+        if not authorization or not authorization.startswith("Bearer "):
+            # Allow dev mode without auth
+            return
+        token = authorization[len("Bearer ") :]
+        try:
+            data = decode_access_token(token)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(exc),
+            ) from exc
+        
+        if not has_any_permission(data.role, *permissions):
+            perm_names = ", ".join(p.value for p in permissions)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Role '{data.role}' lacks required permission(s): {perm_names}",
             )
 
     return _check
@@ -87,3 +128,7 @@ TenantId = Annotated[uuid.UUID, Depends(get_tenant_id)]
 TenantSession = Annotated[AsyncSession, Depends(get_db_session)]
 Redis = Annotated[aioredis.Redis, Depends(get_redis)]
 CurrentUser = Annotated[TokenData | None, Depends(get_current_user)]
+
+# RBAC type aliases
+RequireAdmin = Annotated[None, Depends(require_role("admin"))]
+RequireOperator = Annotated[None, Depends(require_role("operator", "admin"))]

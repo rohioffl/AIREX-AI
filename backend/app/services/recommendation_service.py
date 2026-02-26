@@ -71,7 +71,6 @@ async def generate_recommendation(
         ai_failure_total.labels(
             model="all", error_type="circuit_breaker_or_failure"
         ).inc()
-        from sqlalchemy.orm.attributes import flag_modified
 
         meta["recommendation_note"] = "AI unavailable — manual review required"
         incident.meta = meta

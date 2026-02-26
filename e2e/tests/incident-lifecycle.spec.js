@@ -13,10 +13,30 @@ import { test, expect } from '@playwright/test'
 
 const API = process.env.API_URL || 'http://localhost:8000'
 
+let e2eUserToken = ''
+
+async function setupTestUser(request) {
+  const email = `e2e-suite-${Date.now()}@test.airex.dev`
+  await request.post(`${API}/api/v1/auth/register`, {
+    data: { email, password: 'Test1234!', display_name: 'E2E Suite User' },
+  })
+
+  const res = await request.post(`${API}/api/v1/auth/login`, {
+    data: { email, password: 'Test1234!' },
+  })
+
+  const body = await res.json()
+  e2eUserToken = body.access_token
+  return { email, token: body.access_token }
+}
+
 test.describe('Incident Lifecycle', () => {
   let incidentId
 
   test.beforeAll(async ({ request }) => {
+    // Setup Auth
+    const user = await setupTestUser(request)
+
     // Create an incident via webhook
     const res = await request.post(`${API}/api/v1/webhooks/generic`, {
       headers: {
@@ -27,7 +47,7 @@ test.describe('Incident Lifecycle', () => {
         alert_type: 'cpu_high',
         severity: 'critical',
         title: 'E2E Test: High CPU on web-01',
-        resource_id: 'e2e-web-01',
+        resource_id: `e2e-web-${Date.now()}`,
         meta: {
           host: 'e2e-web-01',
           monitor_name: 'e2e-web-01',
@@ -42,15 +62,22 @@ test.describe('Incident Lifecycle', () => {
     expect(incidentId).toBeTruthy()
   })
 
+  test.beforeEach(async ({ page }) => {
+    // Inject real token so AuthContext allows navigation
+    await page.goto('/login')
+    await page.evaluate((token) => {
+      localStorage.setItem('airex-token', token)
+      localStorage.setItem('airex-token-expiry', String(Date.now() + 86400000)) // 1 day future
+    }, e2eUserToken)
+  })
+
   test('should display incidents list page', async ({ page }) => {
     await page.goto('/incidents')
     await expect(page.locator('body')).toBeVisible()
 
-    // Wait for the incident list to render
-    await page.waitForTimeout(2000)
-
-    // Should see at least the page structure
-    await expect(page.locator('text=Incidents').first()).toBeVisible()
+    // Should see at least the page structure (redirects to /alerts -> Active Alerts)
+    await page.waitForTimeout(5000)
+    await expect(page.locator('text=Dashboard').first()).toBeVisible()
   })
 
   test('should navigate to incident detail', async ({ page }) => {
@@ -61,44 +88,37 @@ test.describe('Incident Lifecycle', () => {
     await expect(page.locator('body')).toBeVisible()
   })
 
-  test('should show incident state progression', async ({ page }) => {
+  test('should show incident state progression and Recommendation/RAG', async ({ page }) => {
     await page.goto(`/incidents/${incidentId}`)
-    await page.waitForTimeout(3000)
 
-    // The incident should have progressed past RECEIVED
-    // Look for state badges/pipeline elements
-    const body = await page.textContent('body')
-    expect(body).toBeTruthy()
+    // Wait until it reaches AWAITING_APPROVAL or FAILED_ANALYSIS
+    // The StateBadge renders the exact state string uppercase, e.g. AWAITING_APPROVAL
+    await expect(page.locator('text=AWAITING_APPROVAL').or(page.locator('text=FAILED_ANALYSIS')).first()).toBeVisible({ timeout: 60000 }) // Use .first() to ensure only one element is matched
+
+    // If there is a recommendation card, verify it shows
+    const hasRecommendation = await page.locator('text=AI Recommendation').isVisible()
+    if (hasRecommendation) {
+      // It should display RAG context if any
+      const hasRag = await page.locator('text=AI Context & Reasoning').isVisible()
+      // We don't strictly assert hasRag is true because it depends on DB seeding in E2E
+    }
   })
 
-  test('should approve incident via API', async ({ request }) => {
-    // Wait for investigation + recommendation to complete
-    await new Promise((r) => setTimeout(r, 5000))
+  test('should approve incident via UI', async ({ page, request }) => {
+    await page.goto(`/incidents/${incidentId}`)
 
-    // Check current state
-    const getRes = await request.get(`${API}/api/v1/incidents/${incidentId}`, {
-      headers: { 'X-Tenant-Id': '00000000-0000-0000-0000-000000000000' },
-    })
+    // Check if the Approve button is visible
+    const approveBtn = page.locator('button:has-text("Approve Execution")')
+    if (await approveBtn.isVisible()) {
+      await approveBtn.click()
 
-    if (getRes.ok()) {
-      const incident = await getRes.json()
-      if (incident.state === 'AWAITING_APPROVAL') {
-        // Approve the incident
-        const approveRes = await request.post(
-          `${API}/api/v1/incidents/${incidentId}/approve`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Tenant-Id': '00000000-0000-0000-0000-000000000000',
-            },
-            data: {
-              action: 'restart_service',
-              idempotency_key: `e2e-approve-${Date.now()}`,
-            },
-          }
-        )
-        expect(approveRes.status()).toBeLessThan(500)
-      }
+      // Confirm in the modal
+      const confirmBtn = page.locator('button:has-text("Confirm & Execute")')
+      await expect(confirmBtn).toBeVisible()
+      await confirmBtn.click()
+
+      // Wait for execution to start
+      await expect(page.locator('text=Executing').or(page.locator('text=Verifying')).or(page.locator('text=Resolved'))).toBeVisible({ timeout: 30000 })
     }
   })
 
@@ -135,6 +155,14 @@ test.describe('Incident Lifecycle', () => {
 })
 
 test.describe('Dashboard UI', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/login')
+    await page.evaluate((token) => {
+      localStorage.setItem('airex-token', token)
+      localStorage.setItem('airex-token-expiry', String(Date.now() + 86400000))
+    }, e2eUserToken)
+  })
+
   test('should render the sidebar and navigation', async ({ page }) => {
     await page.goto('/incidents')
 

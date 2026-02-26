@@ -50,6 +50,9 @@ class UserResponse(BaseModel):
     email: str
     display_name: str
     role: str
+    is_active: bool | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 # ── Password hashing ────────────────────────────────────────

@@ -34,9 +34,18 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
-    with context.begin_transaction():
-        context.run_migrations()
+    """Run migrations with one transaction per revision.
+
+    This ensures changes like adding a new enum value are committed
+    before later migrations reference them (required for PostgreSQL
+    enums with asyncpg).
+    """
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        transaction_per_migration=True,
+    )
+    context.run_migrations()
 
 
 async def run_async_migrations() -> None:

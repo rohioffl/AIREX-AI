@@ -10,7 +10,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 
-from app.api.routes import auth, incidents, sse, tenants, webhooks
+from app.api.routes import (
+    auth,
+    dlq,
+    incidents,
+    metrics as metrics_router,
+    sse,
+    settings as settings_router,
+    tenants,
+    users,
+    webhooks,
+)
 from app.core.config import settings
 from app.core.events import set_redis
 from app.core.logging import setup_logging
@@ -96,7 +106,7 @@ async def health_check():
 
 # Prometheus metrics endpoint
 @app.get("/metrics")
-async def metrics():
+async def prometheus_metrics():
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST,
@@ -128,4 +138,24 @@ app.include_router(
     tenants.router,
     prefix=f"{settings.API_V1_STR}/tenants",
     tags=["tenants"],
+)
+app.include_router(
+    users.router,
+    prefix=f"{settings.API_V1_STR}/users",
+    tags=["users"],
+)
+app.include_router(
+    dlq.router,
+    prefix=f"{settings.API_V1_STR}/dlq",
+    tags=["dlq"],
+)
+app.include_router(
+    metrics_router.router,
+    prefix=f"{settings.API_V1_STR}/metrics",
+    tags=["metrics"],
+)
+app.include_router(
+    settings_router.router,
+    prefix=f"{settings.API_V1_STR}/settings",
+    tags=["settings"],
 )

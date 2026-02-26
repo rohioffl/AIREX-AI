@@ -29,6 +29,23 @@ export function formatDuration(seconds) {
   return `${m}m ${s}s`
 }
 
+export function formatRelativeTime(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now - d
+  const diffSecs = Math.floor(diffMs / 1000)
+  const diffMins = Math.floor(diffSecs / 60)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffSecs < 60) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return formatTimestamp(iso)
+}
+
 /**
  * Build a Gmail compose URL with a professional SRE incident notification.
  *

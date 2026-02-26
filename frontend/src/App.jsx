@@ -3,6 +3,8 @@ import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './context/ToastContext'
 import { AuthProvider } from './context/AuthContext'
 import Layout from './components/layout/Layout'
+import PrivateRoute from './components/common/PrivateRoute'
+import RequireRole from './components/common/RequireRole'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import IncidentDetail from './pages/IncidentDetail'
@@ -11,6 +13,7 @@ import RejectedPage from './pages/RejectedPage'
 import DashboardPage from './pages/DashboardPage'
 import LiveFeed from './pages/LiveFeed'
 import SettingsPage from './pages/SettingsPage'
+import UserManagementPage from './pages/UserManagementPage'
 
 export default function App() {
   return (
@@ -22,17 +25,31 @@ export default function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/*" element={
-                <Layout>
-                  <Routes>
-                    <Route path="/incidents" element={<Navigate to="/alerts" replace />} />
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/incidents/:id" element={<IncidentDetail />} />
-                    <Route path="/alerts" element={<AlertsPage />} />
-                    <Route path="/rejected" element={<RejectedPage />} />
-                    <Route path="/live" element={<LiveFeed />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                  </Routes>
-                </Layout>
+                <PrivateRoute>
+                  <Layout>
+                    <Routes>
+                      <Route path="/incidents" element={<Navigate to="/alerts" replace />} />
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/incidents/:id" element={<IncidentDetail />} />
+                      <Route path="/alerts" element={<AlertsPage />} />
+                      <Route path="/rejected" element={<RejectedPage />} />
+                      <Route path="/live" element={<LiveFeed />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/admin/users" element={
+                        <RequireRole roles="admin">
+                          <UserManagementPage />
+                        </RequireRole>
+                      } />
+                      <Route path="*" element={
+                        <div className="p-6 text-center">
+                          <h1 className="text-2xl font-bold mb-2">404 - Page Not Found</h1>
+                          <p className="text-muted mb-4">The page you're looking for doesn't exist.</p>
+                          <Navigate to="/dashboard" replace />
+                        </div>
+                      } />
+                    </Routes>
+                  </Layout>
+                </PrivateRoute>
               } />
             </Routes>
           </ToastProvider>

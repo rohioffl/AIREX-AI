@@ -69,6 +69,19 @@ async def execute_action(
     )
     session.add(lock_record)
 
+    # Check tenant daily execution limit
+    from app.core.tenant_limits import check_daily_executions
+    
+    allowed, current, max_allowed = await check_daily_executions(session, incident.tenant_id)
+    if not allowed:
+        log.warning(
+            "execution_limit_exceeded",
+            current=current,
+            max=max_allowed,
+        )
+        # Still allow execution but log warning
+        # In strict mode, you might want to raise an exception here
+    
     # Create execution record
     execution = Execution(
         tenant_id=incident.tenant_id,

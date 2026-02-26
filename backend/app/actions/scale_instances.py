@@ -75,9 +75,56 @@ class ScaleInstancesAction(BaseAction):
 
     async def _execute_gcp(self, instance_id, service, meta):
         """Scale GCP Managed Instance Group."""
-        # GCP MIG scaling requires knowing the MIG name; fall back to simulation
-        # In production, query the instance group manager API
-        return await self._simulate(service)
+        try:
+            from google.cloud import compute_v1
+            from app.cloud.gcp_ssh import get_gcp_credentials
+            
+            project_id = meta.get("_gcp_project_id") or meta.get("gcp_project_id", "")
+            zone = meta.get("_gcp_zone") or meta.get("gcp_zone", "")
+            mig_name = meta.get("_mig_name") or meta.get("mig_name", f"{service}-mig")
+            
+            if not project_id or not zone:
+                logger.warning("gcp_mig_missing_config", instance_id=instance_id)
+                return await self._simulate(service)
+            
+            credentials = get_gcp_credentials()
+            instance_group_manager_client = compute_v1.InstanceGroupManagersClient(credentials=credentials)
+            
+            loop = asyncio.get_event_loop()
+            
+            # Get current MIG size
+            mig = await loop.run_in_executor(
+                None,
+                lambda: instance_group_manager_client.get(
+                    project=project_id,
+                    zone=zone,
+                    instance_group_manager=mig_name,
+                )
+            )
+            
+            current_size = mig.target_size
+            max_size = mig.autoscaling_policy.max_num_replicas if mig.autoscaling_policy else current_size + 10
+            target_size = min(current_size + 2, max_size)
+            
+            # Resize the MIG
+            await loop.run_in_executor(
+                None,
+                lambda: instance_group_manager_client.resize(
+                    project=project_id,
+                    zone=zone,
+                    instance_group_manager=mig_name,
+                    size=target_size,
+                )
+            )
+            
+            return ActionResult(
+                success=True,
+                logs=f"[GCP MIG] {mig_name}: scaled {current_size} -> {target_size} instances",
+                exit_code=0,
+            )
+        except Exception as exc:
+            logger.warning("scale_gcp_failed", error=str(exc))
+            return await self._simulate(service)
 
     async def _simulate(self, service):
         await asyncio.sleep(random.uniform(2, 4))

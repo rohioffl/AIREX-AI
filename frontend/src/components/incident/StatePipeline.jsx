@@ -57,7 +57,14 @@ export default function StatePipeline({ currentState }) {
                     fontWeight: 700,
                     fontFamily: 'var(--font-mono)',
                     ...(done ? { background: palette.done, color: palette.doneText, border: `1px solid ${palette.doneText}40` } : {}),
-                    ...(active ? { background: palette.active, color: '#fff', boxShadow: `0 0 12px ${palette.active}50`, transform: 'scale(1.1)' } : {}),
+                    ...(active ? { 
+                      background: '#6366F1', 
+                      color: '#fff', 
+                      boxShadow: document.body.classList.contains('light-mode') 
+                        ? '0 0 0 4px rgba(99,102,241,0.15)' 
+                        : `0 0 12px ${palette.active}50`, 
+                      transform: 'scale(1.1)' 
+                    } : {}),
                     ...(!done && !active ? { background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}),
                   }}
                 >

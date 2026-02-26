@@ -17,8 +17,19 @@ export default function Timeline({ transitions }) {
               <div
                 className="h-[9px] w-[9px] rounded-full border-2 transition-all"
                 style={i === transitions.length - 1
-                  ? { borderColor: '#818cf8', background: '#818cf8', boxShadow: '0 0 8px rgba(129,140,248,0.4)' }
-                  : { borderColor: 'var(--text-muted)', background: 'var(--bg-card)' }
+                  ? { 
+                      borderColor: '#6366F1', 
+                      background: '#6366F1', 
+                      borderWidth: document.body.classList.contains('light-mode') ? '2.5px' : '2px',
+                      boxShadow: document.body.classList.contains('light-mode') 
+                        ? '0 0 0 4px rgba(99,102,241,0.15)' 
+                        : '0 0 8px rgba(129,140,248,0.4)' 
+                    }
+                  : { 
+                      borderColor: 'var(--text-muted)', 
+                      background: 'var(--bg-elevated)',
+                      borderWidth: document.body.classList.contains('light-mode') ? '2px' : '2px'
+                    }
                 }
               />
             </div>
