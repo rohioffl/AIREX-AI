@@ -63,8 +63,9 @@ htmlcov/
 .pytest_cache/
 
 # MCP Server runtime
-.mcp-server/.venv/
-.mcp-server/__pycache__/
+.mcp-server/
+.playwright-mcp/
+mcp-cli-config.json
 
 # Playwright reports & test results
 playwright-report/
