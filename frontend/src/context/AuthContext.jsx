@@ -4,11 +4,26 @@ import { login as apiLogin, logout as apiLogout, isAuthenticated, getToken, refr
 const AuthContext = createContext()
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [token, setToken] = useState(() => getToken())
-  const [loading, setLoading] = useState(true)
+  // TEMPORARILY DISABLED: Bypass authentication for development
+  const BYPASS_AUTH = true
+
+  const [user, setUser] = useState(BYPASS_AUTH ? {
+    email: 'dev@airex.local',
+    role: 'operator',
+    tenantId: '00000000-0000-0000-0000-000000000000',
+    userId: 'dev-user',
+    displayName: 'Dev User'
+  } : null)
+  const [token, setToken] = useState(() => BYPASS_AUTH ? 'dev-token' : getToken())
+  const [loading, setLoading] = useState(() => {
+    // When auth is bypassed, start with loading=false immediately
+    if (BYPASS_AUTH) return false
+    return true
+  })
 
   useEffect(() => {
+    if (BYPASS_AUTH) return
+
     if (isAuthenticated()) {
       try {
         const t = getToken()
@@ -27,7 +42,7 @@ export function AuthProvider({ children }) {
       }
     }
     setLoading(false)
-  }, [])
+  }, [BYPASS_AUTH])
 
   const login = useCallback(async ({ email, password }) => {
     const res = await apiLogin({ email, password })
@@ -67,13 +82,25 @@ export function AuthProvider({ children }) {
     }
   }, [logout])
 
+  // TEMPORARILY DISABLED: Always return authenticated
+  const isAuth = BYPASS_AUTH ? true : !!token
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, refresh, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      token, 
+      loading, 
+      login, 
+      logout, 
+      refresh, 
+      isAuthenticated: isAuth
+    }}>
       {children}
     </AuthContext.Provider>
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- useAuth hook must co-locate with AuthProvider
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')

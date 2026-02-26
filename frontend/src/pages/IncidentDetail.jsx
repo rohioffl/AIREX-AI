@@ -1,4 +1,5 @@
-import { useParams, Link } from 'react-router-dom'
+import { useState } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   Radio,
@@ -13,6 +14,7 @@ import {
   Activity,
   Cloud,
   MapPin,
+  Ban,
 } from 'lucide-react'
 import useIncidentDetail from '../hooks/useIncidentDetail'
 import { useTheme } from '../context/ThemeContext'
@@ -22,24 +24,47 @@ import Terminal from '../components/common/Terminal'
 import StatePipeline from '../components/incident/StatePipeline'
 import Timeline from '../components/incident/Timeline'
 import EvidencePanel from '../components/incident/EvidencePanel'
-import RecommendationCard from '../components/incident/RecommendationCard'
-import ApprovalControls from '../components/incident/ApprovalControls'
+import AIAnalysisPanel from '../components/incident/AIAnalysisPanel'
+import AIRecommendationApproval from '../components/incident/AIRecommendationApproval'
 import ExecutionLogs from '../components/incident/ExecutionLogs'
 import VerificationResult from '../components/incident/VerificationResult'
 import ConnectionBanner from '../components/common/ConnectionBanner'
-import { formatTimestamp, buildAcknowledgeMailto, formatDuration } from '../utils/formatters'
+import AcknowledgeRejectModal from '../components/incident/AcknowledgeRejectModal'
+import { formatTimestamp, formatDuration, formatRelativeTime } from '../utils/formatters'
+import { rejectIncident } from '../services/api'
+import { extractErrorMessage } from '../utils/errorHandler'
 
 const SEVERITY_ACCENT = {
   CRITICAL: '#f43f5e',
-  HIGH: '#fb923c',
-  MEDIUM: '#22d3ee',
+  HIGH: '#f97316',
+  MEDIUM: '#f59e0b',
   LOW: '#10b981',
 }
 
 export default function IncidentDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { incident, loading, error, connected, reconnecting, executionLogs } = useIncidentDetail(id)
   const { isDark } = useTheme()
+  const [ackRejectModalOpen, setAckRejectModalOpen] = useState(false)
+  const [rejectLoading, setRejectLoading] = useState(false)
+  const [rejectError, setRejectError] = useState(null)
+
+  const handleReject = async (note) => {
+    setRejectLoading(true)
+    setRejectError(null)
+    try {
+      await rejectIncident(incident.id, note)
+      navigate('/rejected', { replace: true })
+    } catch (err) {
+      setRejectError(extractErrorMessage(err) || err.message)
+      setRejectLoading(false)
+    }
+  }
+
+  const handleAcknowledge = () => {
+    // Modal will handle opening Gmail
+  }
 
   if (loading) {
     return (
@@ -56,7 +81,16 @@ export default function IncidentDetail() {
 
   if (error) {
     return (
-      <div className="glass rounded-xl p-5" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244,63,94,0.03)', fontSize: 14, color: '#fb7185' }}>
+      <div 
+        className="glass rounded-xl p-5" 
+        style={{ 
+          borderLeft: '4px solid #f43f5e', 
+          background: isDark ? 'rgba(244,63,94,0.03)' : '#FFFFFF',
+          border: isDark ? 'none' : '1px solid #E5E7EB',
+          fontSize: 14, 
+          color: '#fb7185' 
+        }}
+      >
         {error}
       </div>
     )
@@ -78,13 +112,27 @@ export default function IncidentDetail() {
   const summary = meta.INCIDENT_REASON || meta.INCIDENT_DETAILS
   const latestTransition = incident.state_transitions?.[incident.state_transitions.length - 1]
   const confidence = meta.recommendation?.confidence != null ? Math.round(meta.recommendation.confidence * 100) : null
-  const accent = SEVERITY_ACCENT[incident.severity] || '#6366f1'
+  const accent = SEVERITY_ACCENT[incident.severity] || '#f97316'
   const manualReason = typeof meta._manual_review_reason === 'string' ? meta._manual_review_reason.trim() : ''
   const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
 
   return (
-    <div className="space-y-6 pb-10 animate-fade-in">
+    <div className="space-y-6 pb-10 animate-fade-in" style={{ width: '100%', maxWidth: '100%' }}>
       <ConnectionBanner connected={connected} reconnecting={reconnecting} />
+
+      {rejectError && (
+        <div
+          className="glass rounded-xl p-3"
+          style={{
+            borderLeft: '3px solid rgba(248,113,113,0.9)',
+            background: 'rgba(248,113,113,0.08)',
+            fontSize: 12,
+            color: '#fb7185',
+          }}
+        >
+          {rejectError}
+        </div>
+      )}
       {/* Breadcrumb */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2" style={{ fontSize: 14 }}>
@@ -96,10 +144,10 @@ export default function IncidentDetail() {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{incident.id.substring(0, 8)}</span>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href={buildAcknowledgeMailto(incident, { escalationEmail: incident.meta?._escalation_email || '' })}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => {
+              setAckRejectModalOpen(true)
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
             style={{
               fontSize: 12,
@@ -108,18 +156,43 @@ export default function IncidentDetail() {
               color: '#818cf8',
               border: '1px solid rgba(99,102,241,0.25)',
             }}
-            title="Acknowledge — opens Gmail with incident details"
+            title="Acknowledge incident"
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99,102,241,0.15)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(99,102,241,0.1)'}
           >
             <Mail size={13} />
             Acknowledge
-          </a>
+          </button>
+          <button
+            onClick={() => {
+              setAckRejectModalOpen(true)
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              background: isDark ? 'rgba(248,113,113,0.1)' : '#FFFFFF',
+              color: '#f87171',
+              border: isDark ? '1px solid rgba(248,113,113,0.25)' : '1px solid #E5E7EB',
+            }}
+            title="Reject incident"
+            onMouseEnter={(e) => e.currentTarget.style.background = isDark ? 'rgba(248,113,113,0.15)' : '#F9FAFB'}
+            onMouseLeave={(e) => e.currentTarget.style.background = isDark ? 'rgba(248,113,113,0.1)' : '#FFFFFF'}
+          >
+            <Ban size={13} />
+            Reject
+          </button>
           <div
             className="flex items-center gap-2 px-3 py-1 rounded-full"
             style={{
               fontSize: 11,
               fontWeight: 700,
-              border: `1px solid ${connected ? 'rgba(16,185,129,0.2)' : 'rgba(244,63,94,0.2)'}`,
-              background: connected ? 'rgba(16,185,129,0.05)' : 'rgba(244,63,94,0.05)',
+              border: isDark 
+                ? `1px solid ${connected ? 'rgba(16,185,129,0.2)' : 'rgba(244,63,94,0.2)'}`
+                : `1px solid ${connected ? '#D1FAE5' : '#FEE2E2'}`,
+              background: isDark 
+                ? (connected ? 'rgba(16,185,129,0.05)' : 'rgba(244,63,94,0.05)')
+                : (connected ? '#ECFDF5' : '#FEF2F2'),
               color: connected ? '#34d399' : '#fb7185',
             }}
           >
@@ -132,14 +205,31 @@ export default function IncidentDetail() {
       {/* Header */}
       <header
         className="rounded-2xl border relative overflow-hidden"
-        style={{ borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)' }}
+        style={{ 
+          border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(220,38,38,0.25)', 
+          background: isDark ? 'transparent' : '#FFFFFF',
+          boxShadow: isDark ? 'none' : '0 1px 2px rgba(0,0,0,0.04)',
+          width: '100%', 
+          maxWidth: '100%', 
+          boxSizing: 'border-box' 
+        }}
       >
+        {!isDark && (
+          <div
+            className="absolute left-0 top-0 bottom-0"
+            style={{
+              width: '4px',
+              background: '#DC2626',
+              borderRadius: '4px 0 0 4px',
+            }}
+          />
+        )}
         <div
           className="absolute inset-0"
           style={{
             background: isDark
-              ? `radial-gradient(circle at 20% 20%, ${accent}33, transparent 55%), linear-gradient(135deg, rgba(15,21,37,0.95), rgba(6,8,15,0.95))`
-              : `radial-gradient(circle at 20% 20%, ${accent}22, transparent 55%), linear-gradient(135deg, rgba(255,255,255,0.95), rgba(241,245,249,0.95))`,
+              ? `radial-gradient(circle at 20% 20%, ${accent}33, transparent 55%), linear-gradient(135deg, rgba(11,12,16,0.95), rgba(16,18,24,0.95))`
+              : 'transparent',
           }}
         />
         <div className="relative p-6 flex flex-col gap-6">
@@ -233,7 +323,16 @@ export default function IncidentDetail() {
           </div>
 
           {latestTransition && (
-            <div className="glass rounded-xl p-4" style={{ borderLeft: `3px solid ${incident.state === 'REJECTED' ? '#f87171' : '#22d3ee'}`, background: incident.state === 'REJECTED' ? 'rgba(248,113,113,0.08)' : 'rgba(34,211,238,0.08)' }}>
+            <div 
+              className="glass rounded-xl p-4" 
+              style={{ 
+                borderLeft: `3px solid ${incident.state === 'REJECTED' ? '#f87171' : '#22d3ee'}`,
+                background: isDark 
+                  ? (incident.state === 'REJECTED' ? 'rgba(248,113,113,0.08)' : 'rgba(34,211,238,0.08)')
+                  : '#F8FAFC',
+                border: isDark ? 'none' : '1px solid #E2E8F0',
+              }}
+            >
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Last Action</span>
@@ -250,7 +349,14 @@ export default function IncidentDetail() {
           )}
 
           {manualReason && (
-            <div className="glass rounded-xl p-4" style={{ borderLeft: '3px solid rgba(248,113,113,0.6)', background: 'rgba(248,113,113,0.08)' }}>
+            <div 
+              className="glass rounded-xl p-4" 
+              style={{ 
+                borderLeft: '3px solid rgba(248,113,113,0.6)', 
+                background: isDark ? 'rgba(248,113,113,0.08)' : '#F8FAFC',
+                border: isDark ? 'none' : '1px solid #E2E8F0',
+              }}
+            >
               <div style={{ fontSize: 11, fontWeight: 700, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Operator note</div>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{manualReason}</p>
               {manualAt && (
@@ -261,64 +367,132 @@ export default function IncidentDetail() {
         </div>
       </header>
 
-      {/* Related incidents (same server) */}
-      {incident.related_incidents?.length > 0 && (
-        <div className="glass rounded-xl p-4" style={{ borderLeft: '3px solid rgba(99,102,241,0.4)' }}>
-          <div className="flex items-center gap-2 mb-3" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            <Server size={12} />
-            Same server — other alerts
-          </div>
-          <ul className="space-y-2">
-            {incident.related_incidents.map((rel) => (
-              <li key={rel.id}>
-                <Link
-                  to={`/incidents/${rel.id}`}
-                  className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg transition-colors"
-                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 13 }}
-                >
-                  <span className="truncate">{rel.title}</span>
-                  <span className="flex items-center gap-1 flex-shrink-0">
-                    <StateBadge state={rel.state} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{rel.alert_type}</span>
-                    <ChevronRight size={14} style={{ color: '#818cf8' }} />
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* Pipeline */}
-      <div className="glass rounded-xl px-4 py-2">
+      <div className="glass rounded-xl px-4 py-2" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'auto' }}>
         <StatePipeline currentState={incident.state} />
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-        <div className="space-y-6">
-          <RecommendationCard recommendation={incident.recommendation} state={incident.state} ragContext={incident.rag_context} />
-          <EvidencePanel evidence={incident.evidence} />
-        </div>
-        <div className="space-y-6">
-          <ApprovalControls incident={incident} />
-          <VerificationResult state={incident.state} />
-          <ExecutionLogs executions={incident.executions} state={incident.state} liveLogs={executionLogs} />
-          {/* Diagnostics Terminal */}
-          {incident.meta?.diagnostics && (
-            <div>
-              <span className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Diagnostics</span>
-              <Terminal content={incident.meta.diagnostics} hostname={incident.alert_type || 'server'} />
+      {/* Vertical Flow Layout */}
+      <div className="space-y-6" style={{ width: '100%', maxWidth: '100%' }}>
+        {/* 0. Same server — other alerts (Top of flow) */}
+        {incident.related_incidents && incident.related_incidents.length > 0 && incident.host_key && (
+          <div
+            className="glass rounded-xl p-4 transition-all"
+            style={{
+              borderLeft: '3px solid rgba(99,102,241,0.4)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderLeftColor = 'rgba(99,102,241,0.8)'
+              e.currentTarget.style.background = 'rgba(99,102,241,0.05)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderLeftColor = 'rgba(99,102,241,0.4)'
+              e.currentTarget.style.background = ''
+            }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <Server size={12} />
+                Same server — other alerts
+              </div>
+              <Link
+                to={`/alerts?host=${encodeURIComponent(incident.host_key)}`}
+                className="flex items-center gap-1 transition-colors"
+                style={{ fontSize: 10, fontWeight: 600, color: '#818cf8', textDecoration: 'none' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#a5b4fc'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#818cf8'}
+              >
+                View all ({incident.related_incidents.length})
+                <ChevronRight size={12} />
+              </Link>
             </div>
-          )}
+            <ul className="space-y-2">
+              {incident.related_incidents
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                .slice(0, 3)
+                .map((rel) => (
+                  <li key={rel.id}>
+                    <div
+                      onClick={(e) => {
+                        e.preventDefault()
+                        navigate(`/incidents/${rel.id}`)
+                      }}
+                      className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg transition-colors cursor-pointer"
+                      style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 13 }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(99,102,241,0.1)'
+                        e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'var(--bg-input)'
+                        e.currentTarget.style.borderColor = 'var(--border)'
+                      }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate" style={{ fontSize: 13, fontWeight: 500 }}>{rel.title}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {formatRelativeTime(rel.created_at)}
+                        </div>
+                      </div>
+                      <span className="flex items-center gap-2 flex-shrink-0">
+                        <StateBadge state={rel.state} />
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>{rel.alert_type}</span>
+                        <ChevronRight size={14} style={{ color: '#818cf8' }} />
+                      </span>
+                    </div>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+        {/* 1. AI Investigation */}
+        <AIAnalysisPanel ragContext={incident.rag_context} recommendation={incident.recommendation} />
+
+        {/* 2. Evidence */}
+        <EvidencePanel evidence={incident.evidence} />
+
+        {/* 3. AI Recommendation & Approval */}
+        <div style={{ width: '100%', maxWidth: '100%' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>AI Recommendation & Approval</span>
+          </div>
+          <AIRecommendationApproval incident={incident} ragContext={incident.rag_context} />
+        </div>
+
+        {/* Additional Info Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+          <VerificationResult state={incident.state} />
+          <div className="space-y-6">
+            <ExecutionLogs executions={incident.executions} state={incident.state} liveLogs={executionLogs} />
+            {/* Diagnostics Terminal */}
+            {incident.meta?.diagnostics && (
+              <div>
+                <span className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Diagnostics</span>
+                <Terminal content={incident.meta.diagnostics} hostname={incident.alert_type || 'server'} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Timeline */}
-      <div className="glass rounded-xl p-6">
+      <div className="glass rounded-xl p-6" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         <span className="block mb-6" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timeline</span>
         <Timeline transitions={incident.state_transitions} />
       </div>
+
+      {/* Acknowledge/Reject Modal */}
+      <AcknowledgeRejectModal
+        open={ackRejectModalOpen}
+        incident={incident}
+        onAcknowledge={handleAcknowledge}
+        onReject={handleReject}
+        onCancel={() => {
+          setAckRejectModalOpen(false)
+          setRejectError(null)
+        }}
+        loading={rejectLoading}
+      />
     </div>
   )
 }

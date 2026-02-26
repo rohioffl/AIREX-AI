@@ -69,7 +69,7 @@ class TestBuildPrompt:
             context="Runbook: scale",
         )
         user = messages[1]["content"]
-        assert "Retrieved Context" in user
+        assert "Historical Context" in user
         assert "Runbook: scale" in user
 
     def test_context_is_sanitized(self):

@@ -15,11 +15,12 @@ import { truncateId, formatTimestamp, formatDuration } from '../../utils/formatt
 
 const SEVERITY_ACCENTS = {
   CRITICAL: '#f43f5e',
-  HIGH: '#fb923c',
-  MEDIUM: '#22d3ee',
+  HIGH: '#f97316',
+  MEDIUM: '#f59e0b',
   LOW: '#10b981',
 }
 
+// eslint-disable-next-line no-unused-vars -- Icon is used as JSX component <Icon />
 function MetricTile({ icon: Icon, label, value, hint, accent }) {
   return (
     <div
@@ -57,7 +58,7 @@ export default function IncidentCard({ incident }) {
   const durationSec = meta._alert_duration_seconds != null ? Number(meta._alert_duration_seconds) : null
   const unstable = Boolean(meta._unstable)
   const confidence = meta.recommendation?.confidence != null ? Math.round(meta.recommendation.confidence * 100) : null
-  const accent = SEVERITY_ACCENTS[incident.severity] || '#6366f1'
+  const accent = SEVERITY_ACCENTS[incident.severity] || '#f97316'
   const summary = meta.INCIDENT_REASON || meta.INCIDENT_DETAILS || incident.title
   const cloud = meta._cloud || meta.cloud
   const tenant = meta._tenant_name || meta.TENANT || meta.tenant
@@ -75,8 +76,8 @@ export default function IncidentCard({ incident }) {
     >
       <Link
         to={`/incidents/${incident.id}`}
-        className="block h-full rounded-[22px] bg-[var(--bg-card)] p-5 glass-hover"
-        style={{ border: '1px solid rgba(255,255,255,0.04)', position: 'relative' }}
+        className="block h-full rounded-[22px] glass p-5 glass-hover backdrop-blur-md"
+        style={{ border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}
       >
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>

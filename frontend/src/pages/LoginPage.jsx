@@ -30,7 +30,7 @@ export default function LoginPage() {
       setStatusIndex(prev => (prev + 1) % statuses.length)
     }, 4000)
     return () => clearInterval(interval)
-  }, [])
+  }, [statuses.length])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

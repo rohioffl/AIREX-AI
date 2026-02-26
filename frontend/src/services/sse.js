@@ -17,10 +17,8 @@ export function createSSEConnection(handlers, onConnectionChange) {
   let eventSource = null
   let retryDelay = INITIAL_RETRY_DELAY
   let closed = false
-  let retryCount = 0
   let lastEventAt = 0
   let staleCheckInterval = null
-  let hasConnectedOnce = false
 
   function connect() {
     if (closed) return
@@ -36,10 +34,8 @@ export function createSSEConnection(handlers, onConnectionChange) {
     eventSource = new EventSource(url)
 
     eventSource.onopen = () => {
-      hasConnectedOnce = true
       lastEventAt = Date.now()
       retryDelay = INITIAL_RETRY_DELAY
-      retryCount = 0
       onConnectionChange?.({ connected: true, retrying: false, initial: false })
       startStaleCheck()
     }
@@ -48,7 +44,6 @@ export function createSSEConnection(handlers, onConnectionChange) {
       stopStaleCheck()
       eventSource.close()
       eventSource = null
-      retryCount++
       onConnectionChange?.({ connected: false, retrying: true, initial: false })
 
       if (!closed) {

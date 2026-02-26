@@ -26,12 +26,14 @@ export default function LiveFeed() {
   const [connected, setConnected] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [initial, setInitial] = useState(true)
-  const [autoScroll, setAutoScroll] = useState(true)
+  const [autoScroll] = useState(true)
   const [filter, setFilter] = useState('all')
   const feedRef = useRef(null)
   const pausedRef = useRef(paused)
 
-  pausedRef.current = paused
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
 
   useEffect(() => {
     const handlers = {}

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Activity, Settings,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
-  X, ChevronRight, Clock, Zap, Ban
+  X, ChevronRight, Clock, Zap, Ban, Users
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
@@ -17,11 +17,12 @@ const ACTIVE_STATES = [
 ]
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'Alerts', path: '/alerts', icon: AlertTriangle, showBadge: true },
-  { label: 'Rejected', path: '/rejected', icon: Ban },
-  { label: 'Live Feed', path: '/live', icon: Activity },
-  { label: 'Settings', path: '/settings', icon: Settings },
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Alerts', path: '/alerts', icon: AlertTriangle, showBadge: true, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Live Feed', path: '/live', icon: Activity, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
+  { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },
 ]
 
 export default function Layout({ children }) {
@@ -35,8 +36,16 @@ export default function Layout({ children }) {
   const [criticalCount, setCriticalCount] = useState(0)
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const bellRef = useRef(null)
   const dropdownRef = useRef(null)
+
+  // Sync search query from URL into local state during render
+  // (React-recommended pattern for deriving state from external values)
+  const urlSearchParam = new URLSearchParams(location.search).get('search') || ''
+  if (searchQuery !== urlSearchParam) {
+    setSearchQuery(urlSearchParam)
+  }
 
   const isActive = (path) => location.pathname.startsWith(path)
 
@@ -102,7 +111,7 @@ export default function Layout({ children }) {
             )
           },
         },
-        () => {}
+        () => { }
       )
     } catch (err) {
       console.warn('SSE connection failed in Layout:', err)
@@ -151,7 +160,15 @@ export default function Layout({ children }) {
           <div className="sidebar-section-label">
             <span className="sidebar-label">Navigation</span>
           </div>
-          {NAV_ITEMS.map(item => (
+          {NAV_ITEMS.filter(item => {
+            // Filter by role if roles are specified
+            if (item.roles && user) {
+              const userRole = (user.role || 'operator').toLowerCase()
+              return item.roles.map(r => r.toLowerCase()).includes(userRole)
+            }
+            // Show all items if no role filter or no user (dev mode)
+            return true
+          }).map(item => (
             <Link
               key={item.path}
               to={item.path}
@@ -221,10 +238,40 @@ export default function Layout({ children }) {
             </button>
 
             {/* Search */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', minWidth: 300 }}>
               <Search size={14} style={{ color: 'var(--text-muted)' }} />
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Search incidents...</span>
-              <kbd className="ml-4 px-1.5 py-0.5 rounded text-[10px] font-mono" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>/</kbd>
+              <input
+                type="text"
+                placeholder="Search incidents..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && searchQuery.trim()) {
+                    navigate(`/alerts?search=${encodeURIComponent(searchQuery.trim())}`)
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: 12,
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('')
+                    navigate('/alerts')
+                  }}
+                  className="p-1 rounded hover:bg-elevated transition-colors"
+                  title="Clear search"
+                >
+                  <X size={12} style={{ color: 'var(--text-muted)' }} />
+                </button>
+              )}
+              <kbd className="px-1.5 py-0.5 rounded text-[10px] font-mono" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>/</kbd>
             </div>
           </div>
 
@@ -317,11 +364,10 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full mt-2 rounded-xl overflow-hidden z-50"
+      className="absolute right-0 top-full mt-2 rounded-xl overflow-hidden z-50 glass backdrop-blur-xl"
       style={{
         width: 380,
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
+        border: '1px solid rgba(255,255,255,0.1)',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
       }}
     >

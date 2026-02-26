@@ -10,7 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.api.dependencies import Redis, TenantId, TenantSession
+from app.api.dependencies import (
+    CurrentUser,
+    Redis,
+    TenantId,
+    TenantSession,
+    require_role,
+)
 from app.core.rate_limit import approval_rate_limit
 from app.core.config import settings
 from app.core.state_machine import IllegalStateTransition, transition_state
@@ -24,6 +30,7 @@ from app.schemas.incident import (
     IncidentDetail,
     IncidentListItem,
     PaginatedIncidents,
+    RecommendationResponse,
     RejectRequest,
     RelatedIncidentItem,
     StateTransitionResponse,
@@ -41,6 +48,13 @@ async def list_incidents(
     state: IncidentState | None = None,
     severity: SeverityLevel | None = None,
     alert_type: str | None = None,
+    host_key: str | None = Query(
+        default=None,
+        description="Filter by host_key to show incidents from the same server",
+    ),
+    search: str | None = Query(
+        default=None, description="Search in title, alert_type, and meta fields"
+    ),
     limit: int = Query(default=50, le=200),
     cursor: str | None = Query(
         default=None, description="ISO timestamp cursor for keyset pagination"
@@ -52,7 +66,10 @@ async def list_incidents(
 
     Supports both keyset (cursor) and offset pagination.
     Cursor takes priority when provided.
+    Search queries match against title, alert_type, and meta JSON fields.
     """
+    from sqlalchemy import or_, cast, String
+
     base_filters = [
         Incident.tenant_id == tenant_id,
         Incident.deleted_at.is_(None),
@@ -63,6 +80,19 @@ async def list_incidents(
         base_filters.append(Incident.severity == severity)
     if alert_type is not None:
         base_filters.append(Incident.alert_type == alert_type)
+    if host_key is not None:
+        base_filters.append(Incident.host_key == host_key)
+
+    # Search functionality: match against title, alert_type, or meta JSON
+    if search and search.strip():
+        search_term = f"%{search.strip().lower()}%"
+        base_filters.append(
+            or_(
+                Incident.title.ilike(search_term),
+                Incident.alert_type.ilike(search_term),
+                cast(Incident.meta, String).ilike(search_term),
+            )
+        )
 
     # Count total (for first page only, when no cursor)
     total = None
@@ -133,7 +163,22 @@ async def get_incident(
     # Recommendation is stored in meta (populated by AI service)
     recommendation = None
     if incident.meta and "recommendation" in incident.meta:
-        recommendation = incident.meta["recommendation"]
+        try:
+            recommendation = RecommendationResponse.model_validate(
+                incident.meta["recommendation"]
+            )
+        except Exception:
+            # If validation fails, try to use raw dict (for backwards compatibility)
+            rec_dict = incident.meta["recommendation"]
+            if isinstance(rec_dict, dict) and "proposed_action" in rec_dict:
+                from app.models.enums import RiskLevel
+
+                recommendation = RecommendationResponse(
+                    root_cause=rec_dict.get("root_cause", ""),
+                    proposed_action=rec_dict.get("proposed_action", ""),
+                    risk_level=RiskLevel(rec_dict.get("risk_level", "MED")),
+                    confidence=float(rec_dict.get("confidence", 0.8)),
+                )
 
     rag_context = None
     if incident.meta and "rag_context" in incident.meta:
@@ -190,6 +235,7 @@ async def get_incident(
         meta=incident.meta,
         rag_context=rag_context,
         related_incidents=related,
+        host_key=incident.host_key,
     )
 
 
@@ -197,14 +243,17 @@ async def get_incident(
     "/{incident_id}/approve",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
-    dependencies=[Depends(approval_rate_limit)],
+    dependencies=[
+        Depends(approval_rate_limit),
+        Depends(require_role("operator", "admin")),
+    ],
 )
 async def approve_incident(
     incident_id: uuid.UUID,
-    body: ApproveRequest,
     tenant_id: TenantId,
     session: TenantSession,
     redis: Redis,
+    body: ApproveRequest,
 ) -> IncidentCreatedResponse:
     """
     Approve an action for execution.
@@ -249,6 +298,7 @@ async def approve_incident(
     "/{incident_id}/reject",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
+    dependencies=[Depends(require_role("operator", "admin"))],
 )
 async def reject_incident(
     incident_id: uuid.UUID,
@@ -309,79 +359,56 @@ async def reject_incident(
 
     return IncidentCreatedResponse(incident_id=incident.id)
 
-    # Acquire distributed lock
-    lock_key = f"lock:incident:{tenant_id}:{incident_id}"
-    lock_acquired = await redis.set(
-        lock_key,
-        f"approval:{body.idempotency_key}",
-        nx=True,
-        ex=settings.LOCK_TTL,
+
+@router.delete(
+    "/{incident_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role("operator", "admin"))],
+)
+async def soft_delete_incident(
+    incident_id: uuid.UUID,
+    tenant_id: TenantId,
+    session: TenantSession,
+) -> None:
+    """
+    Soft delete an incident (admin/operator only).
+
+    Sets deleted_at timestamp. Incident must be in a terminal state
+    (RESOLVED, REJECTED, FAILED_EXECUTION, FAILED_VERIFICATION).
+    """
+    result = await session.execute(
+        select(Incident).where(
+            Incident.tenant_id == tenant_id,
+            Incident.id == incident_id,
+            Incident.deleted_at.is_(None),
+        )
     )
-    if not lock_acquired:
+    incident = result.scalar_one_or_none()
+    if incident is None:
         raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail="Incident is currently locked by another operation",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found or already deleted",
         )
 
-    try:
-        # Validate action is in registry
-        from app.actions.registry import ACTION_REGISTRY
-
-        if body.action not in ACTION_REGISTRY:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown action: {body.action}. Not in ACTION_REGISTRY.",
-            )
-
-        # Transition state
-        await transition_state(
-            session,
-            incident,
-            IncidentState.EXECUTING,
-            reason=f"Approved action: {body.action}",
-            actor="human_approval",
-        )
-
-        # Mark idempotency key (TTL = 1 hour)
-        await redis.set(
-            f"approve:{tenant_id}:{body.idempotency_key}",
-            str(incident.id),
-            ex=3600,
-        )
-
-        logger.info(
-            "incident_approved",
-            tenant_id=str(tenant_id),
-            incident_id=str(incident_id),
-            action=body.action,
-        )
-
-        # Enqueue execution task via ARQ
-        try:
-            from arq import create_pool
-            from arq.connections import RedisSettings
-
-            pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
-            await pool.enqueue_job(
-                "execute_action_task",
-                str(tenant_id),
-                str(incident_id),
-                body.action,
-            )
-            await pool.aclose()
-            logger.info(
-                "execution_task_enqueued",
-                incident_id=str(incident_id),
-                action=body.action,
-            )
-        except Exception as enq_exc:
-            logger.error("execution_enqueue_failed", error=str(enq_exc))
-
-    except IllegalStateTransition as exc:
-        await redis.delete(lock_key)
+    # Only allow soft delete for terminal states
+    terminal_states = {
+        IncidentState.RESOLVED,
+        IncidentState.REJECTED,
+        IncidentState.FAILED_EXECUTION,
+        IncidentState.FAILED_VERIFICATION,
+    }
+    if incident.state not in terminal_states:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
+            detail=f"Cannot delete incident in state {incident.state.value}. Only terminal states can be deleted.",
+        )
 
-    return IncidentCreatedResponse(incident_id=incident.id)
+    incident.deleted_at = datetime.now(timezone.utc)
+    await session.flush()
+
+    logger.info(
+        "incident_soft_deleted",
+        tenant_id=str(tenant_id),
+        incident_id=str(incident_id),
+        state=incident.state.value,
+    )

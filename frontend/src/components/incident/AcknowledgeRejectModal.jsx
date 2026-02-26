@@ -28,11 +28,15 @@ export default function AcknowledgeRejectModal({
   if (!open) return null
 
   const trimmedNote = rejectNote.trim()
-  const canReject = trimmedNote.length >= 3 && trimmedNote.length <= 500
+  // Allow rejection even without a note; backend will
+  // fall back to a generic manual reason if empty.
+  const canReject = trimmedNote.length <= 500
 
   const handleAcknowledge = () => {
     if (incident) {
-      window.open(buildAcknowledgeMailto(incident), '_blank', 'noopener,noreferrer')
+      // Avoid noopener/noreferrer — Gmail needs to follow auth redirects
+      // which fail when the opener relationship is severed.
+      window.open(buildAcknowledgeMailto(incident), '_blank')
     }
     if (onAcknowledge) {
       onAcknowledge()
@@ -140,9 +144,9 @@ export default function AcknowledgeRejectModal({
              <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                You are about to reject this alert and move it to the Rejected queue.
              </p>
-             <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-               Add a short note so future reviewers understand why this alert was rejected.
-             </p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                Optionally add a short note so future reviewers understand why this alert was rejected.
+              </p>
             <div>
               <label 
                 htmlFor="reject-note-modal" 
@@ -179,9 +183,9 @@ export default function AcknowledgeRejectModal({
                 disabled={loading}
                 autoFocus
               />
-              <p style={{ fontSize: 11, color: trimmedNote.length < 3 ? '#f97316' : 'var(--text-muted)', marginTop: 4 }}>
-                {trimmedNote.length < 3 ? 'Provide at least 3 characters' : 'This note will appear in the manual-review log'}
-              </p>
+               <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                This note is optional but recommended; it will appear in the manual-review log.
+               </p>
             </div>
             <div className="flex gap-3">
               <button

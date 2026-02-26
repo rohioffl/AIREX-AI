@@ -23,7 +23,7 @@ export default function DashboardPage() {
   const { incidents, loading, error, connected, reconnecting, reload } = useIncidents()
   const [graphType, setGraphType] = useState('area')
   const [metrics, setMetrics] = useState(null)
-  const [metricsLoading, setMetricsLoading] = useState(true)
+  const [_metricsLoading, setMetricsLoading] = useState(true)
 
   useEffect(() => {
     loadMetrics()
