@@ -452,10 +452,10 @@ export default function IncidentDetail() {
         <InvestigationTimeline probeSteps={probeSteps} />
 
         {/* 1. AI Investigation */}
-        <AIAnalysisPanel ragContext={incident.rag_context} recommendation={incident.recommendation} />
+        <AIAnalysisPanel incident={incident} />
 
         {/* 2. Evidence */}
-        <EvidencePanel evidence={incident.evidence} />
+        <EvidencePanel evidence={incident.evidence} incident={incident} />
 
         {/* 3. AI Recommendation & Approval */}
         <div style={{ width: '100%', maxWidth: '100%' }}>

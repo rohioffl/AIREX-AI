@@ -76,7 +76,6 @@ class ClearLogsAction(BaseAction):
                     instance_name=instance_id,
                     project=meta.get("_project", ""),
                     zone=meta.get("_zone", ""),
-                    sa_key_path=sa_key,
                 )
 
             success = "cleaned" in output.lower() or "%" in output

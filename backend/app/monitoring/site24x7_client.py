@@ -21,8 +21,6 @@ from app.core.config import settings
 logger = structlog.get_logger()
 
 REDIS_TOKEN_KEY = "airex:site24x7:access_token"
-
-
 class Site24x7Client:
     """Async Site24x7 REST API client with OAuth2 token caching."""
 
@@ -46,9 +44,10 @@ class Site24x7Client:
                 if cached:
                     data = json.loads(cached)
                     if data.get("expires_at", 0) > time.time():
-                        self._access_token = data["token"]
+                        token = data["token"]
+                        self._access_token = token
                         self._token_expiry = data["expires_at"]
-                        return self._access_token
+                        return token
             except Exception as exc:
                 logger.warning("site24x7_redis_token_read_failed", error=str(exc))
 

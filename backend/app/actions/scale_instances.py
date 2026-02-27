@@ -111,7 +111,7 @@ class ScaleInstancesAction(BaseAction):
         """Scale GCP Managed Instance Group."""
         try:
             from google.cloud import compute_v1
-            from app.cloud.gcp_ssh import get_gcp_credentials
+            from app.cloud.gcp_ssh import _get_gcp_credentials
 
             project_id = meta.get("_gcp_project_id") or meta.get("gcp_project_id", "")
             zone = meta.get("_gcp_zone") or meta.get("gcp_zone", "")
@@ -121,7 +121,7 @@ class ScaleInstancesAction(BaseAction):
                 logger.warning("gcp_mig_missing_config", instance_id=instance_id)
                 return await self._simulate(service)
 
-            credentials = get_gcp_credentials()
+            credentials = _get_gcp_credentials()
             instance_group_manager_client = compute_v1.InstanceGroupManagersClient(
                 credentials=credentials
             )

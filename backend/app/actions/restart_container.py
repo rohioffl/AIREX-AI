@@ -77,7 +77,7 @@ class RestartContainerAction(BaseAction):
             success = (
                 "true" in output.lower()
                 or "complete" in output.lower()
-                or container_name in output
+                or meta.get("container_name", "application") in output
             )
             return ActionResult(
                 success=success,
@@ -102,7 +102,7 @@ class RestartContainerAction(BaseAction):
             success = (
                 "true" in output.lower()
                 or "complete" in output.lower()
-                or container_name in output
+                or meta.get("container_name", "application") in output
             )
             return ActionResult(
                 success=success,
