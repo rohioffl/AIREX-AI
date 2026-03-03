@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     MAX_INVESTIGATION_RETRIES: int = 3
     MAX_EXECUTION_RETRIES: int = 3
     MAX_VERIFICATION_RETRIES: int = 3
+    MAX_FALLBACK_ALTERNATIVES: int = 2  # max alternative actions to try after verification failure
 
     # ── Auto-Approval Policy ────────────────────────────────────
     # Confidence threshold for auto-approval (0.0-1.0).

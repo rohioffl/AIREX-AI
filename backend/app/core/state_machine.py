@@ -46,6 +46,7 @@ ALLOWED_TRANSITIONS: dict[IncidentState, list[IncidentState]] = {
     IncidentState.FAILED_VERIFICATION: [
         IncidentState.RESOLVED,  # verification retry succeeds
         IncidentState.FAILED_VERIFICATION,  # verification retry fails again
+        IncidentState.AWAITING_APPROVAL,  # fallback to alternative action (Phase 3 ARE)
         IncidentState.REJECTED,
     ],
     IncidentState.FAILED_ANALYSIS: [

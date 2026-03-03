@@ -112,22 +112,52 @@ async def _handle_verification_failure(
     log: structlog.stdlib.BoundLogger,
     reason: str,
 ) -> None:
-    """Increment retry or fall back to manual review. Never re-run execution."""
+    """Increment retry, attempt fallback, or fall back to manual review."""
     incident.verification_retry_count += 1
     current_retries = incident.verification_retry_count
 
     result_state = "FAILED_VERIFICATION"
 
     if current_retries >= settings.MAX_VERIFICATION_RETRIES:
-        log.error(
+        log.warning(
             "verification_max_retries_exceeded",
             retries=current_retries,
         )
+
+        # Phase 3 ARE: attempt fallback to alternative action
+        failed_action = ""
+        if incident.meta and "recommendation" in incident.meta:
+            failed_action = incident.meta["recommendation"].get("proposed_action", "")
+
+        try:
+            from app.services.fallback_service import attempt_fallback
+
+            fallback_initiated = await attempt_fallback(
+                session, incident, failed_action, reason,
+            )
+            if fallback_initiated:
+                log.info(
+                    "fallback_to_alternative_action",
+                    failed_action=failed_action,
+                )
+                try:
+                    await emit_verification_result(
+                        str(incident.tenant_id),
+                        str(incident.id),
+                        "FALLBACK_INITIATED",
+                    )
+                except Exception:
+                    pass
+                return
+        except Exception as exc:
+            log.error("fallback_attempt_failed", error=str(exc))
+
+        # No fallback available — terminal failure
         await transition_state(
             session,
             incident,
             IncidentState.FAILED_VERIFICATION,
-            reason=f"Max verification retries ({current_retries}) exceeded: {reason}",
+            reason=f"Max verification retries ({current_retries}) exceeded, no alternatives: {reason}",
         )
     else:
         log.warning(

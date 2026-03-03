@@ -51,12 +51,13 @@ class TestAllowedTransitions:
         assert IncidentState.REJECTED in allowed
 
     def test_failed_verification_transitions(self):
-        """FAILED_VERIFICATION can retry (resolve/fail again) or be rejected."""
+        """FAILED_VERIFICATION can retry, fallback to alternative, or be rejected."""
         allowed = ALLOWED_TRANSITIONS[IncidentState.FAILED_VERIFICATION]
         assert IncidentState.REJECTED in allowed
         assert IncidentState.RESOLVED in allowed
         assert IncidentState.FAILED_VERIFICATION in allowed
-        assert len(allowed) == 3
+        assert IncidentState.AWAITING_APPROVAL in allowed  # Phase 3 ARE fallback
+        assert len(allowed) == 4
 
     def test_terminal_states_have_no_transitions(self):
         for state in TERMINAL_STATES:

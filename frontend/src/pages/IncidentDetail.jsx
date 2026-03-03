@@ -35,6 +35,7 @@ import InvestigationTimeline from '../components/incident/InvestigationTimeline'
 import IncidentChat from '../components/incident/IncidentChat'
 import ReasoningChain from '../components/incident/ReasoningChain'
 import ResolutionOutcome from '../components/incident/ResolutionOutcome'
+import FallbackHistory from '../components/incident/FallbackHistory'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import AcknowledgeRejectModal from '../components/incident/AcknowledgeRejectModal'
 import { formatTimestamp, formatDuration, formatRelativeTime } from '../utils/formatters'
@@ -502,7 +503,10 @@ export default function IncidentDetail() {
         {/* 4. AI Chat */}
         <IncidentChat incidentId={id} />
 
-        {/* 4.5 Resolution Outcome & Feedback */}
+        {/* 4.5 Fallback History (Phase 3 ARE) */}
+        <FallbackHistory incident={incident} />
+
+        {/* 4.6 Resolution Outcome & Feedback */}
         <ResolutionOutcome incident={incident} />
 
         {/* Additional Info Grid */}
