@@ -214,7 +214,10 @@ class TestCheckSite24x7Monitors:
 
         with (
             patch("app.services.health_check_service.settings") as mock_settings,
-            patch("app.monitoring.site24x7_client.Site24x7Client", return_value=mock_client_instance),
+            patch(
+                "app.monitoring.site24x7_client.Site24x7Client",
+                return_value=mock_client_instance,
+            ),
         ):
             mock_settings.SITE24X7_ENABLED = True
             mock_settings.SITE24X7_REFRESH_TOKEN = "refresh-token"
@@ -252,7 +255,10 @@ class TestCheckSite24x7Monitors:
 
         with (
             patch("app.services.health_check_service.settings") as mock_settings,
-            patch("app.monitoring.site24x7_client.Site24x7Client", return_value=mock_client_instance),
+            patch(
+                "app.monitoring.site24x7_client.Site24x7Client",
+                return_value=mock_client_instance,
+            ),
         ):
             mock_settings.SITE24X7_ENABLED = True
             mock_settings.SITE24X7_REFRESH_TOKEN = "token"
@@ -271,7 +277,10 @@ class TestCheckSite24x7Monitors:
 
         with (
             patch("app.services.health_check_service.settings") as mock_settings,
-            patch("app.monitoring.site24x7_client.Site24x7Client", return_value=mock_client_instance),
+            patch(
+                "app.monitoring.site24x7_client.Site24x7Client",
+                return_value=mock_client_instance,
+            ),
         ):
             mock_settings.SITE24X7_ENABLED = True
             mock_settings.SITE24X7_REFRESH_TOKEN = "token"
@@ -292,15 +301,23 @@ class TestAutoCreateIncidents:
         session = AsyncMock()
         hc = _make_health_check(status=HealthCheckStatus.DOWN)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one.return_value = 0
-        session.execute.return_value = mock_result
+        # First execute: active-incident dedup query (no active incident)
+        dedup_result = MagicMock()
+        dedup_result.scalar_one_or_none.return_value = None
+        # Second execute: cooldown query (no recent incident)
+        cooldown_result = MagicMock()
+        cooldown_result.scalar_one.return_value = 0
+        session.execute.side_effect = [dedup_result, cooldown_result]
 
         mock_incident = MagicMock()
         mock_incident.id = uuid.uuid4()
 
         with (
-            patch("app.services.incident_service.create_incident", new_callable=AsyncMock, return_value=mock_incident),
+            patch(
+                "app.services.incident_service.create_incident",
+                new_callable=AsyncMock,
+                return_value=mock_incident,
+            ),
             patch("app.services.health_check_service.settings") as mock_settings,
         ):
             mock_settings.HEALTH_CHECK_INCIDENT_COOLDOWN_MINUTES = 30
@@ -315,15 +332,23 @@ class TestAutoCreateIncidents:
         session = AsyncMock()
         hc = _make_health_check(status=HealthCheckStatus.DEGRADED)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one.return_value = 0
-        session.execute.return_value = mock_result
+        # First execute: active-incident dedup query (no active incident)
+        dedup_result = MagicMock()
+        dedup_result.scalar_one_or_none.return_value = None
+        # Second execute: cooldown query (no recent incident)
+        cooldown_result = MagicMock()
+        cooldown_result.scalar_one.return_value = 0
+        session.execute.side_effect = [dedup_result, cooldown_result]
 
         mock_incident = MagicMock()
         mock_incident.id = uuid.uuid4()
 
         with (
-            patch("app.services.incident_service.create_incident", new_callable=AsyncMock, return_value=mock_incident),
+            patch(
+                "app.services.incident_service.create_incident",
+                new_callable=AsyncMock,
+                return_value=mock_incident,
+            ),
             patch("app.services.health_check_service.settings") as mock_settings,
         ):
             mock_settings.HEALTH_CHECK_INCIDENT_COOLDOWN_MINUTES = 30
@@ -353,10 +378,13 @@ class TestAutoCreateIncidents:
         session = AsyncMock()
         hc = _make_health_check(status=HealthCheckStatus.DOWN)
 
-        # Mock cooldown query: recent incident exists
-        mock_result = MagicMock()
-        mock_result.scalar_one.return_value = 1
-        session.execute.return_value = mock_result
+        # First execute: active-incident dedup query (no active incident)
+        dedup_result = MagicMock()
+        dedup_result.scalar_one_or_none.return_value = None
+        # Second execute: cooldown query (recent incident exists)
+        cooldown_result = MagicMock()
+        cooldown_result.scalar_one.return_value = 1
+        session.execute.side_effect = [dedup_result, cooldown_result]
 
         with patch("app.services.health_check_service.settings") as mock_settings:
             mock_settings.HEALTH_CHECK_INCIDENT_COOLDOWN_MINUTES = 30
@@ -370,9 +398,13 @@ class TestAutoCreateIncidents:
         session = AsyncMock()
         hc = _make_health_check(status=HealthCheckStatus.DOWN)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one.return_value = 0
-        session.execute.return_value = mock_result
+        # First execute: active-incident dedup query (no active incident)
+        dedup_result = MagicMock()
+        dedup_result.scalar_one_or_none.return_value = None
+        # Second execute: cooldown query (no recent incident)
+        cooldown_result = MagicMock()
+        cooldown_result.scalar_one.return_value = 0
+        session.execute.side_effect = [dedup_result, cooldown_result]
 
         with (
             patch(
@@ -397,15 +429,28 @@ class TestAutoCreateIncidents:
             _make_health_check(status=HealthCheckStatus.DEGRADED, target_id="d2"),
         ]
 
-        mock_result = MagicMock()
-        mock_result.scalar_one.return_value = 0
-        session.execute.return_value = mock_result
+        # For each DOWN/DEGRADED check: dedup query (no active) + cooldown query (no recent)
+        dedup_result = MagicMock()
+        dedup_result.scalar_one_or_none.return_value = None
+        cooldown_result = MagicMock()
+        cooldown_result.scalar_one.return_value = 0
+        # DOWN: dedup + cooldown, DEGRADED: dedup + cooldown = 4 calls
+        session.execute.side_effect = [
+            dedup_result,
+            cooldown_result,
+            dedup_result,
+            cooldown_result,
+        ]
 
         mock_incident = MagicMock()
         mock_incident.id = uuid.uuid4()
 
         with (
-            patch("app.services.incident_service.create_incident", new_callable=AsyncMock, return_value=mock_incident),
+            patch(
+                "app.services.incident_service.create_incident",
+                new_callable=AsyncMock,
+                return_value=mock_incident,
+            ),
             patch("app.services.health_check_service.settings") as mock_settings,
         ):
             mock_settings.HEALTH_CHECK_INCIDENT_COOLDOWN_MINUTES = 30
@@ -433,10 +478,20 @@ class TestRunHealthChecks:
 
         with (
             patch("app.core.database.get_tenant_session") as mock_session_ctx,
-            patch("app.services.health_check_service.check_site24x7_monitors", new_callable=AsyncMock, return_value=checks),
-            patch("app.services.health_check_service.auto_create_incidents", new_callable=AsyncMock, return_value=2),
+            patch(
+                "app.services.health_check_service.check_site24x7_monitors",
+                new_callable=AsyncMock,
+                return_value=checks,
+            ),
+            patch(
+                "app.services.health_check_service.auto_create_incidents",
+                new_callable=AsyncMock,
+                return_value=2,
+            ),
         ):
-            mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_ctx.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session
+            )
             mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 
             summary = await run_health_checks(TENANT)

@@ -231,7 +231,9 @@ async def get_incident(
             )
 
             correlated_incidents = await get_correlated_incidents(
-                session, tenant_id, incident.correlation_group_id,
+                session,
+                tenant_id,
+                incident.correlation_group_id,
                 exclude_id=incident_id,
             )
             for other in correlated_incidents[:20]:
@@ -247,7 +249,9 @@ async def get_incident(
                     )
                 )
             summary_dict = await get_correlation_summary(
-                session, tenant_id, incident.correlation_group_id,
+                session,
+                tenant_id,
+                incident.correlation_group_id,
             )
             if summary_dict:
                 correlation_summary_data = CorrelationGroupSummary(**summary_dict)
@@ -617,7 +621,7 @@ async def submit_feedback(
 @router.get(
     "/{incident_id}/runbook",
     response_model=dict,
-    dependencies=[Depends(require_role("viewer"))],
+    dependencies=[Depends(require_role("viewer", "operator", "admin"))],
 )
 async def get_auto_runbook(
     incident_id: uuid.UUID,
