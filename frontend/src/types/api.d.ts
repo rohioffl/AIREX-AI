@@ -18,6 +18,9 @@ export interface Incident {
   created_at: string
   updated_at: string
   meta: Record<string, unknown> | null
+  resolution_type?: string | null
+  resolution_duration_seconds?: number | null
+  feedback_score?: number | null
 }
 
 export interface RelatedIncidentItem {
@@ -36,6 +39,13 @@ export interface IncidentDetail extends Incident {
   recommendation: Recommendation | null
   meta: Record<string, unknown> | null
   related_incidents?: RelatedIncidentItem[]
+  // Resolution tracking (Phase 2 ARE)
+  resolution_type?: string | null
+  resolution_summary?: string | null
+  resolution_duration_seconds?: number | null
+  feedback_score?: number | null
+  feedback_note?: string | null
+  resolved_at?: string | null
 }
 
 export interface Evidence {

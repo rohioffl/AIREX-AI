@@ -68,6 +68,10 @@ class IncidentListItem(BaseModel):
     updated_at: datetime
     meta: dict | None = None
     host_key: str | None = None
+    # Resolution tracking
+    resolution_type: str | None = None
+    resolution_duration_seconds: float | None = None
+    feedback_score: int | None = None
 
 
 class RelatedIncidentItem(BaseModel):
@@ -89,6 +93,13 @@ class IncidentDetail(IncidentListItem):
     related_incidents: list[RelatedIncidentItem] = []
     rag_context: str | None = None
     host_key: str | None = None
+    # Resolution tracking
+    resolution_type: str | None = None
+    resolution_summary: str | None = None
+    resolution_duration_seconds: float | None = None
+    feedback_score: int | None = None
+    feedback_note: str | None = None
+    resolved_at: datetime | None = None
 
 
 # --- Request models ---
@@ -105,6 +116,28 @@ class RejectRequest(BaseModel):
         max_length=500,
         description="Operator-provided note explaining why the incident was rejected",
     )
+
+
+class FeedbackRequest(BaseModel):
+    """Operator feedback on a resolved/rejected incident."""
+
+    score: int = Field(
+        ...,
+        ge=-1,
+        le=5,
+        description="Rating: -1=harmful, 0=ineffective, 1-5 quality scale",
+    )
+    note: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Optional text feedback explaining the rating",
+    )
+
+
+class FeedbackResponse(BaseModel):
+    incident_id: uuid.UUID
+    feedback_score: int
+    feedback_note: str | None = None
 
 
 # --- Minimal creation response ---

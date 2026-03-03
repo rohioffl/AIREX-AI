@@ -164,4 +164,14 @@ export async function updateSettings(data) {
   return res.data
 }
 
+// Incident feedback (operator rating)
+export async function submitFeedback(incidentId, score, note) {
+  const payload = { score }
+  if (note && note.trim()) {
+    payload.note = note.trim()
+  }
+  const res = await api.post(`/incidents/${incidentId}/feedback`, payload)
+  return res.data
+}
+
 export default api

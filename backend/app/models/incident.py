@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     CheckConstraint,
     Enum as SAEnum,
+    Float,
     Index,
     Integer,
     PrimaryKeyConstraint,
@@ -50,6 +51,10 @@ class Incident(Base, TenantMixin):
         CheckConstraint(
             "verification_retry_count >= 0 AND verification_retry_count <= 3",
             name="ck_incidents_verification_retry",
+        ),
+        CheckConstraint(
+            "feedback_score IS NULL OR (feedback_score >= -1 AND feedback_score <= 5)",
+            name="ck_incidents_feedback_score_range",
         ),
         Index("idx_incidents_tenant_state", "tenant_id", "state"),
         Index(
@@ -114,6 +119,26 @@ class Incident(Base, TenantMixin):
     # Host key for linking related incidents (same server: e.g. private_ip or instance_id)
     host_key: Mapped[str | None] = mapped_column(
         String(512), nullable=True, index=False
+    )
+
+    # ── Resolution tracking (Phase 2 ARE) ────────────────────────
+    resolution_type: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )
+    resolution_summary: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    resolution_duration_seconds: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    feedback_score: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    feedback_note: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
     )
 
     # Flexible metadata

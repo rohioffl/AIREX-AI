@@ -184,6 +184,19 @@ async def transition_state(
         pass  # Don't fail state transition if notifications fail
 
     if new_state in TERMINAL_STATES:
+        # Record structured resolution outcome (Phase 2 ARE)
+        try:
+            from app.services.resolution_service import record_resolution
+
+            await record_resolution(session, incident)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning(
+                "resolution_recording_failed",
+                incident_id=str(incident.id),
+                error=str(exc),
+            )
+
+        # Upsert embedding for RAG similarity search
         try:
             from app.services.incident_embedding_service import (
                 upsert_incident_embedding,

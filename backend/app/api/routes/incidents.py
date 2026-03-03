@@ -26,6 +26,8 @@ from app.schemas.incident import (
     ApproveRequest,
     EvidenceResponse,
     ExecutionResponse,
+    FeedbackRequest,
+    FeedbackResponse,
     IncidentCreatedResponse,
     IncidentDetail,
     IncidentListItem,
@@ -236,6 +238,13 @@ async def get_incident(
         rag_context=rag_context,
         related_incidents=related,
         host_key=incident.host_key,
+        # Resolution tracking
+        resolution_type=incident.resolution_type,
+        resolution_summary=incident.resolution_summary,
+        resolution_duration_seconds=incident.resolution_duration_seconds,
+        feedback_score=incident.feedback_score,
+        feedback_note=incident.feedback_note,
+        resolved_at=incident.resolved_at,
     )
 
 
@@ -497,4 +506,69 @@ async def soft_delete_incident(
         tenant_id=str(tenant_id),
         incident_id=str(incident_id),
         state=incident.state.value,
+    )
+
+
+@router.post(
+    "/{incident_id}/feedback",
+    status_code=status.HTTP_200_OK,
+    response_model=FeedbackResponse,
+    dependencies=[Depends(require_role("operator", "admin"))],
+)
+async def submit_feedback(
+    incident_id: uuid.UUID,
+    tenant_id: TenantId,
+    session: TenantSession,
+    body: FeedbackRequest,
+) -> FeedbackResponse:
+    """
+    Submit operator feedback on a resolved/rejected incident.
+
+    Score scale:
+      -1 = harmful (automation made things worse)
+       0 = ineffective (no impact)
+       1-5 = quality scale (1=poor, 5=excellent)
+    """
+    result = await session.execute(
+        select(Incident).where(
+            Incident.tenant_id == tenant_id,
+            Incident.id == incident_id,
+        )
+    )
+    incident = result.scalar_one_or_none()
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    # Only allow feedback on terminal incidents
+    terminal_states = {
+        IncidentState.RESOLVED,
+        IncidentState.REJECTED,
+        IncidentState.FAILED_EXECUTION,
+        IncidentState.FAILED_VERIFICATION,
+    }
+    if incident.state not in terminal_states:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot submit feedback for incident in state {incident.state.value}. "
+            f"Only terminal states accept feedback.",
+        )
+
+    incident.feedback_score = body.score
+    incident.feedback_note = body.note.strip() if body.note else None
+    await session.flush()
+
+    logger.info(
+        "feedback_submitted",
+        tenant_id=str(tenant_id),
+        incident_id=str(incident_id),
+        score=body.score,
+    )
+
+    return FeedbackResponse(
+        incident_id=incident.id,
+        feedback_score=incident.feedback_score,
+        feedback_note=incident.feedback_note,
     )
