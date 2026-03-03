@@ -298,6 +298,56 @@ async def auto_create_incidents(
         if hc.status not in (HealthCheckStatus.DOWN, HealthCheckStatus.DEGRADED):
             continue
 
+        # Check if there is an ACTIVE incident for this exact target
+        from app.models.incident import Incident
+        from app.models.enums import IncidentState
+        
+        active_incident_stmt = (
+            select(Incident)
+            .where(
+                and_(
+                    Incident.tenant_id == tenant_id,
+                    Incident.alert_type == STATUS_TO_ALERT_TYPE.get(hc.status, "healthcheck"),
+                    Incident.meta["target_id"].astext == str(hc.target_id),
+                    Incident.state.notin_(
+                        [
+                            IncidentState.RESOLVED,
+                            IncidentState.FAILED_ANALYSIS,
+                            IncidentState.FAILED_EXECUTION,
+                            IncidentState.FAILED_VERIFICATION,
+                        ]
+                    ),
+                    Incident.deleted_at.is_(None)
+                )
+            )
+            .order_by(Incident.created_at.desc())
+            .limit(1)
+        )
+        result = await session.execute(active_incident_stmt)
+        active_incident = result.scalar_one_or_none()
+        
+        if active_incident:
+            from sqlalchemy.orm.attributes import flag_modified
+            # Enrich existing incident with latest check info
+            m = dict(active_incident.meta) if active_incident.meta else {}
+            m["_alert_last_seen_at"] = now.isoformat()
+            m["_alert_count"] = int(m.get("_alert_count", 1)) + 1
+            m["health_check_status"] = hc.status
+            m["health_check_metrics"] = hc.metrics
+            if hc.anomalies:
+                m["health_check_anomalies"] = hc.anomalies
+            
+            active_incident.meta = m
+            flag_modified(active_incident, "meta")
+            session.add(active_incident)
+            
+            logger.debug(
+                "health_check_incident_active_dedup",
+                target_id=hc.target_id,
+                incident_id=str(active_incident.id)
+            )
+            continue
+
         # Check cooldown: was an incident created for this target recently?
         cooldown_cutoff = now - cooldown
         recent_stmt = (
@@ -388,8 +438,7 @@ async def auto_create_incidents(
                 error=str(exc),
             )
 
-    if created_count:
-        await session.flush()
+    await session.flush()
 
     return created_count
 
