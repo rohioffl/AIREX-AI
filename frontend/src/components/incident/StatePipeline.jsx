@@ -41,8 +41,8 @@ export default function StatePipeline({ currentState }) {
         : COLORS.normal
 
   return (
-    <div className="w-full overflow-x-auto py-2 px-2">
-      <div className="flex items-center min-w-[600px]">
+    <div className="w-full py-2 px-2">
+      <div className="hidden md:flex items-center overflow-x-auto w-full">
         {STATE_ORDER.map((step, i) => {
           const done = i < currentIdx
           const active = i === currentIdx
@@ -82,6 +82,58 @@ export default function StatePipeline({ currentState }) {
                   />
                 </div>
               )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="flex md:hidden flex-col gap-0 w-full pl-2">
+        {STATE_ORDER.map((step, i) => {
+          const done = i < currentIdx
+          const active = i === currentIdx
+
+          return (
+            <div key={step.id} className="relative flex items-start pb-4 last:pb-0">
+              {i < STATE_ORDER.length - 1 && (
+                <div 
+                  className="absolute left-[13px] top-[28px] bottom-[-4px] w-[2px] rounded-full overflow-hidden" 
+                  style={{ background: 'var(--bg-input)' }}
+                >
+                  <div
+                    className="absolute inset-x-0 top-0 rounded-full transition-all duration-700 ease-out"
+                    style={{ background: `${palette.active}60`, height: i < currentIdx ? '100%' : '0%' }}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 relative z-10 w-full">
+                <div
+                  className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center transition-all duration-500"
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-mono)',
+                    ...(done ? { background: palette.done, color: palette.doneText, border: `1px solid ${palette.doneText}40` } : {}),
+                    ...(active ? { 
+                      background: '#6366F1', 
+                      color: '#fff', 
+                      boxShadow: document.body.classList.contains('light-mode') 
+                        ? '0 0 0 4px rgba(99,102,241,0.15)' 
+                        : `0 0 12px ${palette.active}50`, 
+                      transform: 'scale(1.1)' 
+                    } : {}),
+                    ...(!done && !active ? { background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}),
+                  }}
+                >
+                  {done ? <Check size={14} strokeWidth={3} /> : step.icon}
+                </div>
+                <span 
+                  className="mt-[2px]"
+                  style={{ fontSize: 12, fontWeight: 500, color: active ? 'var(--text-primary)' : 'var(--text-muted)', transition: 'color 0.3s' }}
+                >
+                  {step.label}
+                </span>
+              </div>
             </div>
           )
         })}

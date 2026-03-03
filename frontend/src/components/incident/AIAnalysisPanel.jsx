@@ -1,5 +1,35 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Brain, Copy, ChevronDown, BookOpen, History, TrendingUp, AlertCircle } from 'lucide-react'
+
+// Animated Thinking Indicator
+function ThinkingIndicator() {
+  const [textIndex, setTextIndex] = useState(0);
+  const texts = [
+    "Analyzing evidence...",
+    "Correlating patterns...",
+    "Generating recommendations..."
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTextIndex((prev) => (prev + 1) % texts.length);
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [texts.length]);
+
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        {texts[textIndex]}
+      </div>
+      <div className="flex items-center gap-1" style={{ color: '#818cf8' }}>
+        <span className="thinking-dot"></span>
+        <span className="thinking-dot"></span>
+        <span className="thinking-dot"></span>
+      </div>
+    </div>
+  );
+}
 
 // Score badge with color based on similarity score
 function ScoreBadge({ score }) {
@@ -164,15 +194,13 @@ export default function AIAnalysisPanel({ incident }) {
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(129,140,248,0.1)', color: '#818cf8' }}>
-              <Brain size={16} />
+              <Brain size={16} style={{ animation: 'var(--animate-glow-pulse)' }} />
             </div>
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 AI Investigation
               </h3>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                Analysis in progress...
-              </p>
+              <ThinkingIndicator />
             </div>
           </div>
         </div>

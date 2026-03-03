@@ -75,6 +75,7 @@ export default function SettingsPage() {
       section: 'AI / LLM',
       icon: Brain,
       color: '#a78bfa',
+      glassClass: 'glass-purple',
       items: [
         { label: 'Provider', value: 'Vertex AI (LiteLLM)' },
         { label: 'Primary Model', value: 'gemini-2.0-flash' },
@@ -87,6 +88,7 @@ export default function SettingsPage() {
       section: 'Pipeline',
       icon: RefreshCw,
       color: '#38bdf8',
+      glassClass: 'glass-cyan',
       items: [
         { label: 'Investigation Timeout', value: '60s' },
         { label: 'Execution Timeout', value: '20s' },
@@ -99,6 +101,7 @@ export default function SettingsPage() {
       section: 'Actions & Policies',
       icon: Shield,
       color: '#fbbf24',
+      glassClass: 'glass-amber',
       items: [
         { label: 'restart_service', value: 'Requires approval | Max risk: HIGH' },
         { label: 'clear_logs', value: 'Auto-approve | Max risk: MED' },
@@ -109,6 +112,7 @@ export default function SettingsPage() {
       section: 'Infrastructure',
       icon: Server,
       color: '#34d399',
+      glassClass: 'glass-green',
       items: [
         {
           label: 'Backend',
@@ -167,7 +171,7 @@ export default function SettingsPage() {
             { label: 'Redis / Queue', ok: true, detail: 'ARQ Worker' },
             { label: 'AI Engine', ok: true, detail: 'Gemini 2.0 Flash' },
           ].map(s => (
-            <div key={s.label} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+            <div key={s.label} className="flex items-center gap-3 p-3 rounded-lg hover-lift" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
               {s.ok ? (
                 <CheckCircle size={18} style={{ color: '#34d399', flexShrink: 0 }} />
               ) : loading ? (
@@ -193,9 +197,11 @@ export default function SettingsPage() {
       {/* Config Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {configs.map(section => (
-          <div key={section.section} className="glass rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <section.icon size={16} style={{ color: section.color }} />
+          <div key={section.section} className={`glass rounded-xl p-5 ${section.glassClass}`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-1.5 rounded-lg" style={{ background: `${section.color}22` }}>
+                <section.icon size={16} style={{ color: section.color }} />
+              </div>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{section.section}</span>
             </div>
             <div className="space-y-2">
@@ -226,7 +232,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all disabled:opacity-50 hover:shadow-lg hover:-translate-y-0.5 glow-indigo"
               style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
             >
               <Save size={14} />

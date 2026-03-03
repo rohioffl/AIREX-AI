@@ -244,6 +244,7 @@ export default function Layout({ children }) {
               onClick={() => setCollapsed(!collapsed)}
               className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
               style={{ color: 'var(--text-muted)', background: 'var(--bg-input)' }}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
             </button>
@@ -251,16 +252,18 @@ export default function Layout({ children }) {
               onClick={() => setMobileOpen(!mobileOpen)}
               className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg"
               style={{ color: 'var(--text-muted)', background: 'var(--bg-input)' }}
+              aria-label="Toggle mobile menu"
             >
               <PanelLeft size={16} />
             </button>
 
             {/* Search */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', minWidth: 300 }}>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500/20 transition-shadow" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', minWidth: 300 }}>
               <Search size={14} style={{ color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 placeholder="Search incidents..."
+                aria-label="Search incidents"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -268,6 +271,7 @@ export default function Layout({ children }) {
                     navigate(`/alerts?search=${encodeURIComponent(searchQuery.trim())}`)
                   }
                 }}
+                className="focus:outline-none"
                 style={{
                   flex: 1,
                   background: 'transparent',
@@ -285,6 +289,7 @@ export default function Layout({ children }) {
                   }}
                   className="p-1 rounded hover:bg-elevated transition-colors"
                   title="Clear search"
+                  aria-label="Clear search"
                 >
                   <X size={12} style={{ color: 'var(--text-muted)' }} />
                 </button>
@@ -315,8 +320,9 @@ export default function Layout({ children }) {
               <button
                 ref={bellRef}
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
+                className="relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover-lift"
                 style={{ color: 'var(--text-muted)', background: 'var(--bg-input)', border: '1px solid var(--border)' }}
+                aria-label="Toggle notifications"
               >
                 {unreadCount > 0 ? <BellRing size={16} style={{ color: '#fbbf24' }} /> : <Bell size={16} />}
                 {unreadCount > 0 && (
@@ -355,10 +361,14 @@ export default function Layout({ children }) {
         </main>
 
         {/* Footer */}
-        <footer className="py-4 px-6" style={{ borderTop: '1px solid var(--border)' }}>
+        <footer className="py-4 px-6 relative">
+          <div className="absolute top-0 left-0 right-0 divider-glow"></div>
           <div className="max-w-[1400px] mx-auto flex justify-between items-center" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
             <span>AIREX AUTONOMOUS SRE v0.9</span>
-            <span>STATUS: OPERATIONAL</span>
+            <span className="flex items-center gap-2">
+              <span className="status-dot status-dot-green inline-block"></span>
+              STATUS: OPERATIONAL
+            </span>
           </div>
         </footer>
       </div>

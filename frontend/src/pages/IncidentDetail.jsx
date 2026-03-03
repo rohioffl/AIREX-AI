@@ -85,11 +85,11 @@ export default function IncidentDetail() {
   if (loading) {
     return (
       <div className="space-y-5 animate-fade-in">
-        <div className="glass rounded-xl h-40 shimmer" />
-        <div className="glass rounded-xl h-12 shimmer" />
+        <div className="glass skeleton rounded-xl h-48" />
+        <div className="glass skeleton rounded-xl h-16" />
         <div className="grid grid-cols-2 gap-5">
-          <div className="glass rounded-xl h-64 shimmer" />
-          <div className="glass rounded-xl h-64 shimmer" />
+          <div className="glass skeleton rounded-xl h-72" />
+          <div className="glass skeleton rounded-xl h-64" />
         </div>
       </div>
     )
@@ -160,7 +160,7 @@ export default function IncidentDetail() {
             <ArrowLeft size={14} />
             Incidents
           </Link>
-          <span style={{ color: 'var(--text-muted)' }}>/</span>
+          <span className="opacity-40 transition-opacity hover:opacity-100" style={{ color: 'var(--text-muted)' }}>/</span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{incident.id.substring(0, 8)}</span>
         </div>
         <div className="flex items-center gap-2">
@@ -248,7 +248,7 @@ export default function IncidentDetail() {
           className="absolute inset-0"
           style={{
             background: isDark
-              ? `radial-gradient(circle at 20% 20%, ${accent}33, transparent 55%), linear-gradient(135deg, rgba(11,12,16,0.95), rgba(16,18,24,0.95))`
+              ? `radial-gradient(circle at 20% 20%, ${accent}55, transparent 65%), linear-gradient(135deg, rgba(11,12,16,0.95), rgba(16,18,24,0.95))`
               : 'transparent',
           }}
         />
@@ -347,7 +347,7 @@ export default function IncidentDetail() {
               { label: 'Cloud Target', value: cloud ? cloud.toUpperCase() : 'Unknown', hint: region || 'no region received', icon: Cloud },
               { label: 'Tenant Scope', value: tenant || 'default', hint: `state ${incident.state}`, icon: GaugeCircle },
             ].map((card) => (
-              <div key={card.label} className="rounded-2xl px-4 py-3" style={{ background: isDark ? 'rgba(6,8,15,0.6)' : 'rgba(255,255,255,0.6)', border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.08)' }}>
+              <div key={card.label} className="rounded-2xl px-4 py-3 hover-lift" style={{ background: isDark ? 'rgba(6,8,15,0.6)' : 'rgba(255,255,255,0.6)', border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.08)' }}>
                 <div className="flex items-center justify-between" style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   {card.label}
                   <card.icon size={13} />
@@ -535,7 +535,7 @@ export default function IncidentDetail() {
 
       {/* Timeline */}
       <div className="glass rounded-xl p-6" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
-        <span className="block mb-6" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timeline</span>
+        <span className="block mb-6 neon-text-cyan" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timeline</span>
         <Timeline transitions={incident.state_transitions} />
       </div>
 

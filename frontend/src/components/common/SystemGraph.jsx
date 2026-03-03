@@ -69,11 +69,11 @@ function buildSeries(incidents) {
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="glass p-3 text-xs" style={{ minWidth: 140 }}>
+    <div className="glass p-3 text-xs" style={{ minWidth: 140, background: 'rgba(17, 19, 24, 0.85)', backdropFilter: 'blur(12px)', border: '1px solid var(--border)' }}>
       <div style={{ fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>{label}</div>
       {payload.map((p, i) => (
         <div key={i} className="flex items-center gap-2 py-0.5">
-          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span className="w-2 h-2 rounded-full pulse-ring" style={{ background: p.color, boxShadow: `0 0 8px ${p.color}` }} />
           <span style={{ color: 'var(--text-secondary)' }}>{p.name}:</span>
           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.value}</span>
         </div>
@@ -126,20 +126,20 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
 
   return (
     <div className="glass p-5">
-      <div className="flex items-center justify-between mb-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
+      <div className="flex items-center justify-between mb-5 pb-3 divider-glow border-b-0">
         <div className="flex items-center gap-2">
-          <Activity size={16} style={{ color: '#22d3ee' }} />
+          <Activity size={16} className="neon-text-cyan" />
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>
             {type === 'area' ? 'Incident Trend (24h)' : 'Resolution Rate'}
           </span>
         </div>
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            <span className="w-2 h-2 rounded-full" style={{ background: '#6366f1' }} />
+            <span className="w-2 h-2 rounded-full" style={{ background: '#6366f1', boxShadow: '0 0 6px rgba(99,102,241,0.5)' }} />
             Incidents
           </span>
           <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            <span className="w-2 h-2 rounded-full" style={{ background: '#10b981' }} />
+            <span className="w-2 h-2 rounded-full" style={{ background: '#10b981', boxShadow: '0 0 6px rgba(16,185,129,0.5)' }} />
             Resolved
           </span>
         </div>
@@ -152,27 +152,27 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
               <AreaChart data={data}>
               <defs>
                 <linearGradient id="gradIncident" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  <stop offset="5%" stopColor="rgba(99,102,241,0.3)" />
+                  <stop offset="95%" stopColor="transparent" />
                 </linearGradient>
                 <linearGradient id="gradResolved" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  <stop offset="5%" stopColor="rgba(16,185,129,0.3)" />
+                  <stop offset="95%" stopColor="transparent" />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--grid-line)" />
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="incidents" name="Incidents" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#gradIncident)" />
-              <Area type="monotone" dataKey="resolved" name="Resolved" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#gradResolved)" />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--grid-line)', strokeWidth: 2, strokeDasharray: '4 4' }} />
+              <Area type="monotone" dataKey="incidents" name="Incidents" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#gradIncident)" activeDot={{ r: 4, style: { filter: 'drop-shadow(0 0 4px rgba(99,102,241,0.4))' } }} />
+              <Area type="monotone" dataKey="resolved" name="Resolved" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#gradResolved)" activeDot={{ r: 4, style: { filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.4))' } }} />
             </AreaChart>
           ) : (
               <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--grid-line)" />
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--bg-input)' }} />
               <Bar dataKey="incidents" name="Incidents" fill="#6366f1" radius={[4, 4, 0, 0]} />
               <Bar dataKey="resolved" name="Resolved" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -182,7 +182,7 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
       </div>
 
       {/* Mini stats */}
-      <div className="flex gap-6 pt-4 mt-4" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="flex gap-6 pt-4 mt-4 divider-glow border-t-0">
         {mini.map(s => (
           <div key={s.label} className="flex flex-col gap-1">
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</span>

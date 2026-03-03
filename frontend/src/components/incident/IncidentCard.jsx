@@ -24,17 +24,18 @@ const SEVERITY_ACCENTS = {
 function MetricTile({ icon: Icon, label, value, hint, accent }) {
   return (
     <div
-      className="rounded-xl px-3 py-2 flex items-center gap-3"
+      className="rounded-xl px-3 py-2 flex items-center gap-3 transition-all hover-lift"
       style={{
         background: 'rgba(255,255,255,0.02)',
         border: '1px solid rgba(255,255,255,0.06)',
       }}
     >
       <div
-        className="h-8 w-8 rounded-lg flex items-center justify-center"
-        style={{ background: `${accent}1a`, color: accent }}
+        className="h-8 w-8 rounded-lg flex items-center justify-center relative overflow-hidden"
+        style={{ background: `${accent}1a`, color: accent, boxShadow: `0 0 15px ${accent}33` }}
       >
-        <Icon size={14} strokeWidth={2} />
+        <div className="absolute inset-0 opacity-50" style={{ background: `radial-gradient(circle, ${accent}66 0%, transparent 70%)` }} />
+        <Icon size={14} strokeWidth={2} className="relative z-10" />
       </div>
       <div className="flex-1 min-w-0">
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
@@ -68,16 +69,17 @@ export default function IncidentCard({ incident }) {
 
   return (
     <div
-      className="rounded-2xl"
+      className="rounded-2xl transition-all"
       style={{
-        background: `linear-gradient(135deg, ${accent}1f, transparent 70%)`,
+        background: `linear-gradient(135deg, ${accent}33, transparent 80%)`,
         padding: 1,
+        boxShadow: `0 4px 20px ${accent}1a`,
       }}
     >
       <Link
         to={`/incidents/${incident.id}`}
-        className="block h-full rounded-[22px] glass p-5 glass-hover backdrop-blur-md"
-        style={{ border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}
+        className="block h-full rounded-[22px] glass p-5 glass-hover backdrop-blur-md group"
+        style={{ border: '1px solid rgba(255,255,255,0.08)', position: 'relative' }}
       >
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
@@ -89,7 +91,7 @@ export default function IncidentCard({ incident }) {
             >
               <span
                 className="h-2 w-2 rounded-full"
-                style={{ display: 'inline-flex', background: accent }}
+                style={{ display: 'inline-flex', background: accent, boxShadow: `0 0 10px ${accent}` }}
               />
               {truncateId(incident.id)}
             </button>
@@ -124,8 +126,8 @@ export default function IncidentCard({ incident }) {
         </div>
 
         <h3
-          className="leading-tight"
-          style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-heading)' }}
+          className="leading-tight mt-3 mb-1"
+          style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}
         >
           {incident.title}
         </h3>
@@ -166,8 +168,8 @@ export default function IncidentCard({ incident }) {
           <div className="flex flex-wrap items-center gap-2">
             {alertCount > 1 && (
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 animate-fade-in"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', animationDelay: '100ms', animationFillMode: 'both' }}
               >
                 <Repeat size={10} />
                 amplified
@@ -175,8 +177,8 @@ export default function IncidentCard({ incident }) {
             )}
             {unstable && (
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#fbbf24', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)' }}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 animate-fade-in"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#fbbf24', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', animationDelay: '150ms', animationFillMode: 'both' }}
               >
                 <AlertTriangle size={10} />
                 flapping
@@ -184,8 +186,8 @@ export default function IncidentCard({ incident }) {
             )}
             {confidence != null && (
               <span
-                className="inline-flex items-center gap-2 rounded-full px-2 py-0.5"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(8,145,178,0.15)', color: '#38bdf8', border: '1px solid rgba(8,145,178,0.3)' }}
+                className="inline-flex items-center gap-2 rounded-full px-2 py-0.5 animate-fade-in"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(8,145,178,0.15)', color: '#38bdf8', border: '1px solid rgba(8,145,178,0.3)', animationDelay: '200ms', animationFillMode: 'both' }}
               >
                 <GaugeCircle size={10} />
                 AI {confidence}%
@@ -193,8 +195,8 @@ export default function IncidentCard({ incident }) {
             )}
             {meta.recommendation?.proposed_action && (
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(56,189,248,0.08)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.2)' }}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 animate-fade-in"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(56,189,248,0.08)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.2)', animationDelay: '250ms', animationFillMode: 'both' }}
               >
                 <Flame size={10} />
                 {meta.recommendation.proposed_action}
@@ -202,14 +204,14 @@ export default function IncidentCard({ incident }) {
             )}
             {manualReason && (
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.25)' }}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 animate-fade-in"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.25)', animationDelay: '300ms', animationFillMode: 'both' }}
               >
                 Note Saved
               </span>
             )}
           </div>
-          <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
+          <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} className="transition-transform group-hover:translate-x-1" />
         </div>
 
         {manualReason && (

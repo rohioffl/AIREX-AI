@@ -75,7 +75,7 @@ export default function DashboardPage() {
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
             <TrendingUp size={26} style={{ color: '#22d3ee' }} />
-            Command Dashboard
+            <span className="text-gradient-multi">Command Dashboard</span>
             <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? '#10b981' : '#f43f5e' }}>
               {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: '#10b981', opacity: 0.3 }} />}
             </span>
@@ -86,7 +86,7 @@ export default function DashboardPage() {
         </div>
         <button
           onClick={() => reload()}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg"
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-all hover-lift hover:border-indigo-500/30 hover:text-indigo-400 hover:shadow-[0_0_15px_rgba(99,102,241,0.15)]"
           style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
         >
           <RefreshCcw size={14} /> Refresh
@@ -94,23 +94,23 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard title="Active" value={String(summary.active)} trend="Awaiting resolution" trendType="neutral" icon={Bell} />
-        <MetricCard title="Critical" value={String(summary.critical)} trend={summary.critical ? 'Needs attention' : 'Stable'} trendType={summary.critical ? 'negative' : 'positive'} icon={AlertTriangle} isCritical={summary.critical > 0} />
-        <MetricCard title="Resolved (24h)" value={String(summary.resolvedToday)} trend="Closed in last day" trendType="positive" icon={CheckCircle} />
-        <MetricCard
-          title="Live Sessions"
-          value={connected ? 'Connected' : reconnecting ? 'Reconnecting' : 'Disconnected'}
-          trend={connected ? 'SSE connected' : reconnecting ? 'Attempting reconnect' : 'SSE disconnected'}
-          trendType={connected ? 'positive' : reconnecting ? 'neutral' : 'negative'}
-          icon={Activity}
-        />
+        {[
+          { title: 'Active', value: String(summary.active), trend: 'Awaiting resolution', trendType: 'neutral', icon: Bell },
+          { title: 'Critical', value: String(summary.critical), trend: summary.critical ? 'Needs attention' : 'Stable', trendType: summary.critical ? 'negative' : 'positive', icon: AlertTriangle, isCritical: summary.critical > 0 },
+          { title: 'Resolved (24h)', value: String(summary.resolvedToday), trend: 'Closed in last day', trendType: 'positive', icon: CheckCircle },
+          { title: 'Live Sessions', value: connected ? 'Connected' : reconnecting ? 'Reconnecting' : 'Disconnected', trend: connected ? 'SSE connected' : reconnecting ? 'Attempting reconnect' : 'SSE disconnected', trendType: connected ? 'positive' : reconnecting ? 'neutral' : 'negative', icon: Activity }
+        ].map((props, i) => (
+          <div key={i} className="animate-fade-in" style={{ animationDelay: `${i * 100}ms`, animationFillMode: 'both' }}>
+            <MetricCard {...props} />
+          </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <SystemGraph incidents={incidents} type={graphType} />
         </div>
-        <div className="glass p-5 flex flex-col gap-4">
+        <div className="glass glass-purple p-5 flex flex-col gap-4">
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Telemetry</span>
           <div className="flex-1 flex flex-col gap-3">
             {[
@@ -168,7 +168,9 @@ export default function DashboardPage() {
 
       {loading && (
         <div className="space-y-3">
-          {[...Array(3)].map((_, idx) => <div key={idx} className="glass rounded-xl h-20 shimmer" />)}
+          <div className="glass rounded-xl h-20 skeleton" />
+          <div className="glass rounded-xl h-16 skeleton" />
+          <div className="glass rounded-xl h-24 skeleton" />
         </div>
       )}
 

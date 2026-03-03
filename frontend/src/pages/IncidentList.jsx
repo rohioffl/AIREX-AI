@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Bell,
@@ -14,6 +14,7 @@ import {
   Radio,
   ArrowUpRight,
   ChevronRight,
+  Search,
 } from 'lucide-react'
 import useIncidents from '../hooks/useIncidents'
 import IncidentCard from '../components/incident/IncidentCard'
@@ -30,11 +31,24 @@ const STATES = [
   'FAILED_VERIFICATION', 'REJECTED',
 ]
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+const ALERT_TYPES = ['cpu_high', 'memory_high', 'disk_full', 'healthcheck', 'network_check']
 
 export default function IncidentList({ initialFilters = {}, title = 'Dashboard' }) {
-  const { incidents, loading, error, connected, reconnecting, filters, setFilters } = useIncidents(initialFilters)
+  const { incidents, loading, error, connected, reconnecting, filters, setFilters, loadMore, hasMore, total } = useIncidents(initialFilters)
   const [view, setView] = useState('list')
   const [graphType, setGraphType] = useState('area')
+  const [searchInput, setSearchInput] = useState(filters.search || '')
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters(f => {
+        if (f.search === (searchInput || undefined) || f.search === searchInput) return f
+        return { ...f, search: searchInput || undefined }
+      })
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput, setFilters])
 
   const stats = useMemo(() => ({
     total: incidents.length,
@@ -57,6 +71,11 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
             Real-time incident monitoring and autonomous resolution.
+            {total !== undefined && total !== null && (
+              <span className="ml-3 font-mono text-xs px-2 py-0.5 rounded-md" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                Showing {incidents.length} of {total}
+              </span>
+            )}
           </p>
         </div>
       </div>
@@ -111,6 +130,28 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
       {/* Controls */}
       <div className="glass rounded-xl p-3 flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <div className="relative flex items-center w-full md:w-48">
+            <div className="absolute left-2.5" style={{ color: isSearchFocused ? 'var(--neon-indigo)' : 'var(--text-muted)' }}>
+              <Search size={14} />
+            </div>
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              className={`w-full pl-8 pr-3 py-1.5 rounded-lg outline-none transition-all placeholder:opacity-50 ${isSearchFocused ? 'glow-indigo' : ''}`}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+                background: 'var(--bg-input)',
+                border: isSearchFocused ? '1px solid rgba(99,102,241,0.5)' : '1px solid var(--border)',
+              }}
+            />
+          </div>
+          <Select value={filters.alertType || ''} onChange={(v) => setFilters(f => ({ ...f, alertType: v || null }))} options={ALERT_TYPES} placeholder="All Alert Types" />
           <Select value={filters.state || ''} onChange={(v) => setFilters(f => ({ ...f, state: v || null }))} options={STATES} placeholder="All States" />
           <Select value={filters.severity || ''} onChange={(v) => setFilters(f => ({ ...f, severity: v || null }))} options={SEVERITIES} placeholder="All Severities" />
         </div>
@@ -142,7 +183,10 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
       {/* Loading */}
       {loading && (
         <div className="space-y-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="glass rounded-xl h-16 shimmer" />)}
+          <div className="glass rounded-xl h-16 skeleton" />
+          <div className="glass rounded-xl h-20 skeleton" />
+          <div className="glass rounded-xl h-24 skeleton" />
+          <div className="glass rounded-xl h-16 skeleton" />
         </div>
       )}
 
@@ -156,22 +200,40 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
       {/* Content */}
       {!loading && !error && (
         incidents.length === 0 ? (
-          <div className="glass rounded-xl py-20 text-center">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full mb-4" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>
+          <div className="glass glass-cyan rounded-xl py-20 text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-b from-[rgba(34,211,238,0.05)] to-transparent pointer-events-none" />
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full mb-4 relative z-10" style={{ background: 'var(--bg-input)', color: 'var(--neon-cyan)', border: '1px solid rgba(34,211,238,0.2)', boxShadow: '0 0 15px rgba(34,211,238,0.1)' }}>
               <Bell size={20} />
             </div>
-            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>No incidents match your criteria.</p>
-          </div>
-        ) : view === 'grid' ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {incidents.map(inc => <IncidentCard key={inc.id} incident={inc} />)}
+            <p className="relative z-10" style={{ fontSize: 14, color: 'var(--text-secondary)' }}>No incidents match your criteria.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {incidents.map(inc => (
-              <IncidentListRow key={inc.id} incident={inc} />
-            ))}
-          </div>
+          <>
+            {view === 'grid' ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {incidents.map((inc, i) => (
+                  <div key={inc.id} className="animate-fade-in slide-down" style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'both' }}>
+                    <IncidentCard incident={inc} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {incidents.map((inc, i) => (
+                  <div key={inc.id} className="animate-fade-in slide-down" style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'both' }}>
+                    <IncidentListRow incident={inc} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {hasMore && (
+              <div className="flex justify-center pt-4">
+                <button onClick={loadMore} className="px-6 py-2.5 rounded-xl font-semibold text-sm transition-all hover-lift" style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)' }}>
+                  Load More Incidents
+                </button>
+              </div>
+            )}
+          </>
         )
       )}
     </div>
