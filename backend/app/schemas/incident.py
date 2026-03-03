@@ -68,6 +68,7 @@ class IncidentListItem(BaseModel):
     updated_at: datetime
     meta: dict | None = None
     host_key: str | None = None
+    correlation_group_id: str | None = None
     # Resolution tracking
     resolution_type: str | None = None
     resolution_duration_seconds: float | None = None
@@ -85,6 +86,33 @@ class RelatedIncidentItem(BaseModel):
     created_at: datetime
 
 
+class CorrelatedIncidentItem(BaseModel):
+    """Minimal incident info for cross-host correlation groups."""
+
+    id: uuid.UUID
+    alert_type: str
+    state: IncidentState
+    severity: SeverityLevel
+    title: str
+    host_key: str | None = None
+    created_at: datetime
+
+
+class CorrelationGroupSummary(BaseModel):
+    """Summary of a cross-host correlation group."""
+
+    group_id: str
+    alert_type: str
+    incident_count: int
+    affected_hosts: int
+    host_keys: list[str] = []
+    states: dict[str, int] = {}
+    severities: dict[str, int] = {}
+    first_seen: str | None = None
+    last_seen: str | None = None
+    span_seconds: int = 0
+
+
 class IncidentDetail(IncidentListItem):
     evidence: list[EvidenceResponse] = []
     state_transitions: list[StateTransitionResponse] = []
@@ -93,6 +121,10 @@ class IncidentDetail(IncidentListItem):
     related_incidents: list[RelatedIncidentItem] = []
     rag_context: str | None = None
     host_key: str | None = None
+    # Correlation grouping
+    correlation_group_id: str | None = None
+    correlated_incidents: list[CorrelatedIncidentItem] = []
+    correlation_summary: CorrelationGroupSummary | None = None
     # Resolution tracking
     resolution_type: str | None = None
     resolution_summary: str | None = None

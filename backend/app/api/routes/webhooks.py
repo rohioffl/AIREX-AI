@@ -703,6 +703,19 @@ async def ingest_site24x7(
         monitor_type=monitor_type,
     )
 
+    # Cross-host correlation (Phase 4 ARE)
+    try:
+        from app.services.correlation_service import correlate_incident
+        group_id = await correlate_incident(session, incident)
+        if group_id:
+            logger.info(
+                "correlation_group_assigned",
+                incident_id=str(incident.id),
+                group_id=group_id,
+            )
+    except Exception as exc:
+        logger.warning("correlation_failed", error=str(exc))
+
     # Enqueue async investigation task via ARQ worker
     try:
         from arq import create_pool
@@ -876,6 +889,19 @@ async def ingest_generic(
         incident_id=str(incident.id),
         alert_type=payload.alert_type,
     )
+
+    # Cross-host correlation (Phase 4 ARE)
+    try:
+        from app.services.correlation_service import correlate_incident
+        group_id = await correlate_incident(session, incident)
+        if group_id:
+            logger.info(
+                "correlation_group_assigned",
+                incident_id=str(incident.id),
+                group_id=group_id,
+            )
+    except Exception as exc:
+        logger.warning("correlation_failed", error=str(exc))
 
     # Enqueue async investigation task via ARQ worker
     try:

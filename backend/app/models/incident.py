@@ -121,6 +121,12 @@ class Incident(Base, TenantMixin):
         String(512), nullable=True, index=False
     )
 
+    # Cross-host correlation group (Phase 4 ARE)
+    # SHA256[:16] of (tenant_id + alert_type + time_bucket)
+    correlation_group_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+
     # ── Resolution tracking (Phase 2 ARE) ────────────────────────
     resolution_type: Mapped[str | None] = mapped_column(
         String(50), nullable=True

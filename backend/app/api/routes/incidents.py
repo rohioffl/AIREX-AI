@@ -24,6 +24,8 @@ from app.models.enums import IncidentState, SeverityLevel
 from app.models.incident import Incident
 from app.schemas.incident import (
     ApproveRequest,
+    CorrelatedIncidentItem,
+    CorrelationGroupSummary,
     EvidenceResponse,
     ExecutionResponse,
     FeedbackRequest,
@@ -218,6 +220,40 @@ async def get_incident(
     ]
     executions = [ExecutionResponse.model_validate(ex) for ex in incident.executions]
 
+    # Cross-host correlated incidents (Phase 4 ARE)
+    correlated: list = []
+    correlation_summary_data = None
+    if incident.correlation_group_id:
+        try:
+            from app.services.correlation_service import (
+                get_correlated_incidents,
+                get_correlation_summary,
+            )
+
+            correlated_incidents = await get_correlated_incidents(
+                session, tenant_id, incident.correlation_group_id,
+                exclude_id=incident_id,
+            )
+            for other in correlated_incidents[:20]:
+                correlated.append(
+                    CorrelatedIncidentItem(
+                        id=other.id,
+                        alert_type=other.alert_type,
+                        state=other.state,
+                        severity=other.severity,
+                        title=other.title,
+                        host_key=other.host_key,
+                        created_at=other.created_at,
+                    )
+                )
+            summary_dict = await get_correlation_summary(
+                session, tenant_id, incident.correlation_group_id,
+            )
+            if summary_dict:
+                correlation_summary_data = CorrelationGroupSummary(**summary_dict)
+        except Exception:
+            pass  # Don't fail detail endpoint if correlation lookup fails
+
     return IncidentDetail(
         id=incident.id,
         tenant_id=incident.tenant_id,
@@ -238,6 +274,10 @@ async def get_incident(
         rag_context=rag_context,
         related_incidents=related,
         host_key=incident.host_key,
+        # Correlation grouping
+        correlation_group_id=incident.correlation_group_id,
+        correlated_incidents=correlated,
+        correlation_summary=correlation_summary_data,
         # Resolution tracking
         resolution_type=incident.resolution_type,
         resolution_summary=incident.resolution_summary,

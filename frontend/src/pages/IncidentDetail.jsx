@@ -36,6 +36,7 @@ import IncidentChat from '../components/incident/IncidentChat'
 import ReasoningChain from '../components/incident/ReasoningChain'
 import ResolutionOutcome from '../components/incident/ResolutionOutcome'
 import FallbackHistory from '../components/incident/FallbackHistory'
+import CorrelationGroup from '../components/incident/CorrelationGroup'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import AcknowledgeRejectModal from '../components/incident/AcknowledgeRejectModal'
 import { formatTimestamp, formatDuration, formatRelativeTime } from '../utils/formatters'
@@ -481,6 +482,9 @@ export default function IncidentDetail() {
         )}
         {/* 0.5 Investigation Timeline (live probe progress) */}
         <InvestigationTimeline probeSteps={probeSteps} />
+
+        {/* 0.7 Cross-Host Correlation (Phase 4 ARE) */}
+        <CorrelationGroup incident={incident} />
 
         {/* 1. AI Investigation */}
         <AIAnalysisPanel incident={incident} />
