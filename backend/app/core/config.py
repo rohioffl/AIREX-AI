@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     MAX_EXECUTION_RETRIES: int = 3
     MAX_VERIFICATION_RETRIES: int = 3
 
+    # ── Auto-Approval Policy ────────────────────────────────────
+    # Confidence threshold for auto-approval (0.0-1.0).
+    # Actions with confidence >= threshold AND policy.auto_approve=True
+    # skip human approval. Set to 1.0 to disable confidence-based auto-approval.
+    AUTO_APPROVAL_CONFIDENCE_THRESHOLD: float = 0.85
+    # Actions with risk_level=HIGH are never auto-approved regardless of confidence.
+    AUTO_APPROVAL_BLOCK_HIGH_RISK: bool = True
+
     # Webhook signature verification (empty = skip in dev)
     WEBHOOK_SECRET: str = ""
 

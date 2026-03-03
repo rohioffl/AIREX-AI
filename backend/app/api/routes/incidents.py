@@ -254,14 +254,16 @@ async def approve_incident(
     session: TenantSession,
     redis: Redis,
     body: ApproveRequest,
+    current_user: CurrentUser,
 ) -> IncidentCreatedResponse:
     """
     Approve an action for execution.
 
     1. Validate state == AWAITING_APPROVAL
-    2. Acquire distributed Redis lock
-    3. Transition to EXECUTING
-    4. Queue async execution task
+    2. Enforce senior approval if policy requires it
+    3. Acquire distributed Redis lock
+    4. Transition to EXECUTING
+    5. Queue async execution task
     """
     # Fetch incident
     result = await session.execute(
@@ -282,6 +284,22 @@ async def approve_incident(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Incident is in state {incident.state.value}, expected AWAITING_APPROVAL",
         )
+
+    # Enforce senior approval if the action's policy requires it
+    meta = dict(incident.meta or {})
+    approval_level = meta.get("_approval_level", "operator")
+    if approval_level == "senior" and current_user is not None:
+        from app.core.rbac import has_permission
+        from app.models.enums import Permission
+
+        if not has_permission(current_user.role, Permission.INCIDENT_SENIOR_APPROVE):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Action '{body.action}' requires senior/admin approval. "
+                    f"Role '{current_user.role}' does not have senior_approve permission."
+                ),
+            )
 
     # Idempotency check — return early if already processed
     idem_key = f"approve:{tenant_id}:{body.idempotency_key}"

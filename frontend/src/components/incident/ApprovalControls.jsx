@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ShieldCheck, Ban, Loader } from 'lucide-react'
+import { ShieldCheck, ShieldAlert, Ban, Loader } from 'lucide-react'
 import { approveIncident, rejectIncident } from '../../services/api'
 import ConfirmationModal from '../common/ConfirmationModal'
 import { extractErrorMessage } from '../../utils/errorHandler'
@@ -17,6 +17,10 @@ export default function ApprovalControls({ incident }) {
   const recommendation = incident.recommendation || incident.meta?.recommendation
   const actionType = recommendation?.proposed_action
   const canApprove = incident.state === 'AWAITING_APPROVAL' && Boolean(actionType)
+
+  // Approval gate metadata
+  const approvalLevel = incident.meta?._approval_level || null
+  const seniorRequired = Boolean(incident.meta?._senior_required)
 
   if (!manualRequired && !canApprove) return null
 
@@ -61,11 +65,22 @@ export default function ApprovalControls({ incident }) {
     <div className="glass rounded-xl p-5" style={{ borderLeft: manualRequired ? '4px solid #f87171' : '4px solid #22d3ee', background: manualRequired ? 'rgba(248,113,113,0.06)' : 'rgba(34,211,238,0.06)' }}>
       <div className="flex items-center gap-2 mb-3">
         <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: manualRequired ? 'rgba(248,113,113,0.15)' : 'rgba(34,211,238,0.15)' }}>
-          <ShieldCheck size={12} style={{ color: manualRequired ? '#f87171' : '#22d3ee' }} />
+          {seniorRequired
+            ? <ShieldAlert size={12} style={{ color: '#f43f5e' }} />
+            : <ShieldCheck size={12} style={{ color: manualRequired ? '#f87171' : '#22d3ee' }} />
+          }
         </div>
         <h3 style={{ fontSize: 13, fontWeight: 700, color: manualRequired ? '#f87171' : '#22d3ee', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          {manualRequired ? 'Manual Review' : 'Approval Required'}
+          {seniorRequired ? 'Senior Approval Required' : manualRequired ? 'Manual Review' : 'Approval Required'}
         </h3>
+        {seniorRequired && (
+          <span
+            className="px-2 py-0.5 rounded"
+            style={{ fontSize: 10, fontWeight: 700, color: '#f43f5e', background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.2)' }}
+          >
+            ADMIN ONLY
+          </span>
+        )}
       </div>
 
       {canApprove ? (
@@ -125,7 +140,12 @@ export default function ApprovalControls({ incident }) {
             className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 12px rgba(99,102,241,0.2)' }}
           >
-            {loading ? <><Loader size={14} className="animate-spin" /> Processing...</> : <><ShieldCheck size={14} /> Approve & Execute</>}
+            {loading ? <><Loader size={14} className="animate-spin" /> Processing...</> : (
+              <>
+                {seniorRequired ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
+                {seniorRequired ? 'Senior Approve & Execute' : 'Approve & Execute'}
+              </>
+            )}
           </button>
         )}
         <button
@@ -140,8 +160,12 @@ export default function ApprovalControls({ incident }) {
 
       <ConfirmationModal
         open={modalOpen}
-        title="Confirm Execution"
-        message={`You are about to execute "${actionType}" on this incident. This action will be logged and cannot be undone.`}
+        title={seniorRequired ? 'Senior Approval — Confirm Execution' : 'Confirm Execution'}
+        message={
+          seniorRequired
+            ? `You are about to execute "${actionType}" on this incident. This action requires senior/admin approval and will be audited. This action will be logged and cannot be undone.`
+            : `You are about to execute "${actionType}" on this incident. This action will be logged and cannot be undone.`
+        }
         onConfirm={handleApprove}
         onCancel={() => setModalOpen(false)}
       />

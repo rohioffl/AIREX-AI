@@ -15,6 +15,9 @@ import {
   Cloud,
   MapPin,
   Ban,
+  ShieldAlert,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react'
 import useIncidentDetail from '../hooks/useIncidentDetail'
 import { useTheme } from '../context/ThemeContext'
@@ -42,6 +45,12 @@ const SEVERITY_ACCENT = {
   HIGH: '#f97316',
   MEDIUM: '#f59e0b',
   LOW: '#10b981',
+}
+
+const APPROVAL_LEVEL_BADGE = {
+  auto: { label: 'Auto-Approved', color: '#10b981', Icon: Zap },
+  operator: { label: 'Operator Approval', color: '#3b82f6', Icon: ShieldCheck },
+  senior: { label: 'Senior Approval', color: '#f43f5e', Icon: ShieldAlert },
 }
 
 export default function IncidentDetail() {
@@ -118,6 +127,10 @@ export default function IncidentDetail() {
   const accent = SEVERITY_ACCENT[incident.severity] || '#f97316'
   const manualReason = typeof meta._manual_review_reason === 'string' ? meta._manual_review_reason.trim() : ''
   const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
+
+  // Approval gate metadata
+  const approvalLevel = meta._approval_level || null
+  const approvalBadge = approvalLevel ? APPROVAL_LEVEL_BADGE[approvalLevel] : null
 
   return (
     <div className="space-y-6 pb-10 animate-fade-in" style={{ width: '100%', maxWidth: '100%' }}>
@@ -291,6 +304,22 @@ export default function IncidentDetail() {
                     <div className="mt-3 text-sm" style={{ color: 'var(--text-heading)', fontWeight: 600 }}>
                       <Activity size={14} style={{ marginRight: 4, display: 'inline-block' }} />
                       {meta.recommendation.proposed_action}
+                    </div>
+                  )}
+                  {/* Approval Level Badge */}
+                  {approvalBadge && (
+                    <div
+                      className="mt-3 flex items-center gap-1.5 px-2 py-1 rounded-md"
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: approvalBadge.color,
+                        background: `${approvalBadge.color}15`,
+                        border: `1px solid ${approvalBadge.color}30`,
+                      }}
+                    >
+                      <approvalBadge.Icon size={11} />
+                      {approvalBadge.label}
                     </div>
                   )}
                 </div>

@@ -22,6 +22,7 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         # All operator permissions
         Permission.INCIDENT_VIEW,
         Permission.INCIDENT_APPROVE,
+        Permission.INCIDENT_SENIOR_APPROVE,  # admins can approve senior-gated actions
         Permission.INCIDENT_REJECT,
         Permission.INCIDENT_DELETE,
         # User management
@@ -45,7 +46,7 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
 def get_permissions_for_role(role: str) -> set[Permission]:
     """
     Get all permissions for a given role string.
-    
+
     Returns empty set if role is unknown.
     """
     try:

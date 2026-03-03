@@ -12,7 +12,7 @@ from app.actions.registry import ACTION_REGISTRY
 from app.core.config import settings
 from app.core.events import emit_recommendation_ready
 from app.core.metrics import ai_failure_total, ai_request_total
-from app.core.policy import check_policy, requires_approval
+from app.core.policy import check_policy, evaluate_approval, requires_approval
 from app.core.state_machine import transition_state
 from app.llm.client import LLMClient
 from app.models.enums import IncidentState
@@ -146,6 +146,20 @@ async def generate_recommendation(
     rec_dict = recommendation.model_dump()
     rec_dict = _serialize_recommendation(rec_dict)
     meta["recommendation"] = rec_dict
+
+    # Evaluate approval policy (confidence-gated + senior approval)
+    decision = evaluate_approval(
+        action_type=recommendation.proposed_action,
+        confidence=recommendation.confidence,
+        risk_level=recommendation.risk_level,
+    )
+
+    # Store approval decision in meta for the approval endpoint to enforce
+    meta["_approval_level"] = decision.level.value
+    meta["_approval_reason"] = decision.reason
+    meta["_confidence_met"] = decision.confidence_met
+    meta["_senior_required"] = decision.senior_required
+
     incident.meta = meta
     flag_modified(incident, "meta")
     await session.flush()
@@ -155,6 +169,8 @@ async def generate_recommendation(
         action=recommendation.proposed_action,
         risk=recommendation.risk_level.value,
         confidence=recommendation.confidence,
+        approval_level=decision.level.value,
+        requires_human=decision.requires_human,
     )
 
     # SSE: recommendation ready
@@ -167,13 +183,13 @@ async def generate_recommendation(
     except Exception:
         pass
 
-    # Transition based on approval policy
-    if requires_approval(recommendation.proposed_action):
+    # Transition based on approval decision
+    if decision.requires_human:
         await transition_state(
             session,
             incident,
             IncidentState.AWAITING_APPROVAL,
-            reason=f"Recommendation: {recommendation.proposed_action} (confidence={recommendation.confidence:.2f})",
+            reason=decision.reason,
         )
     else:
         # Auto-approve: skip AWAITING_APPROVAL, go straight to EXECUTING
@@ -181,12 +197,13 @@ async def generate_recommendation(
             "auto_approving_action",
             action=recommendation.proposed_action,
             confidence=recommendation.confidence,
+            reason=decision.reason,
         )
         await transition_state(
             session,
             incident,
             IncidentState.AWAITING_APPROVAL,
-            reason=f"Auto-approved: {recommendation.proposed_action} (confidence={recommendation.confidence:.2f})",
+            reason=decision.reason,
         )
         await transition_state(
             session,

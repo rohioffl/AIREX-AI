@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Sparkles, ShieldCheck, Loader, AlertCircle, CheckCircle2, XCircle, Info } from 'lucide-react'
+import { Sparkles, ShieldCheck, Loader, AlertCircle, CheckCircle2, XCircle, Info, ShieldAlert, Zap } from 'lucide-react'
 import { approveIncident } from '../../services/api'
 import ConfirmationModal from '../common/ConfirmationModal'
 import { extractErrorMessage } from '../../utils/errorHandler'
@@ -8,6 +8,12 @@ const RISK_THEME = {
   LOW: { border: '#10b981', bg: 'rgba(16,185,129,0.06)', text: '#10b981' },
   MED: { border: '#f59e0b', bg: 'rgba(245,158,11,0.06)', text: '#f59e0b' },
   HIGH: { border: '#f43f5e', bg: 'rgba(244,63,94,0.06)', text: '#f43f5e' },
+}
+
+const APPROVAL_LEVEL_THEME = {
+  auto: { label: 'Auto-Approved', color: '#10b981', bg: 'rgba(16,185,129,0.1)', icon: Zap },
+  operator: { label: 'Operator Approval', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', icon: ShieldCheck },
+  senior: { label: 'Senior / Admin Approval Required', color: '#f43f5e', bg: 'rgba(244,63,94,0.1)', icon: ShieldAlert },
 }
 
 export default function AIRecommendationApproval({ incident, ragContext }) {
@@ -41,6 +47,12 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
   const manualRequired = Boolean(incident.meta?._manual_review_required)
   const canApprove = incident.state === 'AWAITING_APPROVAL' && Boolean(normalizedRecommendation?.proposed_action)
   const awaitingApproval = incident.state === 'AWAITING_APPROVAL'
+
+  // Approval gate metadata from backend
+  const approvalLevel = incident.meta?._approval_level || null
+  const approvalReason = incident.meta?._approval_reason || null
+  const confidenceMet = incident.meta?._confidence_met !== false
+  const seniorRequired = Boolean(incident.meta?._senior_required)
   
   // Always show if there's pattern analysis, recommendation, manual review required, or awaiting approval
   const shouldShow = ragContext || normalizedRecommendation || manualRequired || awaitingApproval
@@ -69,6 +81,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
 
   const risk = (normalizedRecommendation?.risk_level || 'MED').toUpperCase()
   const theme = RISK_THEME[risk] || RISK_THEME.MED
+  const approvalTheme = approvalLevel ? APPROVAL_LEVEL_THEME[approvalLevel] : null
 
   return (
     <div className="space-y-6" style={{ width: '100%', maxWidth: '100%' }}>
@@ -144,13 +157,56 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
               </p>
             )}
           </div>
-          <span
-            className="px-2.5 py-1 rounded-md"
-            style={{ fontSize: 11, fontWeight: 700, color: theme.border, background: 'var(--bg-input)', border: `1px solid ${theme.border}30` }}
-          >
-            {risk} RISK
-          </span>
+          <div className="flex items-center gap-2">
+            {/* Senior Approval Badge */}
+            {approvalTheme && (
+              <span
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: approvalTheme.color,
+                  background: approvalTheme.bg,
+                  border: `1px solid ${approvalTheme.color}30`,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <approvalTheme.icon size={12} />
+                {approvalTheme.label}
+              </span>
+            )}
+            <span
+              className="px-2.5 py-1 rounded-md"
+              style={{ fontSize: 11, fontWeight: 700, color: theme.border, background: 'var(--bg-input)', border: `1px solid ${theme.border}30` }}
+            >
+              {risk} RISK
+            </span>
+          </div>
         </div>
+
+        {/* Confidence Gate Info Banner */}
+        {approvalLevel && approvalReason && canApprove && (
+          <div
+            className="mb-4 p-3 rounded-lg flex items-start gap-2"
+            style={{
+              background: approvalTheme?.bg || 'rgba(59,130,246,0.05)',
+              border: `1px solid ${(approvalTheme?.color || '#3b82f6')}20`,
+            }}
+          >
+            <Info size={14} style={{ color: approvalTheme?.color || '#3b82f6', marginTop: 1, flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 600, color: approvalTheme?.color || '#3b82f6', marginBottom: 2 }}>
+                {seniorRequired ? 'Senior/Admin approval required for this action' : 
+                 !confidenceMet ? 'Confidence below auto-approval threshold' :
+                 'Manual approval required by policy'}
+              </p>
+              <p style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                {approvalReason}
+              </p>
+            </div>
+          </div>
+        )}
 
         {!normalizedRecommendation ? (
           <div className="space-y-4">
@@ -318,7 +374,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
               <p className="mb-4 px-3 py-2 rounded-md" style={{ fontSize: 12, color: '#fb7185', background: 'rgba(244,63,94,0.1)' }}>{error}</p>
             )}
 
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-3 flex-wrap items-center">
               <button
                 onClick={() => setModalOpen(true)}
                 disabled={loading || !actionToApprove}
@@ -331,23 +387,34 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                   </>
                 ) : (
                   <>
-                    <ShieldCheck size={14} /> Approve & Execute
+                    {seniorRequired ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
+                    {seniorRequired ? 'Senior Approve & Execute' : 'Approve & Execute'}
                   </>
                 )}
               </button>
+              {seniorRequired && (
+                <span style={{ fontSize: 10, color: '#f43f5e', fontWeight: 600 }}>
+                  Requires admin role
+                </span>
+              )}
             </div>
           </div>
         )}
 
         <ConfirmationModal
           open={modalOpen}
-          title="Confirm Execution"
+          title={seniorRequired ? 'Senior Approval — Confirm Execution' : 'Confirm Execution'}
           message={
             <div className="space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
               <p>You are about to execute <strong style={{ fontFamily: 'var(--font-mono)', color: '#818cf8' }}>{actionToApprove}</strong> on this incident.</p>
               {normalizedRecommendation && (!selectedAction || selectedAction === normalizedRecommendation.proposed_action) && (
                 <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   This is the primary recommendation with {(normalizedRecommendation.confidence * 100).toFixed(0)}% confidence.
+                </p>
+              )}
+              {seniorRequired && (
+                <p style={{ fontSize: 12, color: '#f43f5e', fontWeight: 600 }}>
+                  This action requires senior/admin approval and will be audited.
                 </p>
               )}
               <p>This action will be logged and cannot be undone.</p>

@@ -65,11 +65,42 @@ export interface Execution {
   duration_seconds: number | null
 }
 
+export interface AlternativeRecommendation {
+  action: string
+  rationale: string
+  confidence: number
+  risk_level?: RiskLevel
+}
+
 export interface Recommendation {
   root_cause: string
   proposed_action: string
   risk_level: RiskLevel
   confidence: number
+  summary?: string
+  rationale?: string
+  blast_radius?: string
+  root_cause_category?: string
+  contributing_factors?: string[]
+  alternatives?: AlternativeRecommendation[]
+  verification_criteria?: string[]
+  reasoning_chain?: ReasoningStep[]
+  evidence_annotations?: Record<string, string>
+}
+
+export interface ReasoningStep {
+  step: string
+  detail: string
+}
+
+/** Approval decision metadata stored in incident.meta by the backend. */
+export type ApprovalLevel = 'auto' | 'operator' | 'senior'
+
+export interface ApprovalMeta {
+  _approval_level?: ApprovalLevel
+  _approval_reason?: string
+  _confidence_met?: boolean
+  _senior_required?: boolean
 }
 
 export interface PaginatedIncidents {

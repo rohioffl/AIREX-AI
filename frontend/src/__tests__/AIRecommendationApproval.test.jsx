@@ -117,4 +117,113 @@ describe('AIRecommendationApproval', () => {
     render(<AIRecommendationApproval incident={incident} ragContext={null} />)
     expect(screen.getByText('HIGH RISK')).toBeInTheDocument()
   })
+
+  // ── Confidence Gate & Approval Level Tests ─────────────────
+
+  it('shows operator approval badge when approval_level is operator', () => {
+    const incident = {
+      ...mockIncidentBase,
+      recommendation: mockRecommendation,
+      meta: { _approval_level: 'operator', _approval_reason: 'auto_approve=False', _confidence_met: true, _senior_required: false },
+    }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    expect(screen.getByText('Operator Approval')).toBeInTheDocument()
+  })
+
+  it('shows senior approval badge when approval_level is senior', () => {
+    const incident = {
+      ...mockIncidentBase,
+      recommendation: mockRecommendation,
+      meta: {
+        _approval_level: 'senior',
+        _approval_reason: "Action 'scale_instances' requires senior/admin approval",
+        _confidence_met: true,
+        _senior_required: true,
+      },
+    }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    expect(screen.getByText('Senior / Admin Approval Required')).toBeInTheDocument()
+  })
+
+  it('shows auto-approved badge when approval_level is auto', () => {
+    const incident = {
+      ...mockIncidentBase,
+      recommendation: mockRecommendation,
+      meta: { _approval_level: 'auto', _approval_reason: 'Auto-approved', _confidence_met: true, _senior_required: false },
+    }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    expect(screen.getByText('Auto-Approved')).toBeInTheDocument()
+  })
+
+  it('shows confidence gate banner when confidence not met', () => {
+    const incident = {
+      ...mockIncidentBase,
+      recommendation: mockRecommendation,
+      meta: {
+        _approval_level: 'operator',
+        _approval_reason: 'Confidence 0.50 below threshold 0.85',
+        _confidence_met: false,
+        _senior_required: false,
+      },
+    }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    expect(screen.getByText('Confidence below auto-approval threshold')).toBeInTheDocument()
+    expect(screen.getByText('Confidence 0.50 below threshold 0.85')).toBeInTheDocument()
+  })
+
+  it('shows senior approval info banner for senior-gated actions', () => {
+    const incident = {
+      ...mockIncidentBase,
+      recommendation: mockRecommendation,
+      meta: {
+        _approval_level: 'senior',
+        _approval_reason: "Action 'drain_node' requires senior/admin approval (confidence=0.92)",
+        _confidence_met: true,
+        _senior_required: true,
+      },
+    }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    expect(screen.getByText('Senior/Admin approval required for this action')).toBeInTheDocument()
+  })
+
+  it('shows Senior Approve & Execute button when senior required', () => {
+    const incident = {
+      ...mockIncidentBase,
+      recommendation: mockRecommendation,
+      meta: { _approval_level: 'senior', _senior_required: true, _approval_reason: 'test' },
+    }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    expect(screen.getByText('Senior Approve & Execute')).toBeInTheDocument()
+    expect(screen.getByText('Requires admin role')).toBeInTheDocument()
+  })
+
+  it('shows standard Approve & Execute when not senior', () => {
+    const incident = {
+      ...mockIncidentBase,
+      recommendation: mockRecommendation,
+      meta: { _approval_level: 'operator', _senior_required: false },
+    }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    expect(screen.getByText('Approve & Execute')).toBeInTheDocument()
+    expect(screen.queryByText('Requires admin role')).not.toBeInTheDocument()
+  })
+
+  it('shows senior confirmation title in modal context', () => {
+    const incident = {
+      ...mockIncidentBase,
+      recommendation: mockRecommendation,
+      meta: { _approval_level: 'senior', _senior_required: true, _approval_reason: 'test' },
+    }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    // The modal title is rendered but only visible when modalOpen=true
+    // We verify the button text which changes based on senior flag
+    expect(screen.getByText('Senior Approve & Execute')).toBeInTheDocument()
+  })
+
+  it('does not show approval banner when no approval metadata', () => {
+    const incident = { ...mockIncidentBase, recommendation: mockRecommendation }
+    render(<AIRecommendationApproval incident={incident} ragContext={null} />)
+    expect(screen.queryByText('Confidence below auto-approval threshold')).not.toBeInTheDocument()
+    expect(screen.queryByText('Senior/Admin approval required for this action')).not.toBeInTheDocument()
+  })
 })
