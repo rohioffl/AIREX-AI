@@ -243,7 +243,7 @@ export default function ProactiveAlertsPage() {
       {/* Loading */}
       {loading && (
         <div className="space-y-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="glass rounded-xl h-20 shimmer" />)}
+          {[...Array(4)].map((_, i) => <div key={i} className="glass rounded-xl h-20 skeleton" />)}
         </div>
       )}
 
@@ -258,7 +258,7 @@ export default function ProactiveAlertsPage() {
       {!loading && !error && (
         visibleAlerts.length === 0 ? (
           <div className="glass rounded-xl py-20 text-center">
-            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4" style={{ background: 'rgba(34,211,238,0.1)', color: '#22d3ee' }}>
+            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4 hover-lift" style={{ background: 'rgba(34,211,238,0.1)', color: '#22d3ee' }}>
               <ShieldAlert size={24} />
             </div>
             <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-heading)' }}>No proactive alerts</p>

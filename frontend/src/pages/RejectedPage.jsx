@@ -90,7 +90,7 @@ export default function RejectedPage() {
       {loading && (
         <div className="space-y-3">
           {[...Array(4)].map((_, idx) => (
-            <div key={idx} className="glass rounded-xl h-20 shimmer" />
+            <div key={idx} className="glass rounded-xl h-20 skeleton" />
           ))}
         </div>
       )}
@@ -104,7 +104,7 @@ export default function RejectedPage() {
       {!loading && !error && (
         filtered.length === 0 ? (
           <div className="glass rounded-xl py-20 text-center">
-            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4" style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171' }}>
+            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4 hover-lift" style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171' }}>
               <ShieldX size={24} />
             </div>
             <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-heading)' }}>No rejected alerts</p>

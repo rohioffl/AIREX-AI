@@ -94,16 +94,16 @@ export default function UserManagementPage() {
     }
   }
 
-  const getRoleBadgeColor = (role) => {
+  const getRoleBadgeStyle = (role) => {
     switch (role?.toLowerCase()) {
       case 'admin':
-        return 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+        return { background: 'rgba(168,85,247,0.15)', color: '#c084fc' }
       case 'operator':
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+        return { background: 'rgba(59,130,246,0.15)', color: '#93c5fd' }
       case 'viewer':
-        return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+        return { background: 'rgba(148,163,184,0.1)', color: '#cbd5e1' }
       default:
-        return 'bg-gray-100 text-gray-700'
+        return { background: 'rgba(148,163,184,0.1)', color: '#cbd5e1' }
     }
   }
 
@@ -167,7 +167,7 @@ export default function UserManagementPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       {getRoleIcon(u.role)}
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${getRoleBadgeColor(u.role)}`}>
+                      <span className="px-2 py-1 rounded text-xs font-semibold" style={getRoleBadgeStyle(u.role)}>
                         {u.role?.toUpperCase() || 'OPERATOR'}
                       </span>
                       {u.id === currentUser?.userId && (
@@ -176,10 +176,13 @@ export default function UserManagementPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${u.is_active !== false
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                      : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                      }`}>
+                    <span
+                      className="px-2 py-1 rounded text-xs font-semibold"
+                      style={u.is_active !== false
+                        ? { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7' }
+                        : { background: 'rgba(244,63,94,0.15)', color: '#fda4af' }
+                      }
+                    >
                       {u.is_active !== false ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -213,7 +216,10 @@ export default function UserManagementPage() {
                       {u.id !== currentUser?.userId && (
                         <button
                           onClick={() => handleDelete(u.id)}
-                          className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          className="p-2 rounded-lg transition-colors"
+                          style={{ ':hover': { background: 'rgba(244,63,94,0.1)' } }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = ''}
                           title="Deactivate user"
                         >
                           <Trash2 size={16} className="text-red-500" />
@@ -333,7 +339,7 @@ function UserModal({ user, onClose, onSave }) {
               {formData.role === 'admin' && 'Full access including user management and system settings'}
             </p>
             {roleChanged && !isSelf && (
-              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+              <p className="text-xs mt-1" style={{ color: '#fbbf24' }}>
                 ⚠️ Role will be changed from {user.role.toUpperCase()} to {formData.role.toUpperCase()}
               </p>
             )}
