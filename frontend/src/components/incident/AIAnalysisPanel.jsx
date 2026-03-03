@@ -23,66 +23,6 @@ function ScoreBadge({ score }) {
   )
 }
 
-function RunbookCard({ runbook }) {
-  return (
-    <div
-      className="rounded-lg p-3"
-      style={{
-        background: 'var(--bg-input)',
-        border: '1px solid var(--border)',
-      }}
-    >
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="flex items-center gap-2 min-w-0">
-          <BookOpen size={12} style={{ color: '#818cf8', flexShrink: 0 }} />
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {runbook.title}
-          </span>
-        </div>
-        <ScoreBadge score={runbook.score} />
-      </div>
-      {runbook.source_type && (
-        <span
-          style={{
-            fontSize: 9,
-            fontWeight: 600,
-            color: 'var(--text-muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
-          {runbook.source_type}
-        </span>
-      )}
-      {runbook.snippet && (
-        <p
-          style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            marginTop: 4,
-            lineHeight: 1.4,
-            overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 3,
-            WebkitBoxOrient: 'vertical',
-          }}
-        >
-          {runbook.snippet}
-        </p>
-      )}
-    </div>
-  )
-}
-
 function SimilarIncidentCard({ incident }) {
   return (
     <div
@@ -309,25 +249,6 @@ export default function AIAnalysisPanel({ incident }) {
 
               {/* Pattern Analysis */}
               <PatternAnalysisCard pattern={ragStructured.pattern_analysis} />
-
-              {/* Runbooks */}
-              {ragStructured.runbooks && ragStructured.runbooks.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Relevant Runbooks
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-input)' }}>
-                      {ragStructured.runbooks.length}
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {ragStructured.runbooks.map((rb, idx) => (
-                      <RunbookCard key={idx} runbook={rb} />
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Similar Incidents */}
               {ragStructured.similar_incidents && ragStructured.similar_incidents.length > 0 && (

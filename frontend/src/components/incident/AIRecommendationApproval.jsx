@@ -85,64 +85,6 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
 
   return (
     <div className="space-y-6" style={{ width: '100%', maxWidth: '100%' }}>
-      {/* Pattern Analysis Summary */}
-      {ragContext && (
-        <div 
-          className="glass rounded-xl p-5" 
-          style={{ 
-            borderLeft: '4px solid #818cf8', 
-            background: document.body.classList.contains('light-mode')
-              ? 'linear-gradient(90deg, rgba(99,102,241,0.08), rgba(168,85,247,0.05))'
-              : 'rgba(129,140,248,0.03)',
-            border: document.body.classList.contains('light-mode')
-              ? '1px solid rgba(99,102,241,0.15)'
-              : 'none'
-          }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Info size={14} style={{ color: '#818cf8' }} />
-            <h3 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Pattern Analysis Summary (Human-like SRE Insights)
-            </h3>
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            {(() => {
-              // Extract pattern analysis section if it exists
-              if (ragContext.includes('=== Pattern Analysis') || ragContext.includes('Pattern Analysis')) {
-                // Try to extract just the pattern analysis part (before "Recent Similar Incidents" or "Relevant Runbooks")
-                const patternMatch = ragContext.match(/=== Pattern Analysis[^=]*===\s*([\s\S]*?)(?=\n\n(?:Recent Similar Incidents|Relevant Runbooks)|$)/i)
-                if (patternMatch && patternMatch[1]) {
-                  return (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
-                      {patternMatch[1].trim()}
-                    </div>
-                  )
-                }
-                // Fallback: show everything up to "Recent Similar Incidents" or "Relevant Runbooks"
-                const beforeRecent = ragContext.split('Recent Similar Incidents')[0] || ragContext.split('Relevant Runbooks')[0]
-                if (beforeRecent && beforeRecent !== ragContext) {
-                  return (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
-                      {beforeRecent.trim()}
-                    </div>
-                  )
-                }
-              }
-              // If it contains pattern analysis keywords, show the full context
-              if (ragContext.includes('Historical Context') || ragContext.includes('Alert Type Patterns') || ragContext.includes('Temporal Patterns')) {
-                return (
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
-                    {ragContext}
-                  </div>
-                )
-              }
-              // Default fallback
-              return <p>Historical pattern analysis has been performed to inform recommendations.</p>
-            })()}
-          </div>
-        </div>
-      )}
-
       {/* Recommendations Section */}
       <div className="glass rounded-xl p-5" style={{ borderLeft: `4px solid ${theme.border}`, background: theme.bg }}>
         <div className="flex items-start justify-between mb-5">
@@ -226,7 +168,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                     <div className="mt-3 p-3 rounded" style={{ background: 'rgba(129,140,248,0.05)', border: '1px solid rgba(129,140,248,0.1)' }}>
                       <p style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', marginBottom: 2 }}>Pattern Analysis Available:</p>
                       <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                        Historical patterns and context have been analyzed. Review the Pattern Analysis Summary above for insights. Based on the patterns detected, you may want to consider manual actions such as investigating the recurring issues or reviewing scheduled jobs.
+                        Historical patterns and context have been analyzed. Review the AI Investigation panel above for insights. Based on the patterns detected, you may want to consider manual actions such as investigating the recurring issues or reviewing scheduled jobs.
                       </p>
                     </div>
                   )}
