@@ -512,12 +512,21 @@ async def ingest_site24x7(
         )
         return IncidentCreatedResponse(incident_id=existing_id)
 
-    # Check for active incident on same monitor (use first() — there may be multiples)
+    # Check for active incident on same monitor AND same host.
+    # Without host filtering, different servers with the same alert_type
+    # (e.g. two servers both with cpu_high) would collapse into one incident.
+    _candidate_host_key = monitor_name or monitor_id
+    _host_filter = (
+        Incident.host_key == _candidate_host_key
+        if _candidate_host_key
+        else Incident.host_key.is_(None)
+    )
     result = await session.execute(
         select(Incident)
         .where(
             Incident.tenant_id == tenant_id,
             Incident.alert_type == alert_type,
+            _host_filter,
             Incident.state.notin_(
                 [
                     IncidentState.RESOLVED,
@@ -706,6 +715,7 @@ async def ingest_site24x7(
     # Cross-host correlation (Phase 4 ARE)
     try:
         from app.services.correlation_service import correlate_incident
+
         group_id = await correlate_incident(session, incident)
         if group_id:
             logger.info(
@@ -893,6 +903,7 @@ async def ingest_generic(
     # Cross-host correlation (Phase 4 ARE)
     try:
         from app.services.correlation_service import correlate_incident
+
         group_id = await correlate_incident(session, incident)
         if group_id:
             logger.info(

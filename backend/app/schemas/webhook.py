@@ -70,7 +70,14 @@ class Site24x7Payload(BaseModel):
         return self.MONITORTYPE or self.monitor_type or "unknown"
 
     def get_monitor_id(self) -> str:
-        return str(self.MONITORID or self.monitor_id or self.get_monitor_name())
+        """Return a usable monitor ID, skipping unresolved Site24x7 template vars."""
+        for candidate in [self.MONITORID, self.monitor_id]:
+            if candidate is not None:
+                val = str(candidate).strip()
+                # Reject unresolved template variables like $MONITORID
+                if val and not val.startswith("$"):
+                    return val
+        return self.get_monitor_name()
 
     def get_incident_reason(self) -> str | None:
         return self.INCIDENT_REASON or self.incident_reason
@@ -94,17 +101,22 @@ class Site24x7Payload(BaseModel):
 
         # Check explicit IP fields first
         for val in [
-            self.IPADDRESS, self.IP_ADDRESS,
-            self.ipaddress, self.ip_address,
+            self.IPADDRESS,
+            self.IP_ADDRESS,
+            self.ipaddress,
+            self.ip_address,
         ]:
             if val and val.strip():
                 return val.strip()
 
         # Try to extract IP from URL/name fields
         for val in [
-            self.MONITORURL, self.monitorurl,
-            self.DISPLAYNAME, self.displayname,
-            self.MONITORNAME, self.monitor_name,
+            self.MONITORURL,
+            self.monitorurl,
+            self.DISPLAYNAME,
+            self.displayname,
+            self.MONITORNAME,
+            self.monitor_name,
         ]:
             if val:
                 match = ip_re.search(val)
@@ -113,8 +125,17 @@ class Site24x7Payload(BaseModel):
 
         # Check extra fields (model_config extra="allow")
         extra = self.model_extra or {}
-        for key in ["ip", "ipaddress", "ip_address", "server_ip", "host_ip",
-                     "IPADDRESS", "IP_ADDRESS", "SERVER_IP", "HOST_IP"]:
+        for key in [
+            "ip",
+            "ipaddress",
+            "ip_address",
+            "server_ip",
+            "host_ip",
+            "IPADDRESS",
+            "IP_ADDRESS",
+            "SERVER_IP",
+            "HOST_IP",
+        ]:
             if key in extra and extra[key]:
                 return str(extra[key]).strip()
 
