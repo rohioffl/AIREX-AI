@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Activity, Settings,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
-  X, ChevronRight, Clock, Zap, Ban, Users
+  X, ChevronRight, Clock, Zap, Ban, Users, HeartPulse
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { label: 'Alerts', path: '/alerts', icon: AlertTriangle, showBadge: true, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Live Feed', path: '/live', icon: Activity, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Health', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
   { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },
 ]

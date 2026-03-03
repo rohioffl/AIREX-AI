@@ -179,4 +179,20 @@ export async function fetchAutoRunbook(incidentId) {
   return res.data
 }
 
+// Health checks (Phase 6 ARE — Proactive Monitoring)
+export async function fetchHealthCheckDashboard() {
+  const res = await api.get('/health-checks/dashboard')
+  return res.data
+}
+
+export async function fetchTargetHistory(targetType, targetId, { limit = 100 } = {}) {
+  const res = await api.get(`/health-checks/targets/${targetType}/${targetId}/history`, { params: { limit } })
+  return res.data
+}
+
+export async function triggerHealthCheck() {
+  const res = await api.post('/health-checks/run')
+  return res.data
+}
+
 export default api

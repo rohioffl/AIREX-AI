@@ -14,6 +14,7 @@ import DashboardPage from './pages/DashboardPage'
 import LiveFeed from './pages/LiveFeed'
 import SettingsPage from './pages/SettingsPage'
 import UserManagementPage from './pages/UserManagementPage'
+import HealthChecksPage from './pages/HealthChecksPage'
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
                       <Route path="/rejected" element={<RejectedPage />} />
                       <Route path="/live" element={<LiveFeed />} />
                       <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/health-checks" element={<HealthChecksPage />} />
                       <Route path="/admin/users" element={
                         <RequireRole roles="admin">
                           <UserManagementPage />

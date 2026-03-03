@@ -14,6 +14,7 @@ from app.api.routes import (
     auth,
     chat,
     dlq,
+    health_checks,
     incidents,
     metrics as metrics_router,
     sse,
@@ -164,4 +165,9 @@ app.include_router(
     settings_router.router,
     prefix=f"{settings.API_V1_STR}/settings",
     tags=["settings"],
+)
+app.include_router(
+    health_checks.router,
+    prefix=f"{settings.API_V1_STR}/health-checks",
+    tags=["health-checks"],
 )

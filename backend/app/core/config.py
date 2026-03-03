@@ -58,7 +58,9 @@ class Settings(BaseSettings):
     MAX_INVESTIGATION_RETRIES: int = 3
     MAX_EXECUTION_RETRIES: int = 3
     MAX_VERIFICATION_RETRIES: int = 3
-    MAX_FALLBACK_ALTERNATIVES: int = 2  # max alternative actions to try after verification failure
+    MAX_FALLBACK_ALTERNATIVES: int = (
+        2  # max alternative actions to try after verification failure
+    )
 
     # ── Auto-Approval Policy ────────────────────────────────────
     # Confidence threshold for auto-approval (0.0-1.0).
@@ -67,6 +69,14 @@ class Settings(BaseSettings):
     AUTO_APPROVAL_CONFIDENCE_THRESHOLD: float = 0.85
     # Actions with risk_level=HIGH are never auto-approved regardless of confidence.
     AUTO_APPROVAL_BLOCK_HIGH_RISK: bool = True
+
+    # ── Proactive Health Checks (Phase 6 ARE) ───────────────────
+    HEALTH_CHECK_ENABLED: bool = True
+    HEALTH_CHECK_INTERVAL_MINUTES: int = 5
+    HEALTH_CHECK_MAX_MONITORS: int = 200  # max Site24x7 monitors per run
+    HEALTH_CHECK_INCIDENT_COOLDOWN_MINUTES: int = (
+        30  # min gap between auto-incidents per target
+    )
 
     # Webhook signature verification (empty = skip in dev)
     WEBHOOK_SECRET: str = ""

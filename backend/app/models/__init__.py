@@ -2,6 +2,7 @@ from app.models.base import Base
 from app.models.enums import ExecutionStatus, IncidentState, RiskLevel, SeverityLevel
 from app.models.evidence import Evidence
 from app.models.execution import Execution
+from app.models.health_check import HealthCheck
 from app.models.incident_embedding import IncidentEmbedding
 from app.models.incident import Incident
 from app.models.incident_lock import IncidentLock
@@ -14,6 +15,7 @@ __all__ = [
     "Base",
     "Evidence",
     "Execution",
+    "HealthCheck",
     "IncidentEmbedding",
     "ExecutionStatus",
     "Incident",
