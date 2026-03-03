@@ -27,7 +27,7 @@ export default function SettingsPage() {
   async function fetchHealth() {
     try {
       // In dev, `/api` is proxied to the backend; backend health lives at `/health`
-      const res = await fetch('/api/health', { credentials: 'include' })
+      const res = await fetch('/health', { credentials: 'include' })
 
       // Expected case in dev when backend is not running
       if (res.status === 404) {

@@ -19,7 +19,7 @@ export default function ApprovalControls({ incident }) {
   const canApprove = incident.state === 'AWAITING_APPROVAL' && Boolean(actionType)
 
   // Approval gate metadata
-  const approvalLevel = incident.meta?._approval_level || null
+
   const seniorRequired = Boolean(incident.meta?._senior_required)
 
   if (!manualRequired && !canApprove) return null

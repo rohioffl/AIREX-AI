@@ -111,7 +111,7 @@ class TestComputeResolutionDuration:
     def test_handles_naive_datetime(self):
         """Should handle naive datetimes by assuming UTC."""
         inc = _make_incident(
-            created_at=datetime.utcnow() - timedelta(seconds=30)
+            created_at=datetime.now(timezone.utc) - timedelta(seconds=30)
         )
         duration = compute_resolution_duration(inc)
         assert duration is not None

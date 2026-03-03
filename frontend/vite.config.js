@@ -8,6 +8,7 @@ export default defineConfig({
     allowedHosts: ['airex.rohitpt.online'],
     proxy: {
       '/api': 'http://localhost:8000',
+      '/health': 'http://localhost:8000',
     },
   },
   build: {

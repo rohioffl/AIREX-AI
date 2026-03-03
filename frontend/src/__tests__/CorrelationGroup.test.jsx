@@ -13,7 +13,7 @@ vi.mock('../context/ThemeContext', () => ({
 vi.mock('../utils/formatters', () => ({
   formatTimestamp: (ts) => ts,
   formatDuration: (d) => `${d}s`,
-  formatRelativeTime: (t) => '2m ago',
+  formatRelativeTime: () => '2m ago',
 }))
 
 const mockNavigate = vi.fn()

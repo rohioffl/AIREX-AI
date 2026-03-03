@@ -20,7 +20,7 @@ const SEVERITY_ACCENTS = {
   LOW: '#10b981',
 }
 
-// eslint-disable-next-line no-unused-vars -- Icon is used as JSX component <Icon />
+ 
 function MetricTile({ icon: Icon, label, value, hint, accent }) {
   return (
     <div

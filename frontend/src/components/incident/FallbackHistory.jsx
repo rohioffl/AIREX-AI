@@ -43,7 +43,7 @@ export default function FallbackHistory({ incident }) {
   const meta = incident?.meta || {}
   const fallbackHistory = meta._fallback_history || []
   const isFallback = meta._is_fallback || false
-  const fallbackFrom = meta._fallback_from || ''
+
   const originalAction = meta._original_proposed_action || ''
   const currentAction = meta.recommendation?.proposed_action || ''
 

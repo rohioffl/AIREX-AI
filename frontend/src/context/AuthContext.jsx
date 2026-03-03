@@ -1,61 +1,55 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { login as apiLogin, logout as apiLogout, isAuthenticated, getToken, refreshToken } from '../services/auth'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
+import { login as apiLogin, logout as apiLogout, getToken, refreshToken } from '../services/auth'
 
 const AuthContext = createContext()
 
-export function AuthProvider({ children }) {
-  // TEMPORARILY DISABLED: Bypass authentication for development
-  const BYPASS_AUTH = true
+const BYPASS_AUTH = import.meta.env.VITE_BYPASS_AUTH === 'true'
 
-  const [user, setUser] = useState(BYPASS_AUTH ? {
-    email: 'dev@airex.local',
-    role: 'operator',
-    tenantId: '00000000-0000-0000-0000-000000000000',
-    userId: 'dev-user',
-    displayName: 'Dev User'
-  } : null)
-  const [token, setToken] = useState(() => BYPASS_AUTH ? 'dev-token' : getToken())
-  const [loading, setLoading] = useState(() => {
-    // When auth is bypassed, start with loading=false immediately
-    if (BYPASS_AUTH) return false
-    return true
-  })
+const DEV_USER = {
+  email: 'dev@airex.local',
+  role: 'operator',
+  tenantId: '00000000-0000-0000-0000-000000000000',
+  userId: 'dev-user',
+  displayName: 'Dev User'
+}
 
-  useEffect(() => {
-    if (BYPASS_AUTH) return
-
-    if (isAuthenticated()) {
-      try {
-        const t = getToken()
-        if (t) {
-          const payload = JSON.parse(atob(t.split('.')[1]))
-          setUser({
-            email: payload.sub,
-            role: payload.role || 'operator',
-            tenantId: payload.tenant_id,
-            userId: payload.user_id,
-          })
-          setToken(t)
-        }
-      } catch {
-        apiLogout()
-      }
-    }
-    setLoading(false)
-  }, [BYPASS_AUTH])
-
-  const login = useCallback(async ({ email, password }) => {
-    const res = await apiLogin({ email, password })
-    const payload = JSON.parse(atob(res.access_token.split('.')[1]))
-    setUser({
+function parseTokenUser(t) {
+  try {
+    const payload = JSON.parse(atob(t.split('.')[1]))
+    return {
       email: payload.sub,
       role: payload.role || 'operator',
       tenantId: payload.tenant_id,
       userId: payload.user_id,
-    })
+    }
+  } catch {
+    return null
+  }
+}
+
+function getInitialUser() {
+  if (BYPASS_AUTH) return DEV_USER
+  const t = getToken()
+  return t ? parseTokenUser(t) : null
+}
+
+function getInitialToken() {
+  if (BYPASS_AUTH) return 'dev-token'
+  return getToken() || null
+}
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(getInitialUser)
+  const [token, setToken] = useState(getInitialToken)
+  const loading = false
+
+  const login = useCallback(async ({ email, password }) => {
+    const res = await apiLogin({ email, password })
+    const parsed = parseTokenUser(res.access_token)
+    setUser(parsed)
     setToken(res.access_token)
-    if (payload.tenant_id) {
-      localStorage.setItem('tenant_id', payload.tenant_id)
+    if (parsed?.tenantId) {
+      localStorage.setItem('tenant_id', parsed.tenantId)
     }
     return res
   }, [])
@@ -69,32 +63,22 @@ export function AuthProvider({ children }) {
   const refresh = useCallback(async () => {
     try {
       const res = await refreshToken()
-      const payload = JSON.parse(atob(res.access_token.split('.')[1]))
-      setUser({
-        email: payload.sub,
-        role: payload.role || 'operator',
-        tenantId: payload.tenant_id,
-        userId: payload.user_id,
-      })
+      const parsed = parseTokenUser(res.access_token)
+      setUser(parsed)
       setToken(res.access_token)
     } catch {
       logout()
     }
   }, [logout])
 
-  // TEMPORARILY DISABLED: Always return authenticated
   const isAuth = BYPASS_AUTH ? true : !!token
 
+  const value = useMemo(() => ({
+    user, token, loading, login, logout, refresh, isAuthenticated: isAuth
+  }), [user, token, loading, login, logout, refresh, isAuth])
+
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      token, 
-      loading, 
-      login, 
-      logout, 
-      refresh, 
-      isAuthenticated: isAuth
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

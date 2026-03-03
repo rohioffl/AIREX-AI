@@ -207,7 +207,7 @@ export default function LandingPage() {
           <h2 className="airex-section-title airex-reveal">Built for autonomous SRE</h2>
           <p className="airex-section-lead airex-reveal">From alert to resolution with AI in the loop and humans in control.</p>
           <div className="airex-features-grid">
-            {/* eslint-disable-next-line no-unused-vars -- FeatureIcon used as JSX component */}
+            { }
             {FEATURES.map(({ icon: FeatureIcon, title, description }, idx) => (
               <article key={title} className={`airex-feature-card airex-reveal airex-reveal-stagger-${(idx % 3) + 1}`}>
                 <div className="airex-feature-icon">
