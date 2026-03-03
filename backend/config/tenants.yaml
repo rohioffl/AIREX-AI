@@ -11,6 +11,20 @@
 #
 #  Hot reload: POST /api/v1/tenants/reload
 #
+# ── SSH User Resolution (per-machine) ─────────────────────────
+#
+#  AIREX resolves the SSH username for each machine automatically:
+#    1. Per-server ssh_user (servers[].ssh_user in this file)
+#    2. Per-tenant ssh_user (top-level ssh_user in this file)
+#    3. Cloud instance tag/label (ssh-user or ssh_user)
+#    4. Cloud API auto-detection (GCP boot image / AWS AMI)
+#    5. Global default (defaults.ssh_user, default: ubuntu)
+#
+#  You can also set ssh_user as a cloud instance tag/label:
+#    GCP: gcloud compute instances add-labels VM --labels=ssh-user=wacko
+#    AWS: aws ec2 create-tags --tags Key=ssh-user,Value=ubuntu
+#
+#
 # ── GCP Authentication (pick ONE) ──────────────────────────────
 #
 #  Option 1: gcloud CLI (recommended for dev)
@@ -70,74 +84,45 @@ defaults:
 
 tenants:
 
-  # ── GCP client (minimal — just project + email) ──────────────
-  # Tag in Site24x7: tenant:acme-corp  OR  tenant:smart-ops
-  #
-  # tenant_id: The UUID used for database isolation (RLS).
-  #   When Site24x7 sends tenant:acme-corp in tags, AIREX auto-resolves
-  #   this UUID for the DB session. No X-Tenant-Id header needed.
-  #   Generate with: python3 -c "import uuid; print(uuid.uuid4())"
-  acme-corp: &smartops
+  # ── GCP test client ────────────────────────────────────────────
+  gcp-test-client:
     tenant_id: "a1b2c3d4-0000-0000-0000-000000000001"
-    display_name: "Smartops"
+    display_name: "GCP Test Client"
     cloud: gcp
+    ssh_user: wacko                     # default for all GCP instances in this tenant
     gcp:
       project_id: "smartops-automation"
       service_account_key: "/home/ubuntu/AIREX/backend/config/credentials/smartops-automation.json"
     escalation_email: "sre-team@smart-ops.com"
+    # Per-server ssh_user overrides (optional — auto-detected from GCP image if omitted)
+    # servers:
+    #   - name: "vm-prod-web-01"
+    #     private_ip: "10.128.0.15"
+    #     ssh_user: "wacko"             # explicit override
+    #     role: web
+    #   - name: "vm-prod-db-01"
+    #     private_ip: "10.128.0.20"
+    #     ssh_user: "admin"             # this machine runs Debian (different user)
+    #     role: database
 
-  smart-ops: *smartops   # alias — same config as acme-corp
-
-  # ── AWS client — Role Assumption (cross-account) ─────────────
-  #  AIREX assumes a role in the client's AWS account.
-  #  No static keys stored — uses STS temporary credentials.
-  beta-inc:
+  # ── AWS test client ────────────────────────────────────────────
+  aws-test-client:
     tenant_id: "b1b2c3d4-0000-0000-0000-000000000002"
-    display_name: "Beta Inc."
+    display_name: "AWS Test Client"
     cloud: aws
-    aws:
-      account_id: "123456789012"         # client's AWS account number
-      role_name: "AirexReadOnly"         # role in their account
-      external_id: "airex-beta-2026"     # optional trust condition
-      # region: auto-discovered — AIREX scans all regions to find the instance
-    escalation_email: "ops@beta-inc.com"
-
-  # ── AWS client — Access Key / Secret Key ────────────────────
-  #  Store keys in config/credentials/delta-aws.json:
-  #  {"access_key_id": "AKIA...", "secret_access_key": "wJa..."}
-  delta-corp:
-    tenant_id: "d1d2d3d4-0000-0000-0000-000000000003"
-    display_name: "Delta Corp"
-    cloud: aws
+    ssh_user: ubuntu                    # default for all AWS instances in this tenant
     aws:
       credentials_file: "config/credentials/smart-ops.json"
-      # region: auto-discovered — AIREX scans all regions to find the instance
-    escalation_email: "sre@delta-corp.com"
-
-  # ── Multi-cloud (GCP primary, AWS secondary) ─────────────────
-  gamma-tech:
-    tenant_id: "e1e2e3e4-0000-0000-0000-000000000004"
-    display_name: "Gamma Technologies"
-    cloud: gcp
-    gcp:
-      project_id: "gamma-prod-123"
-    aws:
-      account_id: "987654321098"
-      role_name: "AirexReadOnly"
-      # region: auto-discovered
-    escalation_email: "platform@gamma-tech.io"
-
-  # ── Add your clients ─────────────────────────────────────────
-  # my-client:
-  #   tenant_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # REQUIRED for DB isolation
-  #   display_name: "My Client Name"
-  #   cloud: aws
-  #   aws:
-  #     # Method A: Role assumption
-  #     account_id: "111222333444"
-  #     role_name: "AirexReadOnly"
-  #     external_id: "some-secret"
-  #   # Method B: Access key (region auto-discovered)
-  #   # aws:
-  #   #   credentials_file: "config/credentials/my-client-aws.json"
-  #   escalation_email: "team@client.com"
+    escalation_email: "sre-team@smart-ops.com"
+    # Per-server ssh_user overrides (optional — auto-detected from AWS AMI if omitted)
+    # servers:
+    #   - name: "web-prod-01"
+    #     instance_id: "i-0abc123def456"
+    #     private_ip: "172.31.10.5"
+    #     ssh_user: "ubuntu"            # Ubuntu AMI
+    #     role: web
+    #   - name: "api-prod-01"
+    #     instance_id: "i-0def456ghi789"
+    #     private_ip: "172.31.10.10"
+    #     ssh_user: "ec2-user"          # Amazon Linux AMI
+    #     role: api

@@ -80,7 +80,25 @@ class CloudInvestigation(BaseInvestigation):
 
         # ── Run diagnostics on the server ────────────────────────
         aws_config = tenant_config.aws if tenant_config else None
+        gcp_config = tenant_config.gcp if tenant_config else None
         sa_key = tenant_config.gcp.service_account_key if tenant_config else ""
+
+        # Resolve SSH user for this specific machine (per-server > per-tenant > cloud API > fallback)
+        from app.cloud.ssh_user_resolver import resolve_ssh_user
+
+        os_user = await resolve_ssh_user(
+            cloud=cloud,
+            tenant_name=tenant_name,
+            private_ip=private_ip,
+            instance_id=instance_id,
+            instance_name=instance_id,
+            project=project,
+            zone=zone,
+            region=region,
+            aws_config=aws_config,
+            gcp_config=gcp_config,
+        )
+        log.info("ssh_user_resolved", os_user=os_user)
 
         if cloud == "aws" and instance_id:
             # Prefer SSM; only use EC2 Instance Connect when SSM is not available.
@@ -101,9 +119,6 @@ class CloudInvestigation(BaseInvestigation):
                     sections.append(
                         "--- Diagnostics via EC2 Instance Connect (no keys stored) ---"
                     )
-                    os_user = (
-                        tenant_config.ssh.user if tenant_config else ""
-                    ) or "ubuntu"
                     try:
                         ec2_out = await self._run_aws_ec2_connect_ssh(
                             private_ip=private_ip,
@@ -130,7 +145,7 @@ class CloudInvestigation(BaseInvestigation):
             if private_ip:
                 sections.append("--- Diagnostics via GCP OS Login SSH ---")
                 ssh_output = await self._run_gcp_ssh(
-                    private_ip, commands, instance_id, project, zone, sa_key
+                    private_ip, commands, instance_id, project, zone, sa_key, os_user
                 )
                 sections.append(ssh_output)
             else:
@@ -256,6 +271,7 @@ class CloudInvestigation(BaseInvestigation):
         project: str,
         zone: str,
         sa_key_path: str = "",
+        os_user: str = "",
     ) -> str:
         """Execute diagnostic commands via GCP OS Login SSH."""
         try:
@@ -267,6 +283,7 @@ class CloudInvestigation(BaseInvestigation):
                 instance_name=instance_name,
                 project=project,
                 zone=zone,
+                os_user=os_user,
             )
         except Exception as exc:
             return f"SSH ERROR: {exc}"

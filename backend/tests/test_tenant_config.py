@@ -218,16 +218,16 @@ class TestTagParserEnrichment:
     """Test that tag parser enriches from tenant config."""
 
     def test_tags_fill_cloud_from_config(self):
-        """tenant:smart-ops tag should auto-fill cloud=gcp from config."""
+        """tenant:gcp-test-client tag should auto-fill cloud=gcp from config."""
         # This test uses the real config file at config/tenants.yaml
-        ctx = parse_tags("tenant:smart-ops,ip:10.128.0.15")
+        ctx = parse_tags("tenant:gcp-test-client,ip:10.128.0.15")
         assert ctx.cloud == "gcp"
         assert ctx.project == "smartops-automation"
         assert ctx.private_ip == "10.128.0.15"
         assert ctx.has_target is True
 
     def test_tags_fill_aws_region_from_config(self):
-        ctx = parse_tags("tenant:beta-inc,ip:172.31.5.42")
+        ctx = parse_tags("tenant:aws-test-client,ip:172.31.5.42")
         assert ctx.cloud == "aws"
         assert ctx.private_ip == "172.31.5.42"
 
@@ -265,7 +265,10 @@ class TestAWSAuthConfig:
             assert config.aws.account_id == "111222333444"
             assert config.aws.role_name == "AirexReadOnly"
             assert config.aws.external_id == "airex-secret"
-            assert config.aws.get_role_arn() == "arn:aws:iam::111222333444:role/AirexReadOnly"
+            assert (
+                config.aws.get_role_arn()
+                == "arn:aws:iam::111222333444:role/AirexReadOnly"
+            )
         finally:
             os.unlink(path)
 
@@ -283,7 +286,9 @@ class TestAWSAuthConfig:
         path = _write_config(data)
         try:
             config = get_tenant_config("arn-client", config_path=path)
-            assert config.aws.get_role_arn() == "arn:aws:iam::999888777666:role/CustomRole"
+            assert (
+                config.aws.get_role_arn() == "arn:aws:iam::999888777666:role/CustomRole"
+            )
         finally:
             os.unlink(path)
 
@@ -302,7 +307,9 @@ class TestAWSAuthConfig:
         path = _write_config(data)
         try:
             config = get_tenant_config("key-client", config_path=path)
-            assert config.aws.credentials_file == "config/credentials/my-client-aws.json"
+            assert (
+                config.aws.credentials_file == "config/credentials/my-client-aws.json"
+            )
             assert config.aws.region == "eu-west-1"
             assert config.aws.get_role_arn() == ""  # no role configured
         finally:

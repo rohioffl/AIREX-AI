@@ -108,6 +108,7 @@ class ServerEntry:
     private_ip: str = ""
     cloud: str = ""  # override per-server (for multi-cloud tenants)
     role: str = ""  # web, api, database, worker, etc.
+    ssh_user: str = ""  # per-machine SSH user override (e.g. "wacko", "ec2-user")
 
 
 @dataclass
@@ -230,13 +231,21 @@ def _parse_tenant(name: str, raw: dict, defaults: dict) -> TenantConfig:
             secret_access_key=aws_raw.get("secret_access_key", ""),
         )
 
-    # SSH
+    # SSH — support both nested ssh: block and top-level ssh_user key
     ssh_raw = raw.get("ssh", {})
+    top_level_ssh_user = raw.get("ssh_user", defaults.get("ssh_user", "ubuntu"))
+    top_level_ssh_port = raw.get("ssh_port", defaults.get("ssh_port", 22))
     if ssh_raw:
         tc.ssh = SSHConfig(
-            user=ssh_raw.get("user", defaults.get("ssh_user", "ubuntu")),
+            user=ssh_raw.get("user", top_level_ssh_user),
             key_path=ssh_raw.get("key_path", ""),
-            port=ssh_raw.get("port", defaults.get("ssh_port", 22)),
+            port=ssh_raw.get("port", top_level_ssh_port),
+        )
+    else:
+        tc.ssh = SSHConfig(
+            user=top_level_ssh_user,
+            key_path="",
+            port=top_level_ssh_port,
         )
 
     # Servers
@@ -248,6 +257,7 @@ def _parse_tenant(name: str, raw: dict, defaults: dict) -> TenantConfig:
                 private_ip=srv_raw.get("private_ip", ""),
                 cloud=srv_raw.get("cloud", tc.cloud),
                 role=srv_raw.get("role", ""),
+                ssh_user=srv_raw.get("ssh_user", ""),
             )
         )
 
@@ -318,6 +328,44 @@ def get_server_by_ip(
         if server.private_ip == ip:
             return server
     return None
+
+
+def get_ssh_user_for_host(
+    tenant_name: str, host_ip: str = "", instance_id: str = "", config_path: str = ""
+) -> str:
+    """
+    Resolve the SSH user for a specific host within a tenant.
+
+    Resolution order:
+      1. Per-server ssh_user (from servers[] in tenants.yaml)
+      2. Per-tenant ssh_user (top-level or ssh.user)
+      3. Empty string (caller should use auto-detection or global fallback)
+
+    Args:
+        tenant_name: Tenant name from config.
+        host_ip: Private IP of the target host.
+        instance_id: Cloud instance ID (e.g. i-0abc123, vm-prod-web-01).
+
+    Returns:
+        SSH username or empty string if no static mapping found.
+    """
+    config = get_tenant_config(tenant_name, config_path)
+    if not config:
+        return ""
+
+    # Check per-server override first
+    if host_ip:
+        server = get_server_by_ip(tenant_name, host_ip, config_path)
+        if server and server.ssh_user:
+            return server.ssh_user
+
+    if instance_id:
+        server = get_server_by_name(tenant_name, instance_id, config_path)
+        if server and server.ssh_user:
+            return server.ssh_user
+
+    # Fall back to tenant-level SSH user
+    return config.ssh.user
 
 
 def resolve_tenant_id_by_name(tenant_name: str, config_path: str = "") -> str:

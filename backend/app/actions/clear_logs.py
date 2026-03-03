@@ -68,14 +68,24 @@ class ClearLogsAction(BaseAction):
                 )
             else:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+                from app.cloud.ssh_user_resolver import resolve_ssh_user
 
-                sa_key = self._get_sa_key(meta)
+                os_user = await resolve_ssh_user(
+                    cloud="gcp",
+                    tenant_name=meta.get("_tenant_name", ""),
+                    private_ip=private_ip,
+                    instance_name=instance_id,
+                    project=meta.get("_project", ""),
+                    zone=meta.get("_zone", ""),
+                )
+
                 output = await ssh_run_command(
                     private_ip=private_ip,
                     commands=commands,
                     instance_name=instance_id,
                     project=meta.get("_project", ""),
                     zone=meta.get("_zone", ""),
+                    os_user=os_user,
                 )
 
             success = "cleaned" in output.lower() or "%" in output
@@ -151,8 +161,19 @@ class ClearLogsAction(BaseAction):
         elif cloud == "gcp" and private_ip:
             try:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+                from app.cloud.ssh_user_resolver import resolve_ssh_user
 
-                output = await ssh_run_command(private_ip=private_ip, commands=commands)
+                os_user = await resolve_ssh_user(
+                    cloud="gcp",
+                    tenant_name=incident_meta.get("_tenant_name", ""),
+                    private_ip=private_ip,
+                    instance_name=incident_meta.get("_instance_id", ""),
+                    project=incident_meta.get("_project", ""),
+                    zone=incident_meta.get("_zone", ""),
+                )
+                output = await ssh_run_command(
+                    private_ip=private_ip, commands=commands, os_user=os_user,
+                )
                 usage = int(output.strip())
                 return usage < 90
             except Exception:

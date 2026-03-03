@@ -90,6 +90,16 @@ class BlockIpAction(BaseAction):
     async def _execute_gcp(self, private_ip, commands, instance_name, meta):
         try:
             from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+            from app.cloud.ssh_user_resolver import resolve_ssh_user
+
+            os_user = await resolve_ssh_user(
+                cloud="gcp",
+                tenant_name=meta.get("_tenant_name", ""),
+                private_ip=private_ip,
+                instance_name=instance_name or "",
+                project=meta.get("_project", ""),
+                zone=meta.get("_zone", ""),
+            )
 
             output = await ssh_run_command(
                 private_ip=private_ip,
@@ -97,6 +107,7 @@ class BlockIpAction(BaseAction):
                 instance_name=instance_name or "",
                 project=meta.get("_project", ""),
                 zone=meta.get("_zone", ""),
+                os_user=os_user,
             )
             success = (
                 "drop" in output.lower()
@@ -150,8 +161,19 @@ class BlockIpAction(BaseAction):
         elif cloud == "gcp" and private_ip:
             try:
                 from app.cloud.gcp_ssh import gcp_ssh_run_command as ssh_run_command
+                from app.cloud.ssh_user_resolver import resolve_ssh_user
 
-                output = await ssh_run_command(private_ip=private_ip, commands=commands)
+                os_user = await resolve_ssh_user(
+                    cloud="gcp",
+                    tenant_name=incident_meta.get("_tenant_name", ""),
+                    private_ip=private_ip,
+                    instance_name=incident_meta.get("_instance_id", ""),
+                    project=incident_meta.get("_project", ""),
+                    zone=incident_meta.get("_zone", ""),
+                )
+                output = await ssh_run_command(
+                    private_ip=private_ip, commands=commands, os_user=os_user,
+                )
                 return "BLOCKED" in output
             except Exception:
                 pass

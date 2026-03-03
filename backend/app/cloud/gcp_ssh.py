@@ -46,8 +46,11 @@ def _get_gcp_credentials():
     from google.auth import default
     from google.auth.transport.requests import Request
 
-    if settings.GCP_SERVICE_ACCOUNT_KEY and os.path.exists(settings.GCP_SERVICE_ACCOUNT_KEY):
+    if settings.GCP_SERVICE_ACCOUNT_KEY and os.path.exists(
+        settings.GCP_SERVICE_ACCOUNT_KEY
+    ):
         from google.oauth2 import service_account
+
         creds = service_account.Credentials.from_service_account_file(
             settings.GCP_SERVICE_ACCOUNT_KEY,
             scopes=[
@@ -56,10 +59,12 @@ def _get_gcp_credentials():
             ],
         )
     else:
-        creds, _ = default(scopes=[
-            "https://www.googleapis.com/auth/compute",
-            "https://www.googleapis.com/auth/cloud-platform",
-        ])
+        creds, _ = default(
+            scopes=[
+                "https://www.googleapis.com/auth/compute",
+                "https://www.googleapis.com/auth/cloud-platform",
+            ]
+        )
 
     creds.refresh(Request())
     return creds
@@ -72,6 +77,7 @@ async def gcp_ssh_run_command(
     project: str = "",
     zone: str = "",
     timeout: int = 0,
+    os_user: str = "",
 ) -> str:
     """
     Execute commands on a GCE instance via SSH using OS Login.
@@ -87,6 +93,7 @@ async def gcp_ssh_run_command(
         project: GCP project ID
         zone: GCE zone
         timeout: SSH command timeout in seconds
+        os_user: OS user to connect as (overrides default resolution)
 
     Returns:
         Combined stdout from the command execution.
@@ -96,7 +103,7 @@ async def gcp_ssh_run_command(
     timeout = timeout or settings.SSH_TIMEOUT
     project = project or settings.GCP_PROJECT_ID
     zone = zone or settings.GCP_ZONE
-    username = _resolve_os_login_user()
+    username = os_user or _resolve_os_login_user()
 
     log = logger.bind(
         private_ip=private_ip,
@@ -124,7 +131,11 @@ async def gcp_ssh_run_command(
             if result.exit_status != 0:
                 output += f"\n--- EXIT CODE: {result.exit_status} ---"
 
-            log.info("gcp_ssh_command_complete", exit_code=result.exit_status, output_length=len(output))
+            log.info(
+                "gcp_ssh_command_complete",
+                exit_code=result.exit_status,
+                output_length=len(output),
+            )
             return output
 
     except asyncio.TimeoutError:
@@ -134,9 +145,7 @@ async def gcp_ssh_run_command(
         raise RuntimeError(f"SSH to {private_ip} failed: {exc}") from exc
 
 
-async def _build_ssh_connect_kwargs(
-    username: str, host: str, timeout: int
-) -> dict:
+async def _build_ssh_connect_kwargs(username: str, host: str, timeout: int) -> dict:
     """
     Build asyncssh connection kwargs.
 
