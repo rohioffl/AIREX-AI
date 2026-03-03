@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, AlertTriangle, Activity, Settings,
+  LayoutDashboard, AlertTriangle, Activity, Settings, Radar,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
   X, ChevronRight, Clock, Zap, Ban, Users, HeartPulse
 } from 'lucide-react'
@@ -19,6 +19,7 @@ const ACTIVE_STATES = [
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Alerts', path: '/alerts', icon: AlertTriangle, showBadge: true, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Proactive', path: '/proactive', icon: Radar, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Live Feed', path: '/live', icon: Activity, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Health', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
@@ -33,8 +34,10 @@ export default function Layout({ children }) {
   const { user, logout } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [alertCount, setAlertCount] = useState(0)
-  const [criticalCount, setCriticalCount] = useState(0)
+  const [activeAlertIds, setActiveAlertIds] = useState(new Set())
+  const [activeCriticalIds, setActiveCriticalIds] = useState(new Set())
+  const alertCount = activeAlertIds.size
+  const criticalCount = activeCriticalIds.size
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -64,8 +67,9 @@ export default function Layout({ children }) {
         if (cancelled) return
         const items = data.items || []
         const active = items.filter(i => ACTIVE_STATES.includes(i.state))
-        setAlertCount(active.length)
-        setCriticalCount(active.filter(i => i.severity === 'CRITICAL').length)
+        const nonHealthCheck = active.filter(i => i.alert_type !== 'healthcheck')
+        setActiveAlertIds(new Set(nonHealthCheck.map(i => i.id)))
+        setActiveCriticalIds(new Set(nonHealthCheck.filter(i => i.severity === 'CRITICAL').map(i => i.id)))
         setNotifications(active.slice(0, 10).map(i => ({
           id: i.id,
           title: i.title || 'Alert',
@@ -90,8 +94,12 @@ export default function Layout({ children }) {
       sse = createSSEConnection(
         {
           incident_created(data) {
-            setAlertCount(c => c + 1)
-            if (data.severity === 'CRITICAL') setCriticalCount(c => c + 1)
+            if (data.alert_type !== 'healthcheck') {
+              setActiveAlertIds(prev => new Set(prev).add(data.incident_id || data.id))
+              if (data.severity === 'CRITICAL') {
+                setActiveCriticalIds(prev => new Set(prev).add(data.incident_id || data.id))
+              }
+            }
             setNotifications(prev => [{
               id: data.incident_id || data.id || '',
               title: data.title || 'New Alert',
@@ -105,7 +113,16 @@ export default function Layout({ children }) {
           state_changed(data) {
             const resolvedStates = ['RESOLVED', 'FAILED_ANALYSIS', 'FAILED_EXECUTION', 'REJECTED']
             if (resolvedStates.includes(data.new_state)) {
-              setAlertCount(c => Math.max(0, c - 1))
+              setActiveAlertIds(prev => {
+                const next = new Set(prev)
+                next.delete(data.incident_id)
+                return next
+              })
+              setActiveCriticalIds(prev => {
+                const next = new Set(prev)
+                next.delete(data.incident_id)
+                return next
+              })
             }
             setNotifications(prev =>
               prev.map(n => n.id === data.incident_id ? { ...n, state: data.new_state } : n)

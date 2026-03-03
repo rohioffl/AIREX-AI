@@ -9,6 +9,7 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import IncidentDetail from './pages/IncidentDetail'
 import AlertsPage from './pages/AlertsPage'
+import ProactiveAlertsPage from './pages/ProactiveAlertsPage'
 import RejectedPage from './pages/RejectedPage'
 import DashboardPage from './pages/DashboardPage'
 import LiveFeed from './pages/LiveFeed'
@@ -33,6 +34,7 @@ export default function App() {
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/incidents/:id" element={<IncidentDetail />} />
                       <Route path="/alerts" element={<AlertsPage />} />
+                      <Route path="/proactive" element={<ProactiveAlertsPage />} />
                       <Route path="/rejected" element={<RejectedPage />} />
                       <Route path="/live" element={<LiveFeed />} />
                       <Route path="/settings" element={<SettingsPage />} />

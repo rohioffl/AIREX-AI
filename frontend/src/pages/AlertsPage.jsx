@@ -94,7 +94,7 @@ export default function AlertsPage() {
   // eslint-disable-next-line react-hooks/preserve-manual-memoization -- complex filter/sort/paginate logic, React Compiler cannot preserve
   const visibleAlerts = useMemo(() => {
     let list = incidents
-      .filter(i => i.state !== 'REJECTED')
+      .filter(i => i.state !== 'REJECTED' && i.alert_type !== 'healthcheck')
       .map(i => ({ ...i }))
 
     // Filter by host if host parameter is present
@@ -156,7 +156,7 @@ export default function AlertsPage() {
   }, [incidents, alertFilter, hostFilter, advancedFilters, sortBy, page, pageSize])
 
   const totalFiltered = useMemo(() => {
-    let list = incidents.filter(i => i.state !== 'REJECTED')
+    let list = incidents.filter(i => i.state !== 'REJECTED' && i.alert_type !== 'healthcheck')
     if (hostFilter) {
       const decodedFilter = decodeURIComponent(hostFilter)
       list = list.filter(i => {
@@ -188,12 +188,12 @@ export default function AlertsPage() {
 
   const totalPages = Math.ceil(totalFiltered / pageSize)
   const uniqueAlertTypes = useMemo(() => {
-    const types = new Set(incidents.filter(i => i.state !== 'REJECTED' && i.alert_type).map(i => i.alert_type))
+    const types = new Set(incidents.filter(i => i.state !== 'REJECTED' && i.alert_type !== 'healthcheck' && i.alert_type).map(i => i.alert_type))
     return Array.from(types).sort()
   }, [incidents])
 
   const counts = useMemo(() => {
-    let list = incidents.filter(i => i.state !== 'REJECTED')
+    let list = incidents.filter(i => i.state !== 'REJECTED' && i.alert_type !== 'healthcheck')
     // Apply host filter to counts if present - use same logic as visibleAlerts
     if (hostFilter) {
       const decodedFilter = decodeURIComponent(hostFilter)
