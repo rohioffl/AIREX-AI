@@ -174,4 +174,9 @@ export async function submitFeedback(incidentId, score, note) {
   return res.data
 }
 
+export async function fetchAutoRunbook(incidentId) {
+  const res = await api.get(`/incidents/${incidentId}/runbook`)
+  return res.data
+}
+
 export default api

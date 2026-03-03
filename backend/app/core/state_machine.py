@@ -211,4 +211,28 @@ async def transition_state(
                 error=str(exc),
             )
 
+        # Enqueue runbook auto-generation for resolved incidents (Phase 5 ARE)
+        if new_state == IncidentState.RESOLVED:
+            try:
+                from arq import create_pool
+                from arq.connections import RedisSettings
+                from app.core.config import settings as _settings
+
+                pool = await create_pool(
+                    RedisSettings.from_dsn(_settings.REDIS_URL)
+                )
+                await pool.enqueue_job(
+                    "generate_runbook_task",
+                    str(incident.tenant_id),
+                    str(incident.id),
+                    _defer_by=5,  # slight delay to let resolution recording finish
+                )
+                await pool.aclose()
+            except Exception as exc:
+                logger.warning(
+                    "runbook_generation_enqueue_failed",
+                    incident_id=str(incident.id),
+                    error=str(exc),
+                )
+
     return transition

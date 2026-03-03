@@ -164,6 +164,39 @@ async def verify_resolution_task(
             await _send_to_dlq(redis, "verify_resolution_task", tenant_id, incident_id, exc)
 
 
+async def generate_runbook_task(
+    ctx: dict, tenant_id: str, incident_id: str
+) -> None:
+    """ARQ task: auto-generate a runbook from a resolved incident (Phase 5 ARE)."""
+    from app.services.incident_service import get_incident
+    from app.services.runbook_generator import generate_and_store_runbook
+    from app.core.database import get_tenant_session
+
+    log = logger.bind(task="generate_runbook", tenant_id=tenant_id, incident_id=incident_id)
+    log.info("task_started")
+
+    tid = uuid.UUID(tenant_id)
+    iid = uuid.UUID(incident_id)
+    redis = ctx.get("redis")
+
+    try:
+        async with get_tenant_session(tid) as session:
+            incident = await get_incident(session, tid, iid)
+            if incident is None:
+                log.error("incident_not_found")
+                return
+            source_id = await generate_and_store_runbook(session, incident, redis=redis)
+            if source_id:
+                log.info("runbook_generated", source_id=str(source_id))
+            else:
+                log.info("runbook_generation_skipped")
+        log.info("task_completed")
+    except Exception as exc:
+        log.error("task_failed", error=str(exc))
+        if redis:
+            await _send_to_dlq(redis, "generate_runbook_task", tenant_id, incident_id, exc)
+
+
 async def on_startup(ctx: dict) -> None:
     """ARQ worker startup hook — init Redis for SSE events."""
     redis = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
@@ -189,6 +222,7 @@ class WorkerSettings:
         generate_recommendation_task,
         execute_action_task,
         verify_resolution_task,
+        generate_runbook_task,
     ]
     cron_jobs = [
         cron(retry_failed_incidents, second={0, 30}),

@@ -35,6 +35,7 @@ import InvestigationTimeline from '../components/incident/InvestigationTimeline'
 import IncidentChat from '../components/incident/IncidentChat'
 import ReasoningChain from '../components/incident/ReasoningChain'
 import ResolutionOutcome from '../components/incident/ResolutionOutcome'
+import AutoRunbook from '../components/incident/AutoRunbook'
 import FallbackHistory from '../components/incident/FallbackHistory'
 import CorrelationGroup from '../components/incident/CorrelationGroup'
 import ConnectionBanner from '../components/common/ConnectionBanner'
@@ -512,6 +513,9 @@ export default function IncidentDetail() {
 
         {/* 4.6 Resolution Outcome & Feedback */}
         <ResolutionOutcome incident={incident} />
+
+        {/* 4.7 Auto-Generated Runbook (Phase 5 ARE) */}
+        <AutoRunbook incident={incident} />
 
         {/* Additional Info Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">

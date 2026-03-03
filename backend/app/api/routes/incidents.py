@@ -612,3 +612,69 @@ async def submit_feedback(
         feedback_score=incident.feedback_score,
         feedback_note=incident.feedback_note,
     )
+
+
+@router.get(
+    "/{incident_id}/runbook",
+    response_model=dict,
+    dependencies=[Depends(require_role("viewer"))],
+)
+async def get_auto_runbook(
+    incident_id: uuid.UUID,
+    tenant_id: TenantId,
+    session: TenantSession,
+) -> dict:
+    """
+    Retrieve the auto-generated runbook for a resolved incident.
+
+    Returns the full runbook content assembled from chunks,
+    or 404 if no runbook has been generated yet.
+    """
+    from app.services.incident_service import get_incident
+
+    incident = await get_incident(session, tenant_id, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    meta = incident.meta or {}
+    source_id_str = meta.get("_auto_runbook_source_id")
+    if not source_id_str:
+        raise HTTPException(
+            status_code=404,
+            detail="No auto-generated runbook for this incident",
+        )
+
+    source_id = uuid.UUID(source_id_str)
+
+    from app.models.runbook_chunk import RunbookChunk
+
+    result = await session.execute(
+        select(RunbookChunk)
+        .where(
+            RunbookChunk.tenant_id == tenant_id,
+            RunbookChunk.source_id == source_id,
+        )
+        .order_by(RunbookChunk.chunk_index.asc())
+    )
+    chunks = result.scalars().all()
+
+    if not chunks:
+        raise HTTPException(
+            status_code=404,
+            detail="Runbook chunks not found",
+        )
+
+    # Reassemble the full runbook from chunks
+    full_content = "\n".join(c.content for c in chunks)
+    first_meta = chunks[0].meta or {}
+
+    return {
+        "incident_id": str(incident_id),
+        "source_id": str(source_id),
+        "alert_type": incident.alert_type,
+        "title": first_meta.get("title", f"Auto-Runbook: {incident.alert_type}"),
+        "content": full_content,
+        "generated_at": meta.get("_auto_runbook_generated_at"),
+        "resolution_type": incident.resolution_type,
+        "chunk_count": len(chunks),
+    }
