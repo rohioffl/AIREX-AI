@@ -50,6 +50,9 @@ dist/
 Thumbs.db
 
 # Credentials (NEVER commit)
+commands.txt
+gcp-oauth.keys.json
+*.keys
 backend/config/credentials/*.json
 backend/config/credentials/*.pem
 backend/config/credentials/*.key
