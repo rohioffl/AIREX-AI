@@ -6,6 +6,7 @@
 > - Frontend: [docs/frontend_skill.md](docs/frontend_skill.md)
 > - Backend: [docs/backend_skill.md](docs/backend_skill.md)
 > - Database: [docs/database_skill.md](docs/database_skill.md)
+> - Resume: [docs/skills/resume_formatter/SKILL.md](docs/skills/resume_formatter/SKILL.md)
 
 ---
 
