@@ -20,6 +20,8 @@ GitHub: `github.com/rohioffl`
 
 AIREX stands for **Autonomous Incident Resolution Engine Xecution**. It is a safety-conscious incident automation platform that ingests alerts, investigates affected systems, generates AI-assisted recommendations, applies policy and approval rules, executes deterministic remediation actions, and verifies the outcome.
 
+![AIREX landing page screenshot](airex-homepage-desktop-final.png)
+
 ## Why It Exists
 
 AIREX is designed to reduce mean time to resolution for operational incidents without sacrificing control. It combines deterministic backend rules, auditable state transitions, cloud investigation workflows, and approval-gated AI assistance so operators can move faster without giving up safety.
