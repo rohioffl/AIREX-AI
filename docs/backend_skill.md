@@ -30,7 +30,7 @@ The Backend must be:
 | :--- | :--- | :--- |
 | **Framework** | FastAPI | Async IO required. Strict Pydantic models. |
 | **Database** | PostgreSQL | SQLAlchemy 2.0 (Async) + Alembic. |
-| **Queue** | Redis + ARQ/Celery | Distributed task processing. |
+| **Queue** | Redis + ARQ | Distributed task processing. |
 | **AI** | LiteLLM | **Model Agnostic**. Supports local/Gemini/OpenAI. |
 | **Cloud** | boto3 / google-cloud | **NO** stored keys. Use IAM Roles / Workload Identity. |
 
@@ -106,7 +106,7 @@ ALLOWED_TRANSITIONS = {
   - Log failure.
   - Increment `investigation_retry_count`.
   - If `< MAX_INVESTIGATION_RETRY` (3) → Retry.
-  - Else → State = `REJECTED` (manual review).
+  - Else → State = `FAILED_ANALYSIS` and mark manual review required.
 - **Prohibition**: **NO** side effects (ReadOnly actions only).
 
 | Plugin | Alert Type(s) | Notes |
@@ -262,7 +262,7 @@ backend/
     core/
       state_machine.py  # The Law
       policy.py         # The Rules
-      celery_app.py     # The Workers
+      worker.py         # The Workers
     investigations/     # Read-Only Plugins
       cpu_high.py
       disk_full.py

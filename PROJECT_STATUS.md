@@ -211,11 +211,11 @@
 
 | # | Issue | Location |
 |---|-------|----------|
-| 1 | Auth bypass button in production code | `frontend/src/pages/LoginPage.jsx:288` |
-| 2 | No route guards — all pages accessible without login | `frontend/src/App.jsx` |
+| 1 | Auth bypass button in production code | `apps/web/src/pages/LoginPage.jsx:288` |
+| 2 | No route guards — all pages accessible without login | `apps/web/src/App.jsx` |
 | 3 | `backend/.env` appears committed with real GCP project/IP | `backend/.env` |
 | 4 | SECRET_KEY is placeholder: `CHANGE_THIS_IN_PRODUCTION...` | `backend/.env` |
-| 5 | Dockerfiles run as root | `backend/Dockerfile`, `frontend/Dockerfile` |
+| 5 | Some deploy images historically ran as root | `services/airex-api/Dockerfile`, `services/airex-worker/Dockerfile` |
 
 ### P1 — Data Integrity
 
@@ -229,10 +229,10 @@
 
 | # | Issue | Location |
 |---|-------|----------|
-| 9 | Reject button does not capture operator note/reason | `frontend/src/components/incident/ApprovalControls.jsx:59` |
-| 10 | Search bar is decorative (no input, no logic) | `frontend/src/components/layout/Layout.jsx:226` |
-| 11 | SystemGraph uses Math.random() — fake data | `frontend/src/components/common/SystemGraph.jsx:8` |
-| 12 | Settings page hardcoded, read-only | `frontend/src/pages/SettingsPage.jsx` |
+| 9 | Reject button does not capture operator note/reason | `apps/web/src/components/incident/ApprovalControls.jsx:59` |
+| 10 | Search bar is decorative (no input, no logic) | `apps/web/src/components/layout/Layout.jsx:226` |
+| 11 | SystemGraph uses Math.random() — fake data | `apps/web/src/components/common/SystemGraph.jsx:8` |
+| 12 | Settings page remains mostly static and limited in configuration scope | `apps/web/src/pages/SettingsPage.jsx` |
 | 13 | GCP MIG scaling not implemented | `backend/app/actions/scale_instances.py` |
 | 14 | TenantLimit never enforced | `backend/app/models/tenant_limit.py` (model only) |
 | 15 | Missing API endpoints: DLQ replay, user CRUD, soft-delete, manual-review tooling | Backend routes |
@@ -242,9 +242,9 @@
 | # | Issue | Location |
 |---|-------|----------|
 | 16 | Orphaned empty `backend/backend/` directory | `backend/backend/` |
-| 17 | Dead `App.css` (default Vite template) | `frontend/src/App.css` |
-| 18 | Unused Three.js dependencies (~2MB bundle waste) | `frontend/package.json` |
-| 19 | index.html title is "frontend", default favicon | `frontend/index.html` |
+| 17 | Dead `App.css` (default Vite template) | `apps/web/src/App.css` |
+| 18 | Unused Three.js dependencies (~2MB bundle waste) | `apps/web/package.json` |
+| 19 | index.html title is "frontend", default favicon | `apps/web/index.html` |
 | 20 | Cursor agent files corrupted (frontmatter 50-100x duplicated) | `.cursor/agents/*.md` |
 | 21 | Fallback tenant ID duplicated in 6 files | Multiple frontend files |
 | 22 | Orphaned root files: commands.txt, test.mp4, hero.png | Project root |

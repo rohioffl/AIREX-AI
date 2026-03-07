@@ -12,6 +12,14 @@
 - `.cursorrules`: not present
 - `.github/copilot-instructions.md`: not present
 
+## 0) Session Workflow Rules
+- Use the Memory MCP at the start of meaningful project work to recover relevant repo context, prior decisions, architecture facts, and user preferences.
+- Update the Memory MCP after meaningful changes to architecture, deployment, testing status, workflow rules, commits, or other durable project state.
+- Treat Memory MCP usage as a default project rule, not an optional step.
+- Prefer connected MCP servers when they fit the task, especially: `memory`, `filesystem`, `github`, `docker`, `context7`, `grep_app`, `playwright`, `puppeteer`, `websearch`, and `google-drive`.
+- Choose MCP tools by task fit: use documentation/context tools for external library accuracy, browser tools for real UI verification, Docker tools for container/runtime checks, GitHub tools for repository state, and filesystem/search tools for local project inspection.
+- If a connected MCP server is relevant and available, prefer it over ad-hoc workarounds unless there is a clear reason not to.
+
 ## 1) Build, Lint, and Test Commands
 ### 1.1 Backend (FastAPI + SQLAlchemy Async + ARQ)
 Setup:
@@ -51,7 +59,7 @@ python -m pytest tests/ -k "recommendation and not slow"
 ### 1.2 Frontend (React 19 + Vite + Vitest)
 Setup and run:
 ```bash
-cd frontend
+cd apps/web
 npm install
 npm run dev
 npm run build
@@ -140,7 +148,7 @@ Recommended pre-PR validation:
 # backend
 cd backend && ruff check app/ && mypy app/ --ignore-missing-imports && pytest
 # frontend
-cd frontend && npm run lint && npm run test && npm run build
+cd apps/web && npm run lint && npm run test && npm run build
 # e2e (for UI/API flow changes)
 cd e2e && npm run test
 ```

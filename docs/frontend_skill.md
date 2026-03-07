@@ -34,6 +34,8 @@ The UI must be:
 | **Real-time** | SSE (Server-Sent Events) | Must handle auto-reconnect. |
 | **State** | React Context / Hooks | **NO Redux**. **NO MobX**. Keep it simple. |
 
+**Current repo location:** frontend application code lives in `apps/web/`.
+
 ---
 
 ## 2. Core Architectural Rule: "State is King"
@@ -78,7 +80,7 @@ The UI MUST be 100% state-driven.
 1.  **Header**: Core metadata.
 2.  **Timeline**: Chronological events.
 3.  **Evidence**: Raw data (logs/JSON).
-4.  **Recommendation**: AI analysis (If `state >= RECOMMENDATION_READY`).
+4.  **Recommendation**: AI analysis (If state is one of `RECOMMENDATION_READY`, `AWAITING_APPROVAL`, `EXECUTING`, `VERIFYING`, `RESOLVED`, `FAILED_*`, or `REJECTED`).
 5.  **Approval Controls**: Actions (If `state == AWAITING_APPROVAL`).
 6.  **Execution Logs**: Live output (If `state >= EXECUTING`).
 7.  **Verification Result**: Final status (If `state >= VERIFYING`).
@@ -207,29 +209,30 @@ interface Incident {
 
 ## 9. Folder Structure
 ```
-src/
-  pages/
-    IncidentList.jsx
-    IncidentDetail.jsx
-  components/
-    common/
-      StateBadge.jsx
-      SeverityBadge.jsx
-      ConfirmationModal.jsx
-    incident/
-      IncidentCard.jsx
-      Timeline.jsx
-      EvidencePanel.jsx
-      RecommendationCard.jsx
-      ExecutionLogs.jsx
-  services/
-    api.js       // Axios instance
-    sse.js       // SSE connection manager
-  hooks/
-    useIncidents.js
-    useIncidentDetail.js
-  utils/
-    formatters.js
+apps/web/
+  src/
+    pages/
+      IncidentList.jsx
+      IncidentDetail.jsx
+    components/
+      common/
+        StateBadge.jsx
+        SeverityBadge.jsx
+        ConfirmationModal.jsx
+      incident/
+        IncidentCard.jsx
+        Timeline.jsx
+        EvidencePanel.jsx
+        RecommendationCard.jsx
+        ExecutionLogs.jsx
+    services/
+      api.js       // Axios instance
+      sse.js       // SSE connection manager
+    hooks/
+      useIncidents.js
+      useIncidentDetail.js
+    utils/
+      formatters.js
 ```
 
 ## 10. Acceptance Criteria

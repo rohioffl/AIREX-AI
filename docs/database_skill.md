@@ -31,6 +31,8 @@ The Database must be:
 | **Migrations** | Alembic | **NO** auto-generating migrations without review. |
 | **Connection** | Asyncpg | Connection pooling required. |
 
+**Current repo location:** migrations live in `database/`, with Alembic config in `database/alembic.ini` and versions under `database/alembic/versions/`.
+
 ---
 
 ## 2. Core Architectural Rules
@@ -196,6 +198,7 @@ CREATE TYPE incident_state AS ENUM (
     - **Safe FKs**: Use `NOT VALID` then `VALIDATE CONSTRAINT` to avoid locking.
     - `alembic` revisions must handle Enum creation explicitly.
     - Data backfills separate from Schema changes.
+    - The migration pipeline must keep `database/` independent from app deployment pipelines while importing shared models from `backend/`.
 
 ## 6. Acceptance Criteria
 
