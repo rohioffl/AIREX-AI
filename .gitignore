@@ -1,3 +1,4 @@
+.tmp/
 profitgrid/
 # Python
 __pycache__/
