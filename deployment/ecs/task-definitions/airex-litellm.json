@@ -23,9 +23,7 @@
       "secrets": [
         { "name": "LITELLM_MASTER_KEY", "valueFrom": "__SECRET_LITELLM_MASTER_KEY_ARN__" },
         { "name": "LANGFUSE_PUBLIC_KEY", "valueFrom": "__SECRET_LANGFUSE_PUBLIC_KEY_ARN__" },
-        { "name": "LANGFUSE_SECRET_KEY", "valueFrom": "__SECRET_LANGFUSE_SECRET_KEY_ARN__" },
-        { "name": "OPENAI_API_KEY", "valueFrom": "__SECRET_OPENAI_KEY_ARN__" },
-        { "name": "GEMINI_API_KEY", "valueFrom": "__SECRET_GEMINI_KEY_ARN__" }
+        { "name": "LANGFUSE_SECRET_KEY", "valueFrom": "__SECRET_LANGFUSE_SECRET_KEY_ARN__" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",

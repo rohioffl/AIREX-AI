@@ -3,12 +3,12 @@ version: 0.2
 env:
   variables:
     AWS_REGION: ap-south-1
-    ECS_CLUSTER: airex-prod
-    ECS_SERVICE_API: airex-api
-    ECS_SERVICE_WORKER: airex-worker
-    ECS_SERVICE_LITELLM: airex-litellm
-    ECS_SERVICE_LANGFUSE: airex-langfuse
-    ECS_MIGRATE_TASKDEF: airex-migrate
+    ECS_CLUSTER: airex-prod-cluster
+    ECS_SERVICE_API: airex-prod-api
+    ECS_SERVICE_WORKER: airex-prod-worker
+    ECS_SERVICE_LITELLM: airex-prod-litellm
+    ECS_SERVICE_LANGFUSE: airex-prod-langfuse
+    ECS_MIGRATE_TASKDEF: airex-prod-migrate
 
 phases:
   install:

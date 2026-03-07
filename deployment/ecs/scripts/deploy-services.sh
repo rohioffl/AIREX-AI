@@ -15,7 +15,7 @@ update_service() {
   echo "Triggered deployment: $service_name"
 }
 
-update_service "${ECS_SERVICE_API:-airex-api}"
-update_service "${ECS_SERVICE_WORKER:-airex-worker}"
-update_service "${ECS_SERVICE_LITELLM:-airex-litellm}"
-update_service "${ECS_SERVICE_LANGFUSE:-airex-langfuse}"
+update_service "${ECS_SERVICE_API:-airex-prod-api}"
+update_service "${ECS_SERVICE_WORKER:-airex-prod-worker}"
+update_service "${ECS_SERVICE_LITELLM:-airex-prod-litellm}"
+update_service "${ECS_SERVICE_LANGFUSE:-airex-prod-langfuse}"
