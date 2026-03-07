@@ -4,7 +4,7 @@ import {
   CheckCircle, AlertTriangle, RefreshCw, Save
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { fetchSettings, updateSettings } from '../services/api'
+import { fetchBackendHealth, fetchSettings, updateSettings } from '../services/api'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import { FALLBACK_TENANT_ID } from '../utils/constants'
 import { extractErrorMessage } from '../utils/errorHandler'
@@ -26,20 +26,14 @@ export default function SettingsPage() {
 
   async function fetchHealth() {
     try {
-      // In dev, `/api` is proxied to the backend; backend health lives at `/health`
-      const res = await fetch('/health', { credentials: 'include' })
-
-      // Expected case in dev when backend is not running
-      if (res.status === 404) {
+      const data = await fetchBackendHealth()
+      setHealth(data)
+    } catch (err) {
+      if (err?.response?.status === 404) {
         setHealth({ status: 'dev_backend_missing' })
         return
       }
 
-      if (!res.ok) throw new Error('health check failed')
-      const data = await res.json()
-      setHealth(data)
-    } catch (err) {
-      // Only log unexpected failures (network issues, 5xx, etc.)
       console.error('health check failed', err)
       setHealth(null)
     } finally {

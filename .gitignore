@@ -113,6 +113,10 @@ Untitled
 route
 land_final.jpg
 .opencode/
+.opencodeignore
+.sisyphus/
+.opencode-state.json
+.opencode-session.json
 
 # Home dir artifacts
 ~/

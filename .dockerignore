@@ -35,9 +35,6 @@ infrastructure/
 # Docs
 docs/
 
-# Apps (S3-deployed frontend, not Docker)
-apps/
-
 # Sisyphus / CI artifacts
 .sisyphus/
 .opencodeignore

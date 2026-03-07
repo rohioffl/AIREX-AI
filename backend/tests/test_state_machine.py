@@ -4,7 +4,7 @@ Validates allowed transitions, rejects illegal ones, and verifies hash chaining.
 """
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -165,6 +165,24 @@ class TestTransitionState:
                 incident,
                 IncidentState.RESOLVED,
                 reason="Magic fix",
+            )
+
+    @pytest.mark.asyncio
+    async def test_terminal_state_cannot_transition(self, tenant_id):
+        """Terminal states reject follow-up transitions."""
+        incident = MagicMock()
+        incident.tenant_id = tenant_id
+        incident.id = uuid.uuid4()
+        incident.state = IncidentState.RESOLVED
+
+        session = AsyncMock()
+
+        with pytest.raises(IllegalStateTransition):
+            await transition_state(
+                session,
+                incident,
+                IncidentState.INVESTIGATING,
+                reason="Reopen without workflow",
             )
 
     @pytest.mark.asyncio

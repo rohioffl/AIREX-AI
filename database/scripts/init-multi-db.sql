@@ -1,0 +1,4 @@
+-- Reserved for fresh Postgres bootstrap steps used by the database pipeline.
+-- The current local/dev stack only needs a single default database, so this
+-- file is intentionally a no-op placeholder that keeps docker-compose and the
+-- migration pipeline path contract stable.

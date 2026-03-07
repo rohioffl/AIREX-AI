@@ -1,8 +1,0 @@
-Task 4: Update Dockerfile paths from frontend/ to apps/web/
-Changed lines:
-- Line 5: COPY apps/web/package.json apps/web/package-lock.json ./
-- Line 8: COPY apps/web/ .
-- Line 17: COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
-Validation:
-- Grep for frontend/ in services/airex-frontend/Dockerfile: 0 matches
-- Current Dockerfile content shows only apps/web references

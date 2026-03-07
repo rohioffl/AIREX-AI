@@ -18,3 +18,7 @@ phases:
     commands:
       - aws s3 sync apps/web/dist s3://$FRONTEND_BUCKET --delete
       - aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DISTRIBUTION_ID --paths "/*"
+
+cache:
+  paths:
+    - apps/web/node_modules/**/*

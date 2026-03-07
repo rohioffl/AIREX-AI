@@ -164,6 +164,11 @@ export async function updateSettings(data) {
   return res.data
 }
 
+export async function fetchBackendHealth() {
+  const res = await axios.get('/health', { withCredentials: true })
+  return res.data
+}
+
 // Incident feedback (operator rating)
 export async function submitFeedback(incidentId, score, note) {
   const payload = { score }
