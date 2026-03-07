@@ -31,6 +31,8 @@ def _utcnow() -> datetime:
 
 
 class Execution(Base, TenantMixin):
+    """Execution attempts for approved remediation actions on incidents."""
+
     __tablename__ = "executions"
     __table_args__ = (
         PrimaryKeyConstraint("tenant_id", "id"),
@@ -86,3 +88,15 @@ class Execution(Base, TenantMixin):
             "Execution.incident_id == Incident.id)"
         ),
     )
+
+    def __repr__(self) -> str:
+        return (
+            "Execution("
+            f"tenant_id={self.tenant_id!s}, "
+            f"id={self.id!s}, "
+            f"incident_id={self.incident_id!s}, "
+            f"action_type={self.action_type!r}, "
+            f"attempt={self.attempt}, "
+            f"status={self.status.value!r}"
+            ")"
+        )

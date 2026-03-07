@@ -47,8 +47,6 @@ async def query_gcp_logs(
     Returns:
         Formatted log output string.
     """
-    from google.cloud import logging as cloud_logging
-
     project = project or settings.GCP_PROJECT_ID
     if not project:
         return "ERROR: GCP_PROJECT_ID not configured. Cannot query logs."
@@ -60,7 +58,9 @@ async def query_gcp_logs(
 
     try:
         # Build client
-        client = await loop.run_in_executor(None, lambda: _create_logging_client(project, sa_key_path))
+        client = await loop.run_in_executor(
+            None, lambda: _create_logging_client(project, sa_key_path)
+        )
 
         # Build filter
         filter_str = _build_filter(
@@ -104,6 +104,7 @@ def _create_logging_client(project: str, sa_key_path: str = ""):
     key_path = sa_key_path or settings.GCP_SERVICE_ACCOUNT_KEY or ""
     if key_path and os.path.exists(key_path):
         from google.oauth2 import service_account
+
         creds = service_account.Credentials.from_service_account_file(key_path)
         logger.info("gcp_logging_auth_explicit_key", key_path=key_path)
         return cloud_logging.Client(project=project, credentials=creds)
@@ -157,7 +158,7 @@ def _format_log_entries(entries: list, project: str, instance_id: str) -> str:
     lines = [
         f"=== GCP Log Explorer: {project}/{instance_id or 'all'} ===",
         f"Entries found: {len(entries)}",
-        f"",
+        "",
     ]
 
     severity_counts: dict[str, int] = {}
@@ -177,7 +178,9 @@ def _format_log_entries(entries: list, project: str, instance_id: str) -> str:
 
         payload = getattr(entry, "payload", None) or getattr(entry, "text_payload", "")
         if isinstance(payload, dict):
-            message = payload.get("message", "") or payload.get("textPayload", str(payload))
+            message = payload.get("message", "") or payload.get(
+                "textPayload", str(payload)
+            )
         else:
             message = str(payload)
 
@@ -223,21 +226,25 @@ async def query_gcp_serial_port_output(
 
     try:
         client = compute_v1.InstancesClient()
+        request = compute_v1.GetSerialPortOutputInstanceRequest(
+            instance=instance_name,
+            project=project,
+            zone=zone,
+            port=port,
+        )
         response = await loop.run_in_executor(
             None,
-            lambda: client.get_serial_port_output(
-                project=project,
-                zone=zone,
-                instance=instance_name,
-                port=port,
-            ),
+            lambda: client.get_serial_port_output(request=request),
         )
         output = response.contents or ""
         # Return last 200 lines
         lines = output.strip().split("\n")
         if len(lines) > 200:
             lines = lines[-200:]
-        return f"=== Serial Port Output: {instance_name} (last {len(lines)} lines) ===\n" + "\n".join(lines)
+        return (
+            f"=== Serial Port Output: {instance_name} (last {len(lines)} lines) ===\n"
+            + "\n".join(lines)
+        )
 
     except Exception as exc:
         logger.warning("gcp_serial_port_failed", instance=instance_name, error=str(exc))

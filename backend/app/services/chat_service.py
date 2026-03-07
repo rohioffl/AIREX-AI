@@ -7,6 +7,7 @@ to the LLM client for response generation.
 
 import json
 import uuid
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -184,7 +185,7 @@ def _build_incident_context(incident: Incident) -> str:
 
 
 async def get_conversation_history(
-    redis,
+    redis: Any,
     tenant_id: str,
     incident_id: str,
 ) -> list[dict[str, str]]:
@@ -193,6 +194,9 @@ async def get_conversation_history(
     Returns list of {role, content} dicts.
     """
     key = _chat_key(tenant_id, incident_id)
+    log = logger.bind(
+        correlation_id=incident_id, tenant_id=tenant_id, incident_id=incident_id
+    )
     try:
         raw = await redis.get(key)
         if raw:
@@ -200,7 +204,7 @@ async def get_conversation_history(
             if isinstance(messages, list):
                 return messages
     except Exception as exc:
-        logger.warning(
+        log.warning(
             "chat_history_load_failed",
             key=key,
             error=str(exc),
@@ -209,7 +213,7 @@ async def get_conversation_history(
 
 
 async def save_conversation_history(
-    redis,
+    redis: Any,
     tenant_id: str,
     incident_id: str,
     messages: list[dict[str, str]],
@@ -219,12 +223,15 @@ async def save_conversation_history(
     Trims to MAX_HISTORY_MESSAGES to prevent unbounded growth.
     """
     key = _chat_key(tenant_id, incident_id)
+    log = logger.bind(
+        correlation_id=incident_id, tenant_id=tenant_id, incident_id=incident_id
+    )
     # Keep only the most recent messages
     trimmed = messages[-MAX_HISTORY_MESSAGES:]
     try:
         await redis.set(key, json.dumps(trimmed), ex=CHAT_TTL_SECONDS)
     except Exception as exc:
-        logger.warning(
+        log.warning(
             "chat_history_save_failed",
             key=key,
             error=str(exc),
@@ -236,7 +243,7 @@ async def chat_with_incident(
     incident_id: uuid.UUID,
     tenant_id: uuid.UUID,
     user_message: str,
-    redis,
+    redis: Any,
 ) -> tuple[str, int]:
     """Process a chat message for an incident.
 
@@ -257,6 +264,7 @@ async def chat_with_incident(
     log = logger.bind(
         tenant_id=str(tenant_id),
         incident_id=str(incident_id),
+        correlation_id=str(incident_id),
     )
 
     # Fetch incident with relationships

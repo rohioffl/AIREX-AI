@@ -42,9 +42,7 @@ class StateTransition(Base, TenantMixin):
             ["incidents.tenant_id", "incidents.id"],
             ondelete="CASCADE",
         ),
-        Index(
-            "idx_state_transitions_incident_fk", "tenant_id", "incident_id"
-        ),
+        Index("idx_state_transitions_incident_fk", "tenant_id", "incident_id"),
     )
 
     incident_id: Mapped[uuid.UUID] = mapped_column(
@@ -89,3 +87,14 @@ class StateTransition(Base, TenantMixin):
             "StateTransition.incident_id == Incident.id)"
         ),
     )
+
+    def __repr__(self) -> str:
+        return (
+            "StateTransition("
+            f"tenant_id={self.tenant_id!s}, "
+            f"id={self.id!s}, "
+            f"incident_id={self.incident_id!s}, "
+            f"from_state={self.from_state.value!r}, "
+            f"to_state={self.to_state.value!r}"
+            ")"
+        )

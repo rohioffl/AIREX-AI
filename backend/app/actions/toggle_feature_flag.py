@@ -126,9 +126,9 @@ class ToggleFeatureFlagAction(BaseAction):
         logs_lines = [
             f"[SIM] Connecting to {host}...",
             f"[SIM] Feature flag '{flag_name}': enabled -> disabled",
-            f"[SIM] ConfigMap updated successfully",
-            f"[SIM] Pods will pick up change within 30s (configmap refresh)",
-            f"[SIM] Feature flag toggle complete",
+            "[SIM] ConfigMap updated successfully",
+            "[SIM] Pods will pick up change within 30s (configmap refresh)",
+            "[SIM] Feature flag toggle complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
 

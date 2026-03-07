@@ -182,7 +182,7 @@ class ScaleInstancesAction(BaseAction):
             )
         lines += [
             f"[SIM] All {target} instances healthy",
-            f"[SIM] Scale operation complete",
+            "[SIM] Scale operation complete",
         ]
         return ActionResult(success=True, logs="\n".join(lines), exit_code=0)
 

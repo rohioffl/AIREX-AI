@@ -121,7 +121,7 @@ class KillProcessAction(BaseAction):
             f"[SIM] Connecting to {host}...",
             f"[SIM] Found runaway process: {process_name} (PID {pid})",
             f"[SIM] Sending SIGTERM to PID {pid}...",
-            f"[SIM] Waiting 2s for graceful shutdown...",
+            "[SIM] Waiting 2s for graceful shutdown...",
             f"[SIM] Process {process_name} (PID {pid}) terminated successfully",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)

@@ -4,7 +4,11 @@ Role-Based Access Control (RBAC) system.
 Defines role-to-permission mappings and provides permission checking utilities.
 """
 
+import structlog
+
 from app.models.enums import Permission, UserRole
+
+logger = structlog.get_logger(__name__)
 
 # Role hierarchy: ADMIN > OPERATOR > VIEWER
 # Each role inherits permissions from lower roles
@@ -43,17 +47,29 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
 }
 
 
+def _parse_user_role(role: str) -> UserRole | None:
+    """Parse role string into :class:`UserRole` safely."""
+    try:
+        return UserRole(role.lower())
+    except ValueError:
+        logger.warning(
+            "rbac_invalid_role",
+            correlation_id=None,
+            role=role,
+        )
+        return None
+
+
 def get_permissions_for_role(role: str) -> set[Permission]:
     """
     Get all permissions for a given role string.
 
     Returns empty set if role is unknown.
     """
-    try:
-        user_role = UserRole(role.lower())
-        return ROLE_PERMISSIONS.get(user_role, set())
-    except ValueError:
+    user_role = _parse_user_role(role)
+    if user_role is None:
         return set()
+    return ROLE_PERMISSIONS.get(user_role, set())
 
 
 def has_permission(role: str, permission: Permission) -> bool:
@@ -75,16 +91,13 @@ def has_all_permissions(role: str, *permissions: Permission) -> bool:
 
 def is_admin(role: str) -> bool:
     """Check if role is admin."""
-    try:
-        return UserRole(role.lower()) == UserRole.ADMIN
-    except ValueError:
-        return False
+    user_role = _parse_user_role(role)
+    return user_role == UserRole.ADMIN
 
 
 def is_operator_or_admin(role: str) -> bool:
     """Check if role is operator or admin."""
-    try:
-        user_role = UserRole(role.lower())
-        return user_role in (UserRole.OPERATOR, UserRole.ADMIN)
-    except ValueError:
+    user_role = _parse_user_role(role)
+    if user_role is None:
         return False
+    return user_role in (UserRole.OPERATOR, UserRole.ADMIN)

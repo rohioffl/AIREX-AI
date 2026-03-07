@@ -12,7 +12,7 @@ from typing import Any
 
 import structlog
 
-from app.investigations.base import Anomaly, ProbeCategory, ProbeResult
+from app.investigations.base import Anomaly, ProbeResult
 
 logger = structlog.get_logger()
 
@@ -198,6 +198,7 @@ def annotate_probe_results(probes: list[ProbeResult]) -> list[ProbeResult]:
     if total_anomalies > 0:
         logger.info(
             "anomalies_detected",
+            correlation_id="anomaly-detector",
             total=total_anomalies,
             probes_with_anomalies=sum(1 for p in probes if p.anomalies),
         )

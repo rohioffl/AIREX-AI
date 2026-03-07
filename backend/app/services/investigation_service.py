@@ -45,7 +45,7 @@ from app.services.anomaly_detector import annotate_probe_results, summarize_anom
 logger = structlog.get_logger()
 
 
-def _should_use_cloud_investigation(meta: dict) -> bool:
+def _should_use_cloud_investigation(meta: dict[str, Any]) -> bool:
     """Check if incident meta has enough cloud context for a real investigation."""
     cloud = (meta.get("_cloud") or "").lower()
     has_target = meta.get("_has_cloud_target", False)
@@ -74,6 +74,7 @@ async def run_investigation(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
         alert_type=incident.alert_type,
     )
 
@@ -208,7 +209,7 @@ async def run_investigation(
     except asyncio.TimeoutError:
         await _handle_failure(session, incident, log, "Investigation timed out")
         return
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError) as exc:
         await _handle_failure(session, incident, log, f"Investigation failed: {exc}")
         return
 

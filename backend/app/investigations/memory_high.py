@@ -68,22 +68,22 @@ class MemoryHighInvestigation(BaseInvestigation):
 
         lines = [
             f"=== Memory Investigation: {host} ===",
-            f"",
+            "",
             f"Total: {total_mb}MB  Used: {used_mb}MB  Free: {free_mb}MB  Usage: {mem_pct}%",
             f"Swap:  2048MB  Used: {swap_used_mb}MB",
-            f"",
-            f"Top Memory Consumers:",
+            "",
+            "Top Memory Consumers:",
             f"{'PID':>8} {'USER':<10} {'RSS':>8} COMMAND",
         ]
         for p in top_procs:
             lines.append(f"{p['pid']:>8} {p['user']:<10} {p['rss']:>8} {p['cmd']}")
 
         lines += [
-            f"",
+            "",
             f"OOM Kills (24h): {oom_kills}",
-            f"",
+            "",
             f"Diagnosis: Memory at {mem_pct}% — primary consumer is Java service.",
-            f"Recommendation: Restart service or increase heap limits.",
+            "Recommendation: Restart service or increase heap limits.",
         ]
 
         return ProbeResult(

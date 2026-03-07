@@ -27,6 +27,12 @@ from app.core.config import settings
 logger = structlog.get_logger()
 
 
+def _ensure_text(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
 def _resolve_os_login_user() -> str:
     """
     Resolve the OS Login POSIX username.
@@ -125,9 +131,9 @@ async def gcp_ssh_run_command(
                 timeout=timeout,
             )
 
-            output = result.stdout or ""
+            output = _ensure_text(result.stdout)
             if result.stderr:
-                output += f"\n--- STDERR ---\n{result.stderr}"
+                output += f"\n--- STDERR ---\n{_ensure_text(result.stderr)}"
             if result.exit_status != 0:
                 output += f"\n--- EXIT CODE: {result.exit_status} ---"
 
@@ -199,7 +205,7 @@ async def _inject_os_login_key() -> str | None:
         return None
 
     # Generate temporary key pair
-    key = asyncssh.generate_private_key("ssh-rsa", 2048)
+    key = asyncssh.generate_private_key("ssh-rsa", key_size=2048)
     pub_key = key.export_public_key().decode("utf-8").strip()
 
     # Push public key to OS Login

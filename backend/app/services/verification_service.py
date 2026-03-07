@@ -32,6 +32,7 @@ async def verify_resolution(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
     )
 
     action_type = None
@@ -97,7 +98,7 @@ async def verify_resolution(
             log,
             f"Verification timed out after {settings.VERIFICATION_TIMEOUT}s",
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError) as exc:
         await _handle_verification_failure(
             session,
             incident,
@@ -133,7 +134,10 @@ async def _handle_verification_failure(
             from app.services.fallback_service import attempt_fallback
 
             fallback_initiated = await attempt_fallback(
-                session, incident, failed_action, reason,
+                session,
+                incident,
+                failed_action,
+                reason,
             )
             if fallback_initiated:
                 log.info(

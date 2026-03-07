@@ -4,6 +4,8 @@ AI recommendation orchestrator.
 Generates structured recommendations via LLM with circuit breaker fallback.
 """
 
+from typing import Any
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -12,16 +14,12 @@ from app.actions.registry import ACTION_REGISTRY
 from app.core.config import settings
 from app.core.events import emit_recommendation_ready
 from app.core.metrics import ai_failure_total, ai_request_total
-from app.core.policy import check_policy, evaluate_approval, requires_approval
+from app.core.policy import check_policy, evaluate_approval
 from app.core.state_machine import transition_state
 from app.llm.client import LLMClient
 from app.models.enums import IncidentState
 from app.models.incident import Incident
-from app.schemas.recommendation import Recommendation
-from app.services.rag_context import (
-    build_recommendation_context,
-    build_structured_context,
-)
+from app.services.rag_context import build_structured_context
 
 logger = structlog.get_logger()
 
@@ -31,7 +29,7 @@ llm_client = LLMClient()
 async def generate_recommendation(
     session: AsyncSession,
     incident: Incident,
-    redis=None,
+    redis: Any = None,
 ) -> None:
     """
     Generate an AI recommendation for an investigated incident.
@@ -39,6 +37,7 @@ async def generate_recommendation(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
     )
 
     # Gather evidence text for LLM

@@ -129,9 +129,9 @@ class BlockIpAction(BaseAction):
             f"[SIM] Connecting to {host}...",
             f"[SIM] Blocking IP: {malicious_ip}",
             f"[SIM] iptables -A INPUT -s {malicious_ip} -j DROP",
-            f"[SIM] Rule added successfully",
+            "[SIM] Rule added successfully",
             f"[SIM] Verifying: {malicious_ip} DROP rule active",
-            f"[SIM] Block IP action complete",
+            "[SIM] Block IP action complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
 

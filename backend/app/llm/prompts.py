@@ -10,7 +10,6 @@ prompt always stays in sync with available actions.
 
 from __future__ import annotations
 
-from typing import Any
 
 
 def _build_action_descriptions() -> str:

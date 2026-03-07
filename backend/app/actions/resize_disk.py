@@ -129,7 +129,7 @@ class ResizeDiskAction(BaseAction):
             f"[SIM] Running growpart on {disk_device}...",
             f"[SIM] Running resize2fs on {disk_device}...",
             f"[SIM] Disk resized: {new_size}G, {usage_pct}% used",
-            f"[SIM] Disk resize complete",
+            "[SIM] Disk resize complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
 

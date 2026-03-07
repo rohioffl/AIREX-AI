@@ -1,13 +1,17 @@
 """User model for authentication."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import String, Boolean
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+from sqlalchemy import Boolean, String, text
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class User(Base):
@@ -16,10 +20,10 @@ class User(Base):
     __tablename__ = "users"
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, primary_key=True
+        PG_UUID(as_uuid=True), nullable=False, primary_key=True
     )
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), default=uuid.uuid4, primary_key=True
+        PG_UUID(as_uuid=True), default=uuid.uuid4, primary_key=True
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -27,8 +31,24 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="operator")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False, server_default="CURRENT_TIMESTAMP"
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False, server_default="CURRENT_TIMESTAMP", onupdate=datetime.utcnow
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=_utcnow,
     )
+
+    def __repr__(self) -> str:
+        return (
+            "User("
+            f"tenant_id={self.tenant_id!s}, "
+            f"id={self.id!s}, "
+            f"email={self.email!r}, "
+            f"role={self.role!r}, "
+            f"is_active={self.is_active}"
+            ")"
+        )

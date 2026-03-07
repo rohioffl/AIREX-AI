@@ -6,15 +6,17 @@ Failed tasks after max retries go to DLQ via Redis list.
 """
 
 import json
+import importlib
 import uuid
+from collections.abc import Mapping
 from datetime import datetime, timezone
+from typing import Any, cast
 
 import redis.asyncio as aioredis
 import structlog
 from arq.connections import RedisSettings
 from arq.cron import cron
 
-from app.core.config import settings
 from app.core.events import set_redis
 from app.core.logging import setup_logging
 from app.core.metrics import dlq_size
@@ -27,7 +29,12 @@ DLQ_KEY = "airex:dlq"
 
 
 async def _send_to_dlq(
-    redis, task_name: str, tenant_id: str, incident_id: str, error: str
+    redis: Any,
+    task_name: str,
+    tenant_id: str,
+    incident_id: str,
+    error: str | Exception,
+    correlation_id: str | None = None,
 ) -> None:
     """Push a failed task onto the Dead Letter Queue."""
     entry = json.dumps(
@@ -45,23 +52,94 @@ async def _send_to_dlq(
     logger.error(
         "task_sent_to_dlq",
         task=task_name,
+        correlation_id=correlation_id,
         tenant_id=tenant_id,
         incident_id=incident_id,
         error=str(error),
     )
 
 
-async def investigate_incident(ctx: dict, tenant_id: str, incident_id: str) -> None:
-    """ARQ task: run investigation for an incident."""
-    from app.services.incident_service import get_incident
-    from app.services.investigation_service import run_investigation
-    from app.core.database import get_tenant_session
+def _build_task_logger(
+    task_name: str,
+    tenant_id: str | None = None,
+    incident_id: str | None = None,
+    action_type: str | None = None,
+    correlation_id: str | None = None,
+) -> structlog.typing.FilteringBoundLogger:
+    payload: dict[str, str | None] = {
+        "task": task_name,
+        "tenant_id": tenant_id,
+        "incident_id": incident_id,
+        "correlation_id": correlation_id,
+    }
+    if action_type is not None:
+        payload["action_type"] = action_type
+    return logger.bind(**payload)
 
-    log = logger.bind(task="investigate", tenant_id=tenant_id, incident_id=incident_id)
+
+def _extract_correlation_id(ctx: Mapping[str, object]) -> str:
+    job_id = str(ctx.get("job_id", "unknown"))
+    return f"arq-{job_id}"
+
+
+def _parse_task_ids(
+    tenant_id: str,
+    incident_id: str,
+) -> tuple[uuid.UUID, uuid.UUID]:
+    return uuid.UUID(tenant_id), uuid.UUID(incident_id)
+
+
+def _get_redis_client(ctx: Mapping[str, object]) -> Any | None:
+    redis = ctx.get("redis")
+    if redis is not None and hasattr(redis, "rpush"):
+        return redis
+    return None
+
+
+def _get_settings() -> Any:
+    module = importlib.import_module("app.core.config")
+    return cast(Any, module.settings)
+
+
+def _load_attr(module_path: str, attr_name: str) -> Any:
+    module = importlib.import_module(module_path)
+    return getattr(module, attr_name)
+
+
+async def investigate_incident(
+    ctx: Mapping[str, object], tenant_id: str, incident_id: str
+) -> None:
+    """ARQ task: run investigation for an incident."""
+    get_incident = _load_attr("app.services.incident_service", "get_incident")
+    run_investigation = _load_attr(
+        "app.services.investigation_service", "run_investigation"
+    )
+    get_tenant_session = _load_attr("app.core.database", "get_tenant_session")
+
+    correlation_id = _extract_correlation_id(ctx)
+    log = _build_task_logger(
+        task_name="investigate",
+        tenant_id=tenant_id,
+        incident_id=incident_id,
+        correlation_id=correlation_id,
+    )
     log.info("task_started")
 
-    tid = uuid.UUID(tenant_id)
-    iid = uuid.UUID(incident_id)
+    try:
+        tid, iid = _parse_task_ids(tenant_id, incident_id)
+    except ValueError as exc:
+        log.error("task_failed_invalid_uuid", error=str(exc))
+        redis = _get_redis_client(ctx)
+        if redis is not None:
+            await _send_to_dlq(
+                redis,
+                "investigate_incident",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
+            )
+        return
 
     try:
         async with get_tenant_session(tid) as session:
@@ -73,28 +151,54 @@ async def investigate_incident(ctx: dict, tenant_id: str, incident_id: str) -> N
         log.info("task_completed")
     except Exception as exc:
         log.error("task_failed", error=str(exc))
-        redis = ctx.get("redis")
-        if redis:
+        redis = _get_redis_client(ctx)
+        if redis is not None:
             await _send_to_dlq(
-                redis, "investigate_incident", tenant_id, incident_id, exc
+                redis,
+                "investigate_incident",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
             )
 
 
 async def generate_recommendation_task(
-    ctx: dict, tenant_id: str, incident_id: str
+    ctx: Mapping[str, object], tenant_id: str, incident_id: str
 ) -> None:
     """ARQ task: generate AI recommendation for an incident."""
-    from app.services.incident_service import get_incident
-    from app.services.recommendation_service import generate_recommendation
-    from app.core.database import get_tenant_session
+    get_incident = _load_attr("app.services.incident_service", "get_incident")
+    generate_recommendation = _load_attr(
+        "app.services.recommendation_service", "generate_recommendation"
+    )
+    get_tenant_session = _load_attr("app.core.database", "get_tenant_session")
 
-    log = logger.bind(task="recommend", tenant_id=tenant_id, incident_id=incident_id)
+    correlation_id = _extract_correlation_id(ctx)
+    log = _build_task_logger(
+        task_name="recommend",
+        tenant_id=tenant_id,
+        incident_id=incident_id,
+        correlation_id=correlation_id,
+    )
     log.info("task_started")
 
-    tid = uuid.UUID(tenant_id)
-    iid = uuid.UUID(incident_id)
+    try:
+        tid, iid = _parse_task_ids(tenant_id, incident_id)
+    except ValueError as exc:
+        log.error("task_failed_invalid_uuid", error=str(exc))
+        redis = _get_redis_client(ctx)
+        if redis is not None:
+            await _send_to_dlq(
+                redis,
+                "generate_recommendation_task",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
+            )
+        return
 
-    redis = ctx.get("redis")
+    redis_client = _get_redis_client(ctx)
 
     try:
         async with get_tenant_session(tid) as session:
@@ -102,38 +206,58 @@ async def generate_recommendation_task(
             if incident is None:
                 log.error("incident_not_found")
                 return
-            await generate_recommendation(session, incident, redis=redis)
+            await generate_recommendation(session, incident, redis=redis_client)
         log.info("task_completed")
     except Exception as exc:
         log.error("task_failed", error=str(exc))
-        if redis:
+        if redis_client is not None:
             await _send_to_dlq(
-                redis, "generate_recommendation_task", tenant_id, incident_id, exc
+                redis_client,
+                "generate_recommendation_task",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
             )
 
 
 async def execute_action_task(
-    ctx: dict, tenant_id: str, incident_id: str, action_type: str
+    ctx: Mapping[str, object], tenant_id: str, incident_id: str, action_type: str
 ) -> None:
     """ARQ task: execute an approved action."""
-    from app.services.execution_service import execute_action
-    from app.services.incident_service import get_incident
-    from app.core.database import get_tenant_session
+    execute_action = _load_attr("app.services.execution_service", "execute_action")
+    get_incident = _load_attr("app.services.incident_service", "get_incident")
+    get_tenant_session = _load_attr("app.core.database", "get_tenant_session")
 
-    log = logger.bind(
-        task="execute",
+    correlation_id = _extract_correlation_id(ctx)
+    log = _build_task_logger(
+        task_name="execute",
         tenant_id=tenant_id,
         incident_id=incident_id,
         action_type=action_type,
+        correlation_id=correlation_id,
     )
     log.info("task_started")
 
-    tid = uuid.UUID(tenant_id)
-    iid = uuid.UUID(incident_id)
+    try:
+        tid, iid = _parse_task_ids(tenant_id, incident_id)
+    except ValueError as exc:
+        log.error("task_failed_invalid_uuid", error=str(exc))
+        redis = _get_redis_client(ctx)
+        if redis is not None:
+            await _send_to_dlq(
+                redis,
+                "execute_action_task",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
+            )
+        return
 
-    redis = ctx.get("redis")
-    if redis is None:
-        redis = aioredis.from_url(settings.REDIS_URL)
+    redis_client = _get_redis_client(ctx)
+    if redis_client is None:
+        redis_client = aioredis.from_url(_get_settings().REDIS_URL)
 
     try:
         async with get_tenant_session(tid) as session:
@@ -145,29 +269,57 @@ async def execute_action_task(
                 session,
                 incident,
                 action_type,
-                redis,
-                worker_id=f"arq-{ctx.get('job_id', 'unknown')}",
+                redis_client,
+                worker_id=correlation_id,
             )
         log.info("task_completed")
     except Exception as exc:
         log.error("task_failed", error=str(exc))
-        if redis:
+        if redis_client is not None:
             await _send_to_dlq(
-                redis, "execute_action_task", tenant_id, incident_id, exc
+                redis_client,
+                "execute_action_task",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
             )
 
 
-async def verify_resolution_task(ctx: dict, tenant_id: str, incident_id: str) -> None:
+async def verify_resolution_task(
+    ctx: Mapping[str, object], tenant_id: str, incident_id: str
+) -> None:
     """ARQ task: verify that execution resolved the incident."""
-    from app.services.incident_service import get_incident
-    from app.services.verification_service import verify_resolution
-    from app.core.database import get_tenant_session
+    get_incident = _load_attr("app.services.incident_service", "get_incident")
+    verify_resolution = _load_attr(
+        "app.services.verification_service", "verify_resolution"
+    )
+    get_tenant_session = _load_attr("app.core.database", "get_tenant_session")
 
-    log = logger.bind(task="verify", tenant_id=tenant_id, incident_id=incident_id)
+    correlation_id = _extract_correlation_id(ctx)
+    log = _build_task_logger(
+        task_name="verify",
+        tenant_id=tenant_id,
+        incident_id=incident_id,
+        correlation_id=correlation_id,
+    )
     log.info("task_started")
 
-    tid = uuid.UUID(tenant_id)
-    iid = uuid.UUID(incident_id)
+    try:
+        tid, iid = _parse_task_ids(tenant_id, incident_id)
+    except ValueError as exc:
+        log.error("task_failed_invalid_uuid", error=str(exc))
+        redis = _get_redis_client(ctx)
+        if redis is not None:
+            await _send_to_dlq(
+                redis,
+                "verify_resolution_task",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
+            )
+        return
 
     try:
         async with get_tenant_session(tid) as session:
@@ -179,27 +331,54 @@ async def verify_resolution_task(ctx: dict, tenant_id: str, incident_id: str) ->
         log.info("task_completed")
     except Exception as exc:
         log.error("task_failed", error=str(exc))
-        redis = ctx.get("redis")
-        if redis:
+        redis = _get_redis_client(ctx)
+        if redis is not None:
             await _send_to_dlq(
-                redis, "verify_resolution_task", tenant_id, incident_id, exc
+                redis,
+                "verify_resolution_task",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
             )
 
 
-async def generate_runbook_task(ctx: dict, tenant_id: str, incident_id: str) -> None:
+async def generate_runbook_task(
+    ctx: Mapping[str, object], tenant_id: str, incident_id: str
+) -> None:
     """ARQ task: auto-generate a runbook from a resolved incident (Phase 5 ARE)."""
-    from app.services.incident_service import get_incident
-    from app.services.runbook_generator import generate_and_store_runbook
-    from app.core.database import get_tenant_session
+    get_incident = _load_attr("app.services.incident_service", "get_incident")
+    generate_and_store_runbook = _load_attr(
+        "app.services.runbook_generator", "generate_and_store_runbook"
+    )
+    get_tenant_session = _load_attr("app.core.database", "get_tenant_session")
 
-    log = logger.bind(
-        task="generate_runbook", tenant_id=tenant_id, incident_id=incident_id
+    correlation_id = _extract_correlation_id(ctx)
+    log = _build_task_logger(
+        task_name="generate_runbook",
+        tenant_id=tenant_id,
+        incident_id=incident_id,
+        correlation_id=correlation_id,
     )
     log.info("task_started")
 
-    tid = uuid.UUID(tenant_id)
-    iid = uuid.UUID(incident_id)
-    redis = ctx.get("redis")
+    try:
+        tid, iid = _parse_task_ids(tenant_id, incident_id)
+    except ValueError as exc:
+        log.error("task_failed_invalid_uuid", error=str(exc))
+        redis = _get_redis_client(ctx)
+        if redis is not None:
+            await _send_to_dlq(
+                redis,
+                "generate_runbook_task",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
+            )
+        return
+
+    redis_client = _get_redis_client(ctx)
 
     try:
         async with get_tenant_session(tid) as session:
@@ -207,7 +386,9 @@ async def generate_runbook_task(ctx: dict, tenant_id: str, incident_id: str) -> 
             if incident is None:
                 log.error("incident_not_found")
                 return
-            source_id = await generate_and_store_runbook(session, incident, redis=redis)
+            source_id = await generate_and_store_runbook(
+                session, incident, redis=redis_client
+            )
             if source_id:
                 log.info("runbook_generated", source_id=str(source_id))
             else:
@@ -215,24 +396,36 @@ async def generate_runbook_task(ctx: dict, tenant_id: str, incident_id: str) -> 
         log.info("task_completed")
     except Exception as exc:
         log.error("task_failed", error=str(exc))
-        if redis:
+        if redis_client is not None:
             await _send_to_dlq(
-                redis, "generate_runbook_task", tenant_id, incident_id, exc
+                redis_client,
+                "generate_runbook_task",
+                tenant_id,
+                incident_id,
+                exc,
+                correlation_id=correlation_id,
             )
 
 
-async def proactive_health_check(ctx: dict) -> None:
+async def proactive_health_check(ctx: Mapping[str, object]) -> None:
     """ARQ cron: run proactive health checks against known infrastructure (Phase 6 ARE).
 
     Polls Site24x7 monitors, evaluates thresholds, and auto-creates
     incidents when degradation is detected.
     """
-    from app.services.health_check_service import run_health_checks
+    run_health_checks = _load_attr(
+        "app.services.health_check_service", "run_health_checks"
+    )
+
+    settings = _get_settings()
 
     if not settings.HEALTH_CHECK_ENABLED:
         return
 
-    log = logger.bind(task="proactive_health_check")
+    correlation_id = _extract_correlation_id(ctx)
+    log = _build_task_logger(
+        task_name="proactive_health_check", correlation_id=correlation_id
+    )
     log.info("cron_started")
 
     redis = ctx.get("redis")
@@ -247,19 +440,21 @@ async def proactive_health_check(ctx: dict) -> None:
 
 async def on_startup(ctx: dict) -> None:
     """ARQ worker startup hook — init Redis for SSE events."""
-    redis = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
+    redis = aioredis.from_url(_get_settings().REDIS_URL, decode_responses=False)
     ctx["redis"] = redis
     set_redis(redis)
-    logger.info("arq_worker_started")
+    correlation_id = f"arq-startup-{datetime.now(timezone.utc).isoformat()}"
+    logger.info("arq_worker_started", correlation_id=correlation_id)
 
 
 async def on_shutdown(ctx: dict) -> None:
     """ARQ worker shutdown hook."""
     redis = ctx.get("redis")
-    if redis:
+    if redis is not None and hasattr(redis, "aclose"):
         await redis.aclose()
     set_redis(None)
-    logger.info("arq_worker_stopped")
+    correlation_id = f"arq-shutdown-{datetime.now(timezone.utc).isoformat()}"
+    logger.info("arq_worker_stopped", correlation_id=correlation_id)
 
 
 class WorkerSettings:
@@ -281,7 +476,7 @@ class WorkerSettings:
     ]
     on_startup = on_startup
     on_shutdown = on_shutdown
-    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    redis_settings = RedisSettings.from_dsn(_get_settings().REDIS_URL)
     max_jobs = 10
     job_timeout = 120
     retry_jobs = True

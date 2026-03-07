@@ -421,7 +421,7 @@ def _parse_recommendation(data: dict[str, Any]) -> Recommendation:
 
     # Parse reasoning chain
     if "reasoning_chain" in data and isinstance(data["reasoning_chain"], list):
-        steps = []
+        steps: list[ReasoningStep] = []
         for raw_step in data["reasoning_chain"]:
             if isinstance(raw_step, dict):
                 steps.append(

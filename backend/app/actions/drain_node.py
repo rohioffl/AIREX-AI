@@ -136,7 +136,7 @@ class DrainNodeAction(BaseAction):
             f"[SIM] Evicting pod worker-{random.randint(1000, 9999)}",
             f"[SIM] node/{node_name} drained",
             f"[SIM] All {pod_count} pods rescheduled successfully",
-            f"[SIM] Drain node action complete",
+            "[SIM] Drain node action complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
 

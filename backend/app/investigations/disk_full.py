@@ -52,22 +52,22 @@ class DiskFullInvestigation(BaseInvestigation):
 
         output_lines = [
             f"=== Disk Investigation: {host} ===",
-            f"",
-            f"Filesystem      Size  Used Avail Use% Mounted on",
+            "",
+            "Filesystem      Size  Used Avail Use% Mounted on",
             f"/dev/sda1       {total_gb}G   {used_gb}G   {avail_gb}G  {disk_pct}% /",
-            f"/dev/sda2       50G    2G   48G   4% /boot",
-            f"",
-            f"Largest files on /:",
+            "/dev/sda2       50G    2G   48G   4% /boot",
+            "",
+            "Largest files on /:",
         ]
         for f in large_files:
             output_lines.append(f"  {f['size']:>6}  {f['path']}")
 
         output_lines += [
-            f"",
+            "",
             f"Inode usage: {inode_pct}%",
-            f"",
+            "",
             f"Diagnosis: Disk at {disk_pct}% — primary culprit is application logs.",
-            f"Recommendation: Rotate/clear old log files to free space.",
+            "Recommendation: Rotate/clear old log files to free space.",
         ]
 
         return ProbeResult(

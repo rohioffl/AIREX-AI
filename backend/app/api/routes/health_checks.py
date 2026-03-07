@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
@@ -58,7 +58,7 @@ async def target_check_history(
 async def trigger_health_checks(
     tenant_id: TenantId,
     redis: Redis,
-) -> dict:
+) -> dict[str, Any]:
     """Manually trigger a health check run (admin only)."""
     summary = await run_health_checks(tenant_id, redis=redis)
     return {"status": "completed", **summary}

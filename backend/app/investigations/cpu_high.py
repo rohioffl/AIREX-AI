@@ -68,12 +68,12 @@ class CpuHighInvestigation(BaseInvestigation):
 
         output_lines = [
             f"=== CPU Investigation: {host} ===",
-            f"",
+            "",
             f"Load Average (1m/5m/15m): {load_1m} / {load_5m} / {load_15m}",
             f"CPU Cores: {cores}",
             f"Overall CPU Usage: {cpu_pct:.1f}%",
-            f"",
-            f"Top Processes by CPU:",
+            "",
+            "Top Processes by CPU:",
             f"{'PID':>8} {'USER':<10} {'CPU':>6} COMMAND",
             f"{'---':>8} {'---':<10} {'---':>6} -------",
         ]
@@ -83,12 +83,12 @@ class CpuHighInvestigation(BaseInvestigation):
             )
 
         output_lines += [
-            f"",
+            "",
             f"Memory: {mem_pct}% used (of 8GB)",
             f"Swap: {swap_pct}% used",
-            f"",
+            "",
             f"Diagnosis: High CPU driven by PID {top_processes[0]['pid']} ({top_processes[0]['cmd']})",
-            f"Recommendation: Restart the service or investigate memory leaks.",
+            "Recommendation: Restart the service or investigate memory leaks.",
         ]
 
         return ProbeResult(

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
-
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +22,12 @@ async def upsert_incident_embedding(
 ) -> None:
     """Store or refresh the vector summary for a terminal incident."""
 
+    log = logger.bind(
+        tenant_id=str(incident.tenant_id),
+        incident_id=str(incident.id),
+        correlation_id=str(incident.id),
+    )
+
     summary = build_incident_summary(incident)
     if not summary:
         return
@@ -31,18 +35,16 @@ async def upsert_incident_embedding(
     try:
         vector = await _embeddings_client.embed_text(summary)
     except RuntimeError as exc:  # pragma: no cover - network errors
-        logger.warning(
+        log.warning(
             "incident_embedding_failed",
-            incident_id=str(incident.id),
             error=str(exc),
         )
         return
 
     expected_dim = settings.LLM_EMBEDDING_DIMENSION
     if expected_dim and len(vector) != expected_dim:
-        logger.warning(
+        log.warning(
             "incident_embedding_dim_mismatch",
-            incident_id=str(incident.id),
             expected_dim=expected_dim,
             actual_dim=len(vector),
         )
@@ -70,20 +72,22 @@ async def upsert_incident_embedding(
             )
         )
 
-    logger.info(
+    log.info(
         "incident_embedding_upserted",
-        incident_id=str(incident.id),
     )
 
 
 def build_incident_summary(incident: Incident) -> str:
     """Create a deterministic text summary for vector storage."""
 
+    severity_value = getattr(incident.severity, "value", incident.severity)
+    state_value = getattr(incident.state, "value", incident.state)
+
     lines: list[str] = [
         f"Title: {incident.title}",
         f"Alert Type: {incident.alert_type}",
-        f"Severity: {incident.severity.value}",
-        f"Final State: {incident.state.value}",
+        f"Severity: {severity_value}",
+        f"Final State: {state_value}",
     ]
 
     meta = incident.meta or {}

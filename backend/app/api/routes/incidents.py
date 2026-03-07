@@ -4,6 +4,7 @@ Incident CRUD + approval endpoint.
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -72,7 +73,9 @@ async def list_incidents(
     Cursor takes priority when provided.
     Search queries match against title, alert_type, and meta JSON fields.
     """
-    from sqlalchemy import or_, cast, String
+    from sqlalchemy import String, cast, or_
+
+    logger.info("incidents_list_requested", tenant_id=str(tenant_id))
 
     base_filters = [
         Incident.tenant_id == tenant_id,
@@ -151,6 +154,11 @@ async def get_incident(
     session: TenantSession,
 ) -> IncidentDetail:
     """Get full incident detail including evidence, transitions, and executions."""
+    logger.info(
+        "incident_detail_requested",
+        tenant_id=str(tenant_id),
+        incident_id=str(incident_id),
+    )
     result = await session.execute(
         select(Incident).where(
             Incident.tenant_id == tenant_id,
@@ -171,7 +179,13 @@ async def get_incident(
             recommendation = RecommendationResponse.model_validate(
                 incident.meta["recommendation"]
             )
-        except Exception:
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "incident_recommendation_parse_failed",
+                tenant_id=str(tenant_id),
+                incident_id=str(incident_id),
+                error=str(exc),
+            )
             # If validation fails, try to use raw dict (for backwards compatibility)
             rec_dict = incident.meta["recommendation"]
             if isinstance(rec_dict, dict) and "proposed_action" in rec_dict:
@@ -189,7 +203,7 @@ async def get_incident(
         rag_context = incident.meta["rag_context"]
 
     # Related incidents: same host (host_key), same tenant, exclude self
-    related: list = []
+    related: list[RelatedIncidentItem] = []
     if incident.host_key:
         related_result = await session.execute(
             select(Incident)
@@ -221,8 +235,8 @@ async def get_incident(
     executions = [ExecutionResponse.model_validate(ex) for ex in incident.executions]
 
     # Cross-host correlated incidents (Phase 4 ARE)
-    correlated: list = []
-    correlation_summary_data = None
+    correlated: list[CorrelatedIncidentItem] = []
+    correlation_summary_data: CorrelationGroupSummary | None = None
     if incident.correlation_group_id:
         try:
             from app.services.correlation_service import (
@@ -255,8 +269,13 @@ async def get_incident(
             )
             if summary_dict:
                 correlation_summary_data = CorrelationGroupSummary(**summary_dict)
-        except Exception:
-            pass  # Don't fail detail endpoint if correlation lookup fails
+        except (ValueError, TypeError, RuntimeError) as exc:
+            logger.warning(
+                "incident_correlation_lookup_failed",
+                tenant_id=str(tenant_id),
+                incident_id=str(incident_id),
+                error=str(exc),
+            )
 
     return IncidentDetail(
         id=incident.id,
@@ -613,7 +632,7 @@ async def submit_feedback(
 
     return FeedbackResponse(
         incident_id=incident.id,
-        feedback_score=incident.feedback_score,
+        feedback_score=body.score,
         feedback_note=incident.feedback_note,
     )
 
@@ -627,7 +646,7 @@ async def get_auto_runbook(
     incident_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-) -> dict:
+) -> dict[str, Any]:
     """
     Retrieve the auto-generated runbook for a resolved incident.
 

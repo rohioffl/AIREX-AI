@@ -56,24 +56,24 @@ class NetworkCheckInvestigation(BaseInvestigation):
 
         lines = [
             f"=== Network Investigation: {host} → {target} ===",
-            f"",
+            "",
             f"Ping Results ({transmitted} packets):",
             f"  Transmitted: {transmitted}  Received: {received}  Loss: {packet_loss:.1f}%",
             f"  RTT min/avg/max: {avg_latency * 0.5:.1f}/{avg_latency:.1f}/{avg_latency * 1.5:.1f} ms",
-            f"",
-            f"DNS Resolution:",
+            "",
+            "DNS Resolution:",
             f"  {target} → {dns_ip}",
             f"  Resolution time: {dns_resolution_time:.1f}ms",
-            f"",
-            f"TCP Connectivity:",
+            "",
+            "TCP Connectivity:",
             f"  Port 443: {port_443_status}",
             f"  Port 80:  {port_80_status}",
-            f"",
+            "",
             f"Traceroute ({total_hops} hops):",
             f"  Bottleneck at hop {bottleneck_hop}: {bottleneck_latency:.1f}ms",
-            f"",
+            "",
             f"Diagnosis: High packet loss ({packet_loss:.1f}%) and elevated latency ({avg_latency:.0f}ms avg).",
-            f"Recommendation: Check network ACLs, firewall rules, or contact NOC.",
+            "Recommendation: Check network ACLs, firewall rules, or contact NOC.",
         ]
 
         return ProbeResult(

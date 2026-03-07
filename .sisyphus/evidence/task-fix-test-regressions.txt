@@ -1,0 +1,32 @@
+Task: Fix backend test regressions after quality changes
+Date: 2026-03-07
+
+Changed source files:
+- backend/app/services/resolution_service.py
+- backend/app/core/rate_limit.py
+- backend/app/services/chat_service.py
+- backend/app/services/health_check_service.py
+- backend/app/services/incident_embedding_service.py
+
+Required targeted command:
+cd backend && python3 -m pytest tests/test_rejection.py tests/test_chat.py::TestChatServiceHistory::test_get_history_handles_redis_error tests/test_health_check_service.py::TestCheckSite24x7Monitors::test_handles_bulk_api_failure tests/test_health_check_service.py::TestAutoCreateIncidents::test_handles_incident_creation_failure tests/test_integration.py::TestWebhookGeneric tests/test_integration.py::TestApproval::test_approve_nonexistent_incident -v
+Result: 10 passed
+
+Full suite:
+cd backend && python3 -m pytest --tb=short -q
+Result: 510 passed
+
+Lint:
+cd backend && python3 -m ruff check app/
+Result: All checks passed
+
+Type check:
+cd backend && python3 -m mypy app/ --ignore-missing-imports
+Result: Success: no issues found in 126 source files
+
+LSP diagnostics on changed files:
+- resolution_service.py: clean
+- rate_limit.py: clean
+- chat_service.py: clean
+- health_check_service.py: clean
+- incident_embedding_service.py: clean

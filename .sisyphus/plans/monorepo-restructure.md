@@ -260,7 +260,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 2. Move frontend/ → apps/web/
+- [x] 2. Move frontend/ → apps/web/
 
   **What to do**:
   - Move ALL files from `frontend/` to `apps/web/`: `src/`, `public/`, `package.json`, `package-lock.json`, `vite.config.js`, `eslint.config.js`, `index.html`, `nginx.conf`, `scripts/`, `tests/`, `playwright.config.js`
@@ -324,7 +324,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 3. Move alembic to database/ at root level
+- [x] 3. Move alembic to database/ at root level
 
   **What to do**:
   - Move `backend/alembic/` → `database/alembic/`
@@ -394,7 +394,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 4. Update services/airex-frontend/Dockerfile for apps/web/ paths
+- [x] 4. Update services/airex-frontend/Dockerfile for apps/web/ paths  <!-- VERIFIED: 0 frontend/ refs, apps/web/ refs present -->
 
   **What to do**:
   - Update line 5: `frontend/package.json frontend/package-lock.json` → `apps/web/package.json apps/web/package-lock.json`
@@ -434,7 +434,7 @@ Max Concurrent: 7 (Wave 3)
 
   **Commit**: NO (groups with Task 5, 6, 7)
 
-- [ ] 5. Update docker-compose.yml for database/ structure
+- [x] 5. Update docker-compose.yml for database/ structure
 
   **What to do**:
   - Update migrate service (line 69): change `command: alembic upgrade head` to `command: bash -c "cd /database && alembic upgrade head"`
@@ -483,7 +483,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 6. Update buildspec.frontend.yml for apps/web/ paths
+- [x] 6. Update buildspec.frontend.yml for apps/web/ paths
 
   **What to do**:
   - Line 16: `npm ci --prefix frontend` → `npm ci --prefix apps/web`
@@ -528,7 +528,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 7. Create database/Dockerfile for migration pipeline
+- [x] 7. Create database/Dockerfile for migration pipeline
 
   **What to do**:
   - Create `database/Dockerfile` — a slim Python image that:
@@ -580,7 +580,7 @@ Max Concurrent: 7 (Wave 3)
   - Files: `services/airex-frontend/Dockerfile`, `docker-compose.yml`, `deployment/ecs/codebuild/buildspec.frontend.yml`, `database/Dockerfile`
   - Pre-commit: `docker-compose config`
 
-- [ ] 8. Quality Enhancement: app/core/config.py, database.py, logging.py
+- [x] 8. Quality Enhancement: app/core/config.py, database.py, logging.py
 
   **What to do**:
   - `app/core/config.py`: Add type hints to all Settings fields, add field validators with descriptive errors, add docstring explaining each config group, ensure `model_config` uses proper Pydantic v2 patterns
@@ -639,7 +639,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 9. Quality Enhancement: app/core/state_machine.py, events.py, policy.py
+- [x] 9. Quality Enhancement: app/core/state_machine.py, events.py, policy.py
 
   **What to do**:
   - `app/core/state_machine.py`: Add type hints to all functions, add comprehensive docstrings explaining state transitions and the state diagram, add proper error handling with domain-specific exceptions (e.g. `InvalidTransitionError`), improve structured logging with `correlation_id` on all log calls. **CRITICAL: DO NOT move lazy imports at lines 108, 159, 173, 190, 202, 217 to module level — they prevent circular imports.**
@@ -698,7 +698,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 10. Quality Enhancement: app/core/security.py, csrf.py, rbac.py, rate_limit.py
+- [x] 10. Quality Enhancement: app/core/security.py, csrf.py, rbac.py, rate_limit.py
 
   **What to do**:
   - Add type hints to all functions across all 4 files
@@ -759,7 +759,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 11. Quality Enhancement: app/core/worker.py, retry_scheduler.py, tenant_limits.py
+- [x] 11. Quality Enhancement: app/core/worker.py, retry_scheduler.py, tenant_limits.py
 
   **What to do**:
   - `app/core/worker.py`: Fix the `_send_to_dlq` type error (parameter `error` typed as `str` but receives `Exception` — change to `str(error)` at call sites OR change parameter type to `Union[str, Exception]`). Add type hints to all task functions, add docstrings explaining each worker task, improve structured logging with `correlation_id`, add proper error handling with specific exception types. **CRITICAL: DO NOT move lazy imports inside task functions to module level. DO NOT rename any task function (ARQ serializes names in Redis).**
@@ -818,7 +818,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 12. Quality Enhancement: app/core/metrics.py + remaining core files
+- [x] 12. Quality Enhancement: app/core/metrics.py + remaining core files
 
   **What to do**:
   - Identify ALL remaining files in `backend/app/core/` not covered by Tasks 8-11
@@ -866,7 +866,7 @@ Max Concurrent: 7 (Wave 3)
   - Files: `backend/app/core/*`
   - Pre-commit: `cd backend && ruff check app/core/ && pytest`
 
-- [ ] 13. Quality Enhancement: app/models/ (all model files)
+- [x] 13. Quality Enhancement: app/models/ (all model files)
 
   **What to do**:
   - Enhance ALL files in `backend/app/models/`
@@ -930,7 +930,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 14. Quality Enhancement: app/schemas/ (all schema files)
+- [x] 14. Quality Enhancement: app/schemas/ (all schema files)
 
   **What to do**:
   - Enhance ALL Pydantic schema files in `backend/app/schemas/`
@@ -979,7 +979,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 15. Quality Enhancement: app/services/ (all service files)
+- [x] 15. Quality Enhancement: app/services/ (all service files)
 
   **What to do**:
   - Enhance ALL files in `backend/app/services/`
@@ -1032,7 +1032,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 16. Quality Enhancement: app/api/ (routes, dependencies)
+- [x] 16. Quality Enhancement: app/api/ (routes, dependencies)
 
   **What to do**:
   - Enhance ALL files in `backend/app/api/` including `dependencies.py` and all route files under `routes/`
@@ -1093,7 +1093,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 17. Quality Enhancement: app/cloud/ (all cloud adapters)
+- [x] 17. Quality Enhancement: app/cloud/ (all cloud adapters)
 
   **What to do**:
   - Enhance ALL files in `backend/app/cloud/` (~18 files: AWS SSM, OS Login, discovery, tag_parser, etc.)
@@ -1144,7 +1144,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 18. Quality Enhancement: app/investigations/ + app/actions/
+- [x] 18. Quality Enhancement: app/investigations/ + app/actions/
 
   **What to do**:
   - Enhance ALL files in `backend/app/investigations/` (~14 probe files) and `backend/app/actions/` (~15 action plugin files)
@@ -1195,7 +1195,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 19. Quality Enhancement: app/llm/ + app/rag/ + app/monitoring/
+- [x] 19. Quality Enhancement: app/llm/ + app/rag/ + app/monitoring/
 
   **What to do**:
   - Enhance ALL files in `backend/app/llm/` (4 files: LiteLLM client, prompt management)
@@ -1261,7 +1261,7 @@ Max Concurrent: 7 (Wave 3)
   - Files: `backend/app/models/*`, `schemas/*`, `services/*`, `api/*`, `cloud/*`, `investigations/*`, `actions/*`, `llm/*`, `rag/*`, `monitoring/*`, `scripts/*`
   - Pre-commit: `cd backend && ruff check app/ && pytest`
 
-- [ ] 20. Frontend Quality Enhancement: ESLint, component cleanup, prop types
+- [x] 20. Frontend Quality Enhancement: ESLint, component cleanup, prop types
 
   **What to do**:
   - Run `npm run lint` in `apps/web/` and fix ALL ESLint errors and warnings
@@ -1337,7 +1337,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 21. Add Backend Tests: State Machine Transitions
+- [x] 21. Add Backend Tests: State Machine Transitions
 
   **What to do**:
   - Create/enhance `backend/tests/test_state_machine.py` with comprehensive state transition tests
@@ -1398,7 +1398,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 22. Add Backend Tests: Worker Tasks + API Routes
+- [x] 22. Add Backend Tests: Worker Tasks + API Routes
 
   **What to do**:
   - Create/enhance `backend/tests/test_worker.py` with tests for all 5 ARQ task functions:
@@ -1466,7 +1466,7 @@ Max Concurrent: 7 (Wave 3)
 
 ---
 
-- [ ] 23. Full Integration Verification
+- [x] 23. Full Integration Verification
 
   **What to do**:
   - Run the COMPLETE verification suite from a clean state:

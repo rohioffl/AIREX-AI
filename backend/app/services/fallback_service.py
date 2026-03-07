@@ -13,6 +13,7 @@ transition added in Phase 3.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +29,7 @@ from app.models.incident import Incident
 logger = structlog.get_logger()
 
 
-def select_next_alternative(incident: Incident) -> dict | None:
+def select_next_alternative(incident: Incident) -> dict[str, Any] | None:
     """
     Select the next untried alternative action from the recommendation.
 
@@ -86,6 +87,7 @@ async def attempt_fallback(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
         failed_action=failed_action,
     )
 
@@ -115,20 +117,20 @@ async def attempt_fallback(
         # Record it as tried but rejected, then try the next one
         meta = dict(incident.meta or {})
         fallback_history = list(meta.get("_fallback_history", []))
-        fallback_history.append({
-            "action": alt_action,
-            "status": "policy_rejected",
-            "reason": policy_reason,
-            "attempted_at": datetime.now(timezone.utc).isoformat(),
-        })
+        fallback_history.append(
+            {
+                "action": alt_action,
+                "status": "policy_rejected",
+                "reason": policy_reason,
+                "attempted_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         meta["_fallback_history"] = fallback_history
         incident.meta = meta
         flag_modified(incident, "meta")
         await session.flush()
         # Recurse to try the next alternative
-        return await attempt_fallback(
-            session, incident, failed_action, failure_reason
-        )
+        return await attempt_fallback(session, incident, failed_action, failure_reason)
 
     # --- Fallback is viable ---
 
@@ -137,12 +139,14 @@ async def attempt_fallback(
 
     # 1. Record the failed action in fallback history
     fallback_history = list(meta.get("_fallback_history", []))
-    fallback_history.append({
-        "action": failed_action,
-        "status": "verification_failed",
-        "reason": failure_reason,
-        "attempted_at": datetime.now(timezone.utc).isoformat(),
-    })
+    fallback_history.append(
+        {
+            "action": failed_action,
+            "status": "verification_failed",
+            "reason": failure_reason,
+            "attempted_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
     meta["_fallback_history"] = fallback_history
 
     # 2. Store original action if this is the first fallback

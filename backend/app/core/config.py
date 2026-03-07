@@ -1,3 +1,9 @@
+"""Application configuration loaded from environment variables.
+
+This module exposes a singleton ``settings`` object used across the backend.
+Keep setting names stable because they are imported in multiple modules.
+"""
+
 from pydantic_settings import BaseSettings
 
 

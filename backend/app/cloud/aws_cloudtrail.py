@@ -9,12 +9,19 @@ with an incident.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
 import structlog
+from structlog.contextvars import get_contextvars
 
 logger = structlog.get_logger()
+
+
+def _get_correlation_id() -> str:
+    value = get_contextvars().get("correlation_id")
+    return str(value) if value is not None else ""
 
 
 async def query_cloudtrail_events(
@@ -27,6 +34,10 @@ async def query_cloudtrail_events(
     """
     Query CloudTrail for recent events related to a resource.
 
+    AWS APIs/permissions used:
+      - CloudTrail LookupEvents (`cloudtrail:LookupEvents`).
+      - Optional STS AssumeRole via shared aws_auth path when tenant role config exists.
+
     Returns a dict with:
       - events: list of simplified event dicts
       - total_count: number of events found
@@ -34,45 +45,38 @@ async def query_cloudtrail_events(
       - deployment_detected: bool
     """
     try:
-        import aiobotocore.session
+        from app.cloud.aws_auth import get_aws_client
 
-        session = aiobotocore.session.get_session()
-        kwargs: dict[str, Any] = {"region_name": region}
-
-        if aws_config and hasattr(aws_config, "role_arn") and aws_config.role_arn:
-            from app.cloud.aws_auth import get_assumed_role_credentials
-
-            creds = await get_assumed_role_credentials(aws_config.role_arn, region)
-            kwargs.update(
-                {
-                    "aws_access_key_id": creds["AccessKeyId"],
-                    "aws_secret_access_key": creds["SecretAccessKey"],
-                    "aws_session_token": creds["SessionToken"],
-                }
-            )
+        loop = asyncio.get_running_loop()
+        client = await loop.run_in_executor(
+            None,
+            lambda: get_aws_client("cloudtrail", aws_config=aws_config, region=region),
+        )
 
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(minutes=lookback_minutes)
 
-        async with session.create_client("cloudtrail", **kwargs) as client:
-            lookup_attrs = []
-            if resource_id:
-                lookup_attrs.append(
-                    {
-                        "AttributeKey": "ResourceName",
-                        "AttributeValue": resource_id,
-                    }
-                )
+        lookup_attrs: list[dict[str, str]] = []
+        if resource_id:
+            lookup_attrs.append(
+                {
+                    "AttributeKey": "ResourceName",
+                    "AttributeValue": resource_id,
+                }
+            )
 
-            params: dict[str, Any] = {
-                "StartTime": start_time,
-                "EndTime": end_time,
-                "MaxResults": max_results,
-            }
-            if lookup_attrs:
-                params["LookupAttributes"] = lookup_attrs
+        params: dict[str, Any] = {
+            "StartTime": start_time,
+            "EndTime": end_time,
+            "MaxResults": max_results,
+        }
+        if lookup_attrs:
+            params["LookupAttributes"] = lookup_attrs
 
-            response = await client.lookup_events(**params)
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.lookup_events(**params),
+        )
 
         events = _parse_events(response.get("Events", []))
         high_risk = [e for e in events if e.get("is_high_risk")]
@@ -88,10 +92,17 @@ async def query_cloudtrail_events(
         }
 
     except ImportError:
-        logger.warning("cloudtrail_aiobotocore_not_installed")
-        return _empty_result(resource_id, lookback_minutes, "aiobotocore not installed")
+        logger.warning(
+            "cloudtrail_boto3_not_installed",
+            correlation_id=_get_correlation_id(),
+        )
+        return _empty_result(resource_id, lookback_minutes, "boto3 not installed")
     except Exception as exc:
-        logger.warning("cloudtrail_query_failed", error=str(exc))
+        logger.warning(
+            "cloudtrail_query_failed",
+            error=str(exc),
+            correlation_id=_get_correlation_id(),
+        )
         return _empty_result(resource_id, lookback_minutes, str(exc))
 
 

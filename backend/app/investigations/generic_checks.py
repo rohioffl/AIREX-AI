@@ -185,7 +185,7 @@ class DatabaseCheckInvestigation(BaseInvestigation):
         conn_failures = 2
         lines = [
             f"Database: {db}",
-            f"Test query: SELECT 1",
+            "Test query: SELECT 1",
             f"Execution time: {_fmt_ms(query_time)}",
             f"Connection attempts: {conn_attempts} ({conn_failures} failures)",
             "",
@@ -403,7 +403,7 @@ class SslCheckInvestigation(BaseInvestigation):
         ocsp_status = rng.choice(["revoked", "unknown"])
         lines = [
             f"Domain: {host}",
-            f"Issuer: Let's Encrypt R3",
+            "Issuer: Let's Encrypt R3",
             f"Expires in: {days_left} days",
             f"OCSP status: {ocsp_status}",
             "",

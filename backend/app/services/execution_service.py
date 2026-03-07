@@ -6,6 +6,7 @@ Runs deterministic actions from ACTION_REGISTRY with distributed locking.
 
 import asyncio
 from datetime import datetime, timezone
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +32,7 @@ async def execute_action(
     session: AsyncSession,
     incident: Incident,
     action_type: str,
-    redis,
+    redis: Any,
     worker_id: str = "default_worker",
 ) -> None:
     """
@@ -46,14 +47,17 @@ async def execute_action(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
         action_type=action_type,
         worker_id=worker_id,
     )
 
     lock_key = f"lock:exec:{incident.tenant_id}:{incident.id}"
     lock_acquired = await redis.set(
-        lock_key, f"{worker_id}:{datetime.now(timezone.utc).isoformat()}",
-        nx=True, ex=settings.LOCK_TTL,
+        lock_key,
+        f"{worker_id}:{datetime.now(timezone.utc).isoformat()}",
+        nx=True,
+        ex=settings.LOCK_TTL,
     )
     if not lock_acquired:
         log.warning("execution_lock_contention")
@@ -71,8 +75,10 @@ async def execute_action(
 
     # Check tenant daily execution limit
     from app.core.tenant_limits import check_daily_executions
-    
-    allowed, current, max_allowed = await check_daily_executions(session, incident.tenant_id)
+
+    allowed, current, max_allowed = await check_daily_executions(
+        session, incident.tenant_id
+    )
     if not allowed:
         log.warning(
             "execution_limit_exceeded",
@@ -81,7 +87,7 @@ async def execute_action(
         )
         # Still allow execution but log warning
         # In strict mode, you might want to raise an exception here
-    
+
     # Create execution record
     execution = Execution(
         tenant_id=incident.tenant_id,
@@ -112,7 +118,8 @@ async def execute_action(
         # SSE: log line
         try:
             await emit_execution_log(
-                str(incident.tenant_id), str(incident.id),
+                str(incident.tenant_id),
+                str(incident.id),
                 f"[{action_type}] Starting execution (attempt #{execution.attempt})...",
             )
         except Exception:
@@ -127,9 +134,10 @@ async def execute_action(
             ExecutionStatus.COMPLETED if result.success else ExecutionStatus.FAILED
         )
         execution.logs = result.logs
-        execution.completed_at = datetime.now(timezone.utc)
+        completed_at = datetime.now(timezone.utc)
+        execution.completed_at = completed_at
 
-        duration = (execution.completed_at - start_time).total_seconds()
+        duration = (completed_at - start_time).total_seconds()
         execution_duration_seconds.labels(action_type=action_type).observe(duration)
 
         if result.success:
@@ -142,8 +150,11 @@ async def execute_action(
 
             try:
                 await emit_execution_completed(
-                    str(incident.tenant_id), str(incident.id),
-                    action_type, "COMPLETED", duration,
+                    str(incident.tenant_id),
+                    str(incident.id),
+                    action_type,
+                    "COMPLETED",
+                    duration,
                 )
             except Exception:
                 pass
@@ -168,8 +179,11 @@ async def execute_action(
 
             try:
                 await emit_execution_completed(
-                    str(incident.tenant_id), str(incident.id),
-                    action_type, "FAILED", duration,
+                    str(incident.tenant_id),
+                    str(incident.id),
+                    action_type,
+                    "FAILED",
+                    duration,
                 )
             except Exception:
                 pass
@@ -194,7 +208,7 @@ async def execute_action(
             reason=f"Execution timed out after {settings.EXECUTION_TIMEOUT}s",
         )
 
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError) as exc:
         execution.status = ExecutionStatus.FAILED
         execution.logs = str(exc)
         execution.completed_at = datetime.now(timezone.utc)
@@ -211,7 +225,9 @@ async def execute_action(
         await redis.delete(lock_key)
 
 
-async def _enqueue_verification(incident: Incident, log) -> None:
+async def _enqueue_verification(
+    incident: Incident, log: structlog.stdlib.BoundLogger
+) -> None:
     """Enqueue the verification ARQ task after successful execution."""
     try:
         from arq import create_pool

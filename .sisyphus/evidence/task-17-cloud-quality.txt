@@ -1,0 +1,53 @@
+Task 17 — Cloud adapter quality enhancement evidence
+Date: 2026-03-07
+
+Scope:
+- backend/app/cloud/ (18 source files reviewed)
+
+Files updated:
+- backend/app/cloud/aws_auth.py
+- backend/app/cloud/aws_cloudtrail.py
+- backend/app/cloud/aws_ssh.py
+- backend/app/cloud/discovery.py
+- backend/app/cloud/gcp_logging.py
+- backend/app/cloud/gcp_ssh.py
+- backend/app/cloud/tenant_config.py
+
+Verification commands and outcomes:
+
+1) Ruff lint
+Command:
+  cd backend && python3 -m ruff check app/cloud/
+Result:
+  All checks passed!
+
+2) Mypy type-check
+Command:
+  cd backend && python3 -m mypy app/cloud/ --ignore-missing-imports
+Result:
+  Success: no issues found in 18 source files
+
+3) Ruff format on changed files
+Command:
+  cd backend && python3 -m ruff format app/cloud/aws_auth.py app/cloud/aws_ssh.py app/cloud/aws_cloudtrail.py app/cloud/discovery.py app/cloud/gcp_ssh.py app/cloud/gcp_logging.py app/cloud/tenant_config.py
+Result:
+  7 files left unchanged
+
+4) Logged credentials scan
+Command intent:
+  Search cloud logging calls for credential-like fields (access/secret/key_id/session_token/credentials).
+Result:
+  No matches found in backend/app/cloud.
+
+5) LSP diagnostics on changed files
+Result:
+  No diagnostics found for all changed files.
+
+Known mypy errors resolved:
+- aws_ssh.py: bytes/str output normalization fixed.
+- gcp_ssh.py: bytes/str output normalization fixed; asyncssh key generation call typed correctly.
+- discovery.py: AWSConfig typing fixed; mutable default for tags removed.
+- aws_cloudtrail.py: removed dependency on missing get_assumed_role_credentials by using shared aws client path.
+- gcp_logging.py: serial port request updated to typed request object API.
+- tenant_config.py: yaml import marked with # type: ignore[import-untyped].
+- aws_auth.py: boto3 return-annotation name errors removed via Any return typing and import hints.

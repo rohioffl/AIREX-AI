@@ -1,0 +1,11 @@
+Task 5: docker-compose migrate service update
+
+Changes implemented:
+- migrate: command updated to run from /database: bash -c "cd /database && alembic upgrade head"
+- migrate: added new volume mapping ./database:/database in addition to existing ./backend:/app
+
+Validation:
+- docker-compose config validated successfully (PASS)
+
+Notes:
+- No other services modified; only migrate service updated as requested.

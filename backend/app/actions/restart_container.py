@@ -130,11 +130,11 @@ class RestartContainerAction(BaseAction):
         logs_lines = [
             f"[SIM] Connecting to {host}...",
             f"[SIM] Restarting container: {container_name} ({container_id})",
-            f"[SIM] Container stopped",
+            "[SIM] Container stopped",
             f"[SIM] Container started ({container_id[:12]})",
-            f"[SIM] State: Running = true",
-            f"[SIM] Health: healthy",
-            f"[SIM] Container restart complete",
+            "[SIM] State: Running = true",
+            "[SIM] Health: healthy",
+            "[SIM] Container restart complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
 

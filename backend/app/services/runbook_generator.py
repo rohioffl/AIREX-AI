@@ -14,13 +14,12 @@ in future RAG similarity searches.
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, cast
 
 import structlog
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -81,13 +80,17 @@ def build_runbook_context(incident: Incident) -> dict[str, str]:
         for e in incident.evidence[:5]:  # Cap at 5 evidence items
             snippet = (e.raw_output or "")[:300]
             evidence_lines.append(f"[{e.tool_name}] {snippet}")
-    evidence_summary = "\n".join(evidence_lines) if evidence_lines else "No evidence recorded"
+    evidence_summary = (
+        "\n".join(evidence_lines) if evidence_lines else "No evidence recorded"
+    )
 
     # Verification criteria
     verification_criteria = recommendation.get("verification_criteria", [])
-    verification = "\n".join(
-        f"- {c}" for c in verification_criteria
-    ) if verification_criteria else "Standard post-action verification"
+    verification = (
+        "\n".join(f"- {c}" for c in verification_criteria)
+        if verification_criteria
+        else "Standard post-action verification"
+    )
 
     # Duration
     duration = "Unknown"
@@ -162,7 +165,10 @@ async def generate_runbook_content(
         if headers:
             call_kwargs["extra_headers"] = headers
 
-        if settings.LLM_PRIMARY_MODEL.startswith("vertex_ai/") and not settings.LLM_BASE_URL:
+        if (
+            settings.LLM_PRIMARY_MODEL.startswith("vertex_ai/")
+            and not settings.LLM_BASE_URL
+        ):
             call_kwargs["vertex_project"] = settings.VERTEX_PROJECT
             call_kwargs["vertex_location"] = settings.VERTEX_LOCATION
 
@@ -197,6 +203,7 @@ async def store_runbook(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
     )
 
     # Deterministic source_id: same incident always produces same source
@@ -269,6 +276,7 @@ async def generate_and_store_runbook(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
         alert_type=incident.alert_type,
     )
 
@@ -300,6 +308,7 @@ async def generate_and_store_runbook(
     meta["_auto_runbook_generated_at"] = datetime.now(timezone.utc).isoformat()
     incident.meta = meta
     from sqlalchemy.orm.attributes import flag_modified
+
     flag_modified(incident, "meta")
 
     return source_id

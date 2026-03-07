@@ -8,6 +8,7 @@ import uuid
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 
 from app.api.dependencies import (
@@ -16,14 +17,12 @@ from app.api.dependencies import (
     TenantId,
     TenantSession,
 )
-from app.core.rbac import Permission, has_permission
 from app.core.security import (
     UserResponse,
     hash_password,
 )
 from app.models.enums import UserRole
 from app.models.user import User
-from pydantic import BaseModel, EmailStr
 
 logger = structlog.get_logger()
 
@@ -90,7 +89,9 @@ async def list_users(
     return UserListResponse(items=items, total=total)
 
 
-@router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(RequireAdmin)])
+@router.get(
+    "/{user_id}", response_model=UserResponse, dependencies=[Depends(RequireAdmin)]
+)
 async def get_user(
     user_id: uuid.UUID,
     tenant_id: TenantId,
@@ -144,9 +145,7 @@ async def create_user(
         )
 
     # Check if email already exists
-    result = await session.execute(
-        select(User).where(User.email == body.email)
-    )
+    result = await session.execute(select(User).where(User.email == body.email))
     existing = result.scalar_one_or_none()
     if existing:
         raise HTTPException(

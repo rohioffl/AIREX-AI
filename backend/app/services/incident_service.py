@@ -35,6 +35,7 @@ async def create_incident(
         "incident_created",
         tenant_id=str(tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
         alert_type=alert_type,
     )
     return incident

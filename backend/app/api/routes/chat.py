@@ -7,21 +7,24 @@ DELETE /api/v1/incidents/{incident_id}/chat/history
 """
 
 import uuid
+from functools import lru_cache
+from importlib import import_module
+from typing import Any, Awaitable, Callable, cast
 
 import structlog
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import Redis, TenantId, TenantSession
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.chat_service import (
-    chat_with_incident,
-    get_conversation_history,
-    save_conversation_history,
-)
 
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+@lru_cache(maxsize=1)
+def _chat_service_module() -> Any:
+    return import_module("app.services.chat_service")
 
 
 @router.post(
@@ -41,6 +44,10 @@ async def send_chat_message(
     The conversation history is stored in Redis with a 24-hour TTL.
     Each incident has its own independent chat session.
     """
+    chat_with_incident = cast(
+        Callable[..., Awaitable[tuple[str, int]]],
+        _chat_service_module().chat_with_incident,
+    )
     try:
         reply, conversation_length = await chat_with_incident(
             session=session,
@@ -80,6 +87,10 @@ async def get_chat_history(
 
     Returns an empty list if no conversation exists.
     """
+    get_conversation_history = cast(
+        Callable[..., Awaitable[list[dict[str, str]]]],
+        _chat_service_module().get_conversation_history,
+    )
     history = await get_conversation_history(
         redis,
         str(tenant_id),
@@ -98,6 +109,10 @@ async def clear_chat_history(
     redis: Redis,
 ) -> None:
     """Clear the conversation history for an incident chat session."""
+    save_conversation_history = cast(
+        Callable[..., Awaitable[None]],
+        _chat_service_module().save_conversation_history,
+    )
     await save_conversation_history(
         redis,
         str(tenant_id),

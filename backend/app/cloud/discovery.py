@@ -13,12 +13,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from app.core.config import settings
+if TYPE_CHECKING:
+    from app.cloud.tenant_config import AWSConfig
 
 logger = structlog.get_logger()
 
@@ -28,29 +30,27 @@ DISCOVERY_CACHE_TTL = 3600  # 1 hour
 @dataclass
 class DiscoveredInstance:
     """Result from cloud instance auto-discovery."""
-    cloud: str = ""              # gcp | aws
-    instance_name: str = ""      # GCE name or EC2 Name tag
-    instance_id: str = ""        # GCE name or EC2 i-xxxx
-    private_ip: str = ""
-    zone: str = ""               # e.g. asia-south1-a
-    region: str = ""             # e.g. ap-south-1
-    machine_type: str = ""       # e.g. e2-medium, t3.micro
-    status: str = ""             # RUNNING, stopped, etc.
-    network: str = ""            # VPC / subnet
-    service_account: str = ""    # GCP SA email
-    tags: dict = None
 
-    def __post_init__(self):
-        if self.tags is None:
-            self.tags = {}
+    cloud: str = ""  # gcp | aws
+    instance_name: str = ""  # GCE name or EC2 Name tag
+    instance_id: str = ""  # GCE name or EC2 i-xxxx
+    private_ip: str = ""
+    zone: str = ""  # e.g. asia-south1-a
+    region: str = ""  # e.g. ap-south-1
+    machine_type: str = ""  # e.g. e2-medium, t3.micro
+    status: str = ""  # RUNNING, stopped, etc.
+    network: str = ""  # VPC / subnet
+    service_account: str = ""  # GCP SA email
+    tags: dict[str, Any] = field(default_factory=dict)
 
 
 # ═══════════════════════════════════════════════════════════════════
 #  GCP Discovery
 # ═══════════════════════════════════════════════════════════════════
 
+
 @lru_cache(maxsize=4)
-def _get_gcp_compute_client(sa_key_path: str = ""):
+def _get_gcp_compute_client(sa_key_path: str = "") -> Any:
     """
     Create a GCP Compute client.
 
@@ -64,12 +64,17 @@ def _get_gcp_compute_client(sa_key_path: str = ""):
 
     if sa_key_path and os.path.exists(sa_key_path):
         from google.oauth2 import service_account
+
         creds = service_account.Credentials.from_service_account_file(sa_key_path)
         logger.info("gcp_auth_explicit_key", key_path=sa_key_path)
         return compute_v1.InstancesClient(credentials=creds)
 
     # Falls through to ADC: env var → gcloud CLI → GCE metadata
-    auth_source = "GOOGLE_APPLICATION_CREDENTIALS" if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") else "ADC/gcloud/metadata"
+    auth_source = (
+        "GOOGLE_APPLICATION_CREDENTIALS"
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        else "ADC/gcloud/metadata"
+    )
     logger.info("gcp_auth_adc", source=auth_source)
     return compute_v1.InstancesClient()
 
@@ -113,10 +118,16 @@ async def discover_gcp_instance(
                     if iface.network_i_p == private_ip:
                         # Extract zone name from full URL
                         zone_name = inst.zone.split("/")[-1] if inst.zone else ""
-                        region = "-".join(zone_name.split("-")[:-1]) if zone_name else ""
+                        region = (
+                            "-".join(zone_name.split("-")[:-1]) if zone_name else ""
+                        )
 
                         # Machine type
-                        machine_type = inst.machine_type.split("/")[-1] if inst.machine_type else ""
+                        machine_type = (
+                            inst.machine_type.split("/")[-1]
+                            if inst.machine_type
+                            else ""
+                        )
 
                         # Service account
                         sa_email = ""
@@ -135,7 +146,9 @@ async def discover_gcp_instance(
                             region=region,
                             machine_type=machine_type,
                             status=inst.status,
-                            network=iface.network.split("/")[-1] if iface.network else "",
+                            network=iface.network.split("/")[-1]
+                            if iface.network
+                            else "",
                             service_account=sa_email,
                             tags=labels,
                         )
@@ -161,10 +174,11 @@ async def discover_gcp_instance(
 #  AWS Discovery
 # ═══════════════════════════════════════════════════════════════════
 
+
 async def discover_aws_instance(
     private_ip: str,
     region: str = "",
-    aws_config: "AWSConfig | None" = None,
+    aws_config: AWSConfig | None = None,
     profile: str = "",
 ) -> DiscoveredInstance | None:
     """
@@ -183,7 +197,9 @@ async def discover_aws_instance(
 
     if explicit_region:
         # Try the explicit region first
-        result = await _search_ec2_in_region(private_ip, explicit_region, aws_config, loop)
+        result = await _search_ec2_in_region(
+            private_ip, explicit_region, aws_config, loop
+        )
         if result:
             return result
         log.info("aws_instance_not_in_explicit_region", region=explicit_region)
@@ -204,12 +220,19 @@ async def discover_aws_instance(
             log.info("aws_instance_found_in_region", region=r)
             return result
 
-    log.warning("aws_instance_not_found", private_ip=private_ip, regions_searched=len(ordered) + (1 if explicit_region else 0))
+    log.warning(
+        "aws_instance_not_found",
+        private_ip=private_ip,
+        regions_searched=len(ordered) + (1 if explicit_region else 0),
+    )
     return None
 
 
 async def _search_ec2_in_region(
-    private_ip: str, region: str, aws_config: "AWSConfig | None", loop
+    private_ip: str,
+    region: str,
+    aws_config: AWSConfig | None,
+    loop: asyncio.AbstractEventLoop,
 ) -> DiscoveredInstance | None:
     """Search for an EC2 instance by private IP in a specific region."""
     from app.cloud.aws_auth import get_aws_client
@@ -272,7 +295,7 @@ async def _search_ec2_in_region(
         return None
 
 
-async def _discover_aws_regions(aws_config: "AWSConfig | None" = None) -> list[str]:
+async def _discover_aws_regions(aws_config: AWSConfig | None = None) -> list[str]:
     """Get list of enabled AWS regions. Falls back to common ones."""
     from app.cloud.aws_auth import get_aws_client
 
@@ -280,7 +303,9 @@ async def _discover_aws_regions(aws_config: "AWSConfig | None" = None) -> list[s
     try:
         client = get_aws_client("ec2", aws_config, region="us-east-1")
         resp = client.describe_regions(
-            Filters=[{"Name": "opt-in-status", "Values": ["opt-in-not-required", "opted-in"]}]
+            Filters=[
+                {"Name": "opt-in-status", "Values": ["opt-in-not-required", "opted-in"]}
+            ]
         )
         return [r["RegionName"] for r in resp.get("Regions", [])]
     except Exception:
@@ -291,6 +316,7 @@ async def _discover_aws_regions(aws_config: "AWSConfig | None" = None) -> list[s
 #  Cached Discovery (uses Redis)
 # ═══════════════════════════════════════════════════════════════════
 
+
 async def discover_instance_cached(
     private_ip: str,
     cloud: str,
@@ -298,8 +324,8 @@ async def discover_instance_cached(
     region: str = "",
     sa_key_path: str = "",
     aws_profile: str = "",
-    aws_config: "AWSConfig | None" = None,
-    redis=None,
+    aws_config: AWSConfig | None = None,
+    redis: Any = None,
 ) -> DiscoveredInstance | None:
     """
     Discover instance with Redis caching.
@@ -314,8 +340,14 @@ async def discover_instance_cached(
         try:
             cached = await redis.get(cache_key)
             if cached:
-                data = json.loads(cached if isinstance(cached, str) else cached.decode())
-                logger.debug("discovery_cache_hit", ip=private_ip, instance=data.get("instance_name"))
+                data = json.loads(
+                    cached if isinstance(cached, str) else cached.decode()
+                )
+                logger.debug(
+                    "discovery_cache_hit",
+                    ip=private_ip,
+                    instance=data.get("instance_name"),
+                )
                 return DiscoveredInstance(**data)
         except Exception:
             pass
@@ -343,7 +375,9 @@ async def discover_instance_cached(
                 json.dumps(asdict(discovered)),
                 ex=DISCOVERY_CACHE_TTL,
             )
-            logger.debug("discovery_cached", ip=private_ip, instance=discovered.instance_name)
+            logger.debug(
+                "discovery_cached", ip=private_ip, instance=discovered.instance_name
+            )
         except Exception:
             pass
 

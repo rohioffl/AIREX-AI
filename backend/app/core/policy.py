@@ -49,6 +49,8 @@ class ApprovalDecision:
 
 @dataclass(frozen=True)
 class ActionPolicy:
+    """Static policy configuration for an executable action type."""
+
     action_type: str
     auto_approve: bool
     requires_senior_approval: bool
@@ -131,7 +133,11 @@ ACTION_POLICIES: dict[str, ActionPolicy] = {
 }
 
 
-def check_policy(action_type: str, risk_level: RiskLevel) -> tuple[bool, str]:
+def check_policy(
+    action_type: str,
+    risk_level: RiskLevel,
+    correlation_id: str | None = None,
+) -> tuple[bool, str]:
     """
     Check whether an action is allowed given the risk level.
 
@@ -139,18 +145,37 @@ def check_policy(action_type: str, risk_level: RiskLevel) -> tuple[bool, str]:
     """
     policy = ACTION_POLICIES.get(action_type)
     if policy is None:
+        logger.warning(
+            "policy_missing",
+            action=action_type,
+            risk=risk_level.value,
+            correlation_id=correlation_id,
+        )
         return False, f"No policy defined for action: {action_type}"
 
     if RISK_ORDER[risk_level] > RISK_ORDER[policy.max_allowed_risk]:
+        logger.warning(
+            "policy_risk_blocked",
+            action=action_type,
+            risk=risk_level.value,
+            max_allowed_risk=policy.max_allowed_risk.value,
+            correlation_id=correlation_id,
+        )
         return False, (
             f"Risk level {risk_level.value} exceeds max allowed "
             f"{policy.max_allowed_risk.value} for {action_type}"
         )
 
+    logger.info(
+        "policy_check_allowed",
+        action=action_type,
+        risk=risk_level.value,
+        correlation_id=correlation_id,
+    )
     return True, "allowed"
 
 
-def requires_approval(action_type: str) -> bool:
+def requires_approval(action_type: str, correlation_id: str | None = None) -> bool:
     """Return True if the action requires human approval (legacy API).
 
     Preserved for backward compatibility. For confidence-aware decisions,
@@ -158,7 +183,18 @@ def requires_approval(action_type: str) -> bool:
     """
     policy = ACTION_POLICIES.get(action_type)
     if policy is None:
+        logger.warning(
+            "requires_approval_policy_missing",
+            action=action_type,
+            correlation_id=correlation_id,
+        )
         return True
+    logger.info(
+        "requires_approval_evaluated",
+        action=action_type,
+        requires_human=not policy.auto_approve,
+        correlation_id=correlation_id,
+    )
     return not policy.auto_approve
 
 
@@ -166,6 +202,7 @@ def evaluate_approval(
     action_type: str,
     confidence: float = 0.0,
     risk_level: RiskLevel = RiskLevel.MED,
+    correlation_id: str | None = None,
 ) -> ApprovalDecision:
     """
     Evaluate the full approval policy for an action.
@@ -192,6 +229,13 @@ def evaluate_approval(
 
     # Gate 1: Unknown action
     if policy is None:
+        logger.warning(
+            "approval_policy_missing",
+            action=action_type,
+            confidence=confidence,
+            risk=risk_level.value,
+            correlation_id=correlation_id,
+        )
         return ApprovalDecision(
             requires_human=True,
             level=ApprovalLevel.OPERATOR,
@@ -204,6 +248,7 @@ def evaluate_approval(
             "senior_approval_required",
             action=action_type,
             confidence=confidence,
+            correlation_id=correlation_id,
         )
         return ApprovalDecision(
             requires_human=True,
@@ -217,6 +262,13 @@ def evaluate_approval(
 
     # Gate 3: Not eligible for auto-approval
     if not policy.auto_approve:
+        logger.info(
+            "operator_approval_required_auto_approve_disabled",
+            action=action_type,
+            confidence=confidence,
+            risk=risk_level.value,
+            correlation_id=correlation_id,
+        )
         return ApprovalDecision(
             requires_human=True,
             level=ApprovalLevel.OPERATOR,
@@ -234,6 +286,7 @@ def evaluate_approval(
             action=action_type,
             confidence=confidence,
             threshold=threshold,
+            correlation_id=correlation_id,
         )
         return ApprovalDecision(
             requires_human=True,
@@ -247,6 +300,13 @@ def evaluate_approval(
 
     # Gate 5: HIGH risk block
     if settings.AUTO_APPROVAL_BLOCK_HIGH_RISK and risk_level == RiskLevel.HIGH:
+        logger.info(
+            "auto_approval_blocked_high_risk",
+            action=action_type,
+            confidence=confidence,
+            risk=risk_level.value,
+            correlation_id=correlation_id,
+        )
         return ApprovalDecision(
             requires_human=True,
             level=ApprovalLevel.OPERATOR,
@@ -262,6 +322,7 @@ def evaluate_approval(
         action=action_type,
         confidence=confidence,
         risk=risk_level.value,
+        correlation_id=correlation_id,
     )
     return ApprovalDecision(
         requires_human=False,
@@ -275,6 +336,15 @@ def evaluate_approval(
     )
 
 
-def get_policy(action_type: str) -> ActionPolicy | None:
+def get_policy(
+    action_type: str, correlation_id: str | None = None
+) -> ActionPolicy | None:
     """Look up the policy for an action type."""
-    return ACTION_POLICIES.get(action_type)
+    policy = ACTION_POLICIES.get(action_type)
+    if policy is None:
+        logger.warning(
+            "get_policy_not_found",
+            action=action_type,
+            correlation_id=correlation_id,
+        )
+    return policy

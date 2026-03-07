@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -15,7 +14,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TenantMixin
@@ -32,6 +31,8 @@ def _utcnow() -> datetime:
 
 
 class Incident(Base, TenantMixin):
+    """Primary incident aggregate for lifecycle, retries, and related artifacts."""
+
     __tablename__ = "incidents"
     __table_args__ = (
         PrimaryKeyConstraint("tenant_id", "id"),
@@ -123,26 +124,16 @@ class Incident(Base, TenantMixin):
 
     # Cross-host correlation group (Phase 4 ARE)
     # SHA256[:16] of (tenant_id + alert_type + time_bucket)
-    correlation_group_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    correlation_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # ── Resolution tracking (Phase 2 ARE) ────────────────────────
-    resolution_type: Mapped[str | None] = mapped_column(
-        String(50), nullable=True
-    )
-    resolution_summary: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    resolution_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    resolution_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolution_duration_seconds: Mapped[float | None] = mapped_column(
         Float, nullable=True
     )
-    feedback_score: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    feedback_note: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    feedback_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    feedback_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
@@ -182,3 +173,14 @@ class Incident(Base, TenantMixin):
             "Incident.id == Execution.incident_id)"
         ),
     )
+
+    def __repr__(self) -> str:
+        return (
+            "Incident("
+            f"tenant_id={self.tenant_id!s}, "
+            f"id={self.id!s}, "
+            f"state={self.state.value!r}, "
+            f"severity={self.severity.value!r}, "
+            f"title={self.title!r}"
+            ")"
+        )

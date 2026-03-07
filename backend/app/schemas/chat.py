@@ -1,5 +1,7 @@
 """Pydantic schemas for incident AI chat (Phase 7)."""
 
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
 
 
@@ -21,7 +23,7 @@ class ChatMessage(BaseModel):
         ...,
         description="Message role: 'user' or 'assistant'",
     )
-    content: str
+    content: str = Field(..., description="Message body content")
 
 
 class ChatResponse(BaseModel):

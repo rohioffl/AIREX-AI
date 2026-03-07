@@ -1,8 +1,13 @@
-"""JWT token creation/verification and password hashing."""
+"""Security primitives for password hashing and JWT handling.
+
+This module centralizes token serialization/deserialization and password
+verification behavior for authentication flows.
+"""
 
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
@@ -10,9 +15,11 @@ from pydantic import BaseModel, EmailStr
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = structlog.get_logger(__name__)
 
 
 # ── Schemas ──────────────────────────────────────────────────
+
 
 class TokenData(BaseModel):
     tenant_id: uuid.UUID
@@ -56,6 +63,7 @@ class UserResponse(BaseModel):
 
 
 # ── Password hashing ────────────────────────────────────────
+
 
 def hash_password(password: str) -> str:
     """Hash a plaintext password with bcrypt."""
@@ -108,7 +116,11 @@ def create_refresh_token(tenant_id: uuid.UUID, subject: str) -> str:
 
 
 def decode_access_token(token: str) -> TokenData:
-    """Decode and validate a JWT. Raises ValueError on failure."""
+    """Decode and validate an access JWT.
+
+    Raises:
+        ValueError: If the token cannot be decoded or contains invalid claims.
+    """
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
@@ -119,11 +131,20 @@ def decode_access_token(token: str) -> TokenData:
         role = payload.get("role", "operator")
         return TokenData(tenant_id=tenant_id, sub=subject, user_id=user_id, role=role)
     except (JWTError, KeyError, ValueError) as exc:
+        logger.warning(
+            "auth_access_token_decode_failed",
+            correlation_id=None,
+            error_type=type(exc).__name__,
+        )
         raise ValueError(f"Invalid token: {exc}") from exc
 
 
 def decode_refresh_token(token: str) -> TokenData:
-    """Decode a refresh token. Raises ValueError on failure."""
+    """Decode and validate a refresh JWT.
+
+    Raises:
+        ValueError: If token type/claims are invalid or decoding fails.
+    """
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
@@ -134,4 +155,9 @@ def decode_refresh_token(token: str) -> TokenData:
         subject: str = payload["sub"]
         return TokenData(tenant_id=tenant_id, sub=subject)
     except (JWTError, KeyError, ValueError) as exc:
+        logger.warning(
+            "auth_refresh_token_decode_failed",
+            correlation_id=None,
+            error_type=type(exc).__name__,
+        )
         raise ValueError(f"Invalid refresh token: {exc}") from exc

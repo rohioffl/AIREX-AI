@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
 import structlog
-from sqlalchemy import select, func, text, and_
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -72,7 +72,7 @@ def evaluate_thresholds(metrics: dict[str, Any]) -> tuple[str, list[dict]]:
 
     Returns (status, anomalies_list).
     """
-    anomalies: list[dict] = []
+    anomalies: list[dict[str, Any]] = []
     worst_status = HealthCheckStatus.HEALTHY
 
     for metric_key, value in metrics.items():
@@ -232,7 +232,7 @@ async def check_site24x7_monitors(
                 session.add(hc)
                 results.append(hc)
 
-            except Exception as exc:
+            except (TypeError, ValueError, KeyError) as exc:
                 duration_ms = time.monotonic() * 1000 - start_ms
                 log.warning(
                     "health_check_monitor_failed",
@@ -301,13 +301,14 @@ async def auto_create_incidents(
         # Check if there is an ACTIVE incident for this exact target
         from app.models.incident import Incident
         from app.models.enums import IncidentState
-        
+
         active_incident_stmt = (
             select(Incident)
             .where(
                 and_(
                     Incident.tenant_id == tenant_id,
-                    Incident.alert_type == STATUS_TO_ALERT_TYPE.get(hc.status, "healthcheck"),
+                    Incident.alert_type
+                    == STATUS_TO_ALERT_TYPE.get(hc.status, "healthcheck"),
                     Incident.meta["target_id"].astext == str(hc.target_id),
                     Incident.state.notin_(
                         [
@@ -317,7 +318,7 @@ async def auto_create_incidents(
                             IncidentState.FAILED_VERIFICATION,
                         ]
                     ),
-                    Incident.deleted_at.is_(None)
+                    Incident.deleted_at.is_(None),
                 )
             )
             .order_by(Incident.created_at.desc())
@@ -325,9 +326,10 @@ async def auto_create_incidents(
         )
         result = await session.execute(active_incident_stmt)
         active_incident = result.scalar_one_or_none()
-        
+
         if active_incident:
             from sqlalchemy.orm.attributes import flag_modified
+
             # Enrich existing incident with latest check info
             m = dict(active_incident.meta) if active_incident.meta else {}
             m["_alert_last_seen_at"] = now.isoformat()
@@ -336,15 +338,15 @@ async def auto_create_incidents(
             m["health_check_metrics"] = hc.metrics
             if hc.anomalies:
                 m["health_check_anomalies"] = hc.anomalies
-            
+
             active_incident.meta = m
             flag_modified(active_incident, "meta")
             session.add(active_incident)
-            
+
             logger.debug(
                 "health_check_incident_active_dedup",
                 target_id=hc.target_id,
-                incident_id=str(active_incident.id)
+                incident_id=str(active_incident.id),
             )
             continue
 
@@ -363,8 +365,8 @@ async def auto_create_incidents(
                 )
             )
         )
-        result = await session.execute(recent_stmt)
-        recent_count = result.scalar_one()
+        recent_count_result = await session.execute(recent_stmt)
+        recent_count = cast(int, recent_count_result.scalar_one())
 
         if recent_count > 0:
             logger.debug(
@@ -414,6 +416,7 @@ async def auto_create_incidents(
 
             logger.info(
                 "health_check_incident_created",
+                correlation_id=str(incident.id),
                 incident_id=str(incident.id),
                 target=hc.target_name,
                 status=hc.status,
@@ -435,6 +438,7 @@ async def auto_create_incidents(
             logger.error(
                 "health_check_incident_creation_failed",
                 target=hc.target_name,
+                correlation_id=str(hc.id),
                 error=str(exc),
             )
 
@@ -454,7 +458,7 @@ async def run_health_checks(
     """
     from app.core.database import get_tenant_session
 
-    log = logger.bind(tenant_id=str(tenant_id))
+    log = logger.bind(tenant_id=str(tenant_id), correlation_id=str(tenant_id))
     log.info("health_check_run_started")
 
     summary = {

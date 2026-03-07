@@ -128,7 +128,7 @@ class RestartServiceAction(BaseAction):
             f"[SIM] Connecting to {host}...",
             f"[SIM] Running: systemctl restart {service_name}",
             f"[SIM] Service '{service_name}' restarted successfully",
-            f"[SIM] Active: active (running)",
+            "[SIM] Active: active (running)",
             f"[SIM] PID: {random.randint(10000, 50000)}",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)

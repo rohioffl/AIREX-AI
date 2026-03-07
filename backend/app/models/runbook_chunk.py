@@ -18,6 +18,8 @@ def _utcnow() -> datetime:
 
 
 class RunbookChunk(Base, TenantMixin):
+    """Embedded runbook/document chunks used for retrieval-augmented guidance."""
+
     __tablename__ = "runbook_chunks"
     __table_args__ = (
         PrimaryKeyConstraint("tenant_id", "id"),
@@ -46,3 +48,14 @@ class RunbookChunk(Base, TenantMixin):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, default=_utcnow
     )
+
+    def __repr__(self) -> str:
+        return (
+            "RunbookChunk("
+            f"tenant_id={self.tenant_id!s}, "
+            f"id={self.id!s}, "
+            f"source_type={self.source_type!r}, "
+            f"source_id={self.source_id!s}, "
+            f"chunk_index={self.chunk_index}"
+            ")"
+        )

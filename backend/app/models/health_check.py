@@ -87,3 +87,14 @@ class HealthCheck(Base, TenantMixin):
 
     # Error info
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            "HealthCheck("
+            f"tenant_id={self.tenant_id!s}, "
+            f"id={self.id!s}, "
+            f"target_type={self.target_type!r}, "
+            f"target_id={self.target_id!r}, "
+            f"status={self.status!r}"
+            ")"
+        )

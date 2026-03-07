@@ -21,13 +21,9 @@ class IncidentLock(Base):
     """
 
     __tablename__ = "incident_locks"
-    __table_args__ = (
-        PrimaryKeyConstraint("tenant_id", "incident_id"),
-    )
+    __table_args__ = (PrimaryKeyConstraint("tenant_id", "incident_id"),)
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=False
-    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     incident_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), nullable=False
     )
@@ -38,3 +34,12 @@ class IncidentLock(Base):
     expires_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False
     )
+
+    def __repr__(self) -> str:
+        return (
+            "IncidentLock("
+            f"tenant_id={self.tenant_id!s}, "
+            f"incident_id={self.incident_id!s}, "
+            f"worker_id={self.worker_id!r}"
+            ")"
+        )

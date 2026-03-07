@@ -132,9 +132,9 @@ class RollbackDeploymentAction(BaseAction):
             f"[SIM] Connecting to {host}...",
             f"[SIM] Rolling back deployment/{deployment_name}...",
             f"[SIM] deployment.apps/{deployment_name} rolled back to revision {prev_rev}",
-            f"[SIM] Waiting for rollout to complete...",
+            "[SIM] Waiting for rollout to complete...",
             f'[SIM] deployment "{deployment_name}" successfully rolled out',
-            f"[SIM] Rollback action complete",
+            "[SIM] Rollback action complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
 

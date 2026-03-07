@@ -21,13 +21,12 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.models.enums import IncidentState
 from app.models.incident import Incident
 
 logger = structlog.get_logger()
@@ -71,6 +70,7 @@ async def correlate_incident(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
         alert_type=incident.alert_type,
     )
 
@@ -78,13 +78,14 @@ async def correlate_incident(
     window_start = now - timedelta(minutes=CORRELATION_WINDOW_MINUTES)
 
     group_id = compute_correlation_group_id(
-        incident.tenant_id, incident.alert_type, now,
+        incident.tenant_id,
+        incident.alert_type,
+        now,
     )
 
     # Find recent incidents with the same alert_type in the same window
     result = await session.execute(
-        select(Incident)
-        .where(
+        select(Incident).where(
             Incident.tenant_id == incident.tenant_id,
             Incident.alert_type == incident.alert_type,
             Incident.id != incident.id,
@@ -96,8 +97,10 @@ async def correlate_incident(
 
     # Filter to cross-host only (different host_key)
     cross_host = [
-        s for s in siblings
-        if s.host_key != incident.host_key or (s.host_key is None and incident.host_key is None)
+        s
+        for s in siblings
+        if s.host_key != incident.host_key
+        or (s.host_key is None and incident.host_key is None)
     ]
 
     if not cross_host:
@@ -142,9 +145,7 @@ async def get_correlated_incidents(
         filters.append(Incident.id != exclude_id)
 
     result = await session.execute(
-        select(Incident)
-        .where(*filters)
-        .order_by(Incident.created_at.desc())
+        select(Incident).where(*filters).order_by(Incident.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -153,7 +154,7 @@ async def get_correlation_summary(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     correlation_group_id: str,
-) -> dict:
+) -> dict[str, Any]:
     """
     Build a summary of a correlation group for API responses.
     """
@@ -196,7 +197,7 @@ async def get_correlation_summary(
         "severities": severities,
         "first_seen": first.created_at.isoformat() if first.created_at else None,
         "last_seen": last.created_at.isoformat() if last.created_at else None,
-        "span_seconds": int(
-            (last.created_at - first.created_at).total_seconds()
-        ) if first.created_at and last.created_at else 0,
+        "span_seconds": int((last.created_at - first.created_at).total_seconds())
+        if first.created_at and last.created_at
+        else 0,
     }

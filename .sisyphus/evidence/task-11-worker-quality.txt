@@ -1,0 +1,42 @@
+Task 11 Evidence — worker quality enhancement
+Date: 2026-03-07
+
+Files changed:
+- backend/app/core/worker.py
+- backend/app/core/retry_scheduler.py
+- backend/app/core/tenant_limits.py
+
+Verification commands and outputs:
+
+1) Ruff format
+Command:
+cd backend && python3 -m ruff format app/core/worker.py app/core/retry_scheduler.py app/core/tenant_limits.py
+Output:
+3 files left unchanged
+
+2) Ruff check
+Command:
+cd backend && python3 -m ruff check app/core/worker.py app/core/retry_scheduler.py app/core/tenant_limits.py
+Output:
+All checks passed!
+
+3) Mypy check
+Command:
+cd backend && python3 -m mypy app/core/worker.py app/core/retry_scheduler.py app/core/tenant_limits.py --ignore-missing-imports
+Output:
+Success: no issues found in 3 source files
+
+4) LSP diagnostics
+- backend/app/core/worker.py: No diagnostics found
+- backend/app/core/retry_scheduler.py: No diagnostics found
+- backend/app/core/tenant_limits.py: No diagnostics found
+
+Requirement checks:
+- _send_to_dlq type mismatch fixed: parameter now accepts str | Exception.
+- Lazy imports remain inside worker task function bodies (implemented via dynamic module attribute loading in-task).
+- Task function names unchanged and verified present:
+  investigate_incident
+  generate_recommendation_task
+  execute_action_task
+  verify_resolution_task
+  generate_runbook_task

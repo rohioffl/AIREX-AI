@@ -58,6 +58,11 @@ async def build_structured_context(
         or None if no context found.
     """
     query_seed = _build_query_seed(incident, evidence_text)
+    log = logger.bind(
+        tenant_id=str(incident.tenant_id),
+        incident_id=str(incident.id),
+        correlation_id=str(incident.id),
+    )
 
     runbooks = await _vector_store.search_runbook_chunks(
         session=session,
@@ -80,7 +85,7 @@ async def build_structured_context(
 
         pattern_analysis = await analyze_patterns(session, incident, lookback_days=30)
     except Exception as exc:
-        logger.warning("pattern_analysis_failed", error=str(exc))
+        log.warning("pattern_analysis_failed", error=str(exc))
 
     text = format_context_sections(runbooks, incidents, pattern_analysis)
     if text is None and not runbooks and not incidents:

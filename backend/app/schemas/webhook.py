@@ -1,5 +1,6 @@
 from typing import Any
-from pydantic import BaseModel, ConfigDict, Field
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Site24x7Payload(BaseModel):
@@ -151,4 +152,11 @@ class GenericWebhookPayload(BaseModel):
     resource_id: str
     title: str
     severity: str = "MEDIUM"
-    meta: dict = Field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("alert_type", "resource_id", "title", "severity", mode="before")
+    @classmethod
+    def normalize_text_fields(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value

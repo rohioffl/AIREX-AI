@@ -135,10 +135,10 @@ class RotateCredentialsAction(BaseAction):
         logs_lines = [
             f"[SIM] Connecting to {host}...",
             f"[SIM] Rotating {credential_type}...",
-            f"[SIM] Certificate renewed: valid until 2027-02-24",
-            f"[SIM] Reloading nginx...",
-            f"[SIM] nginx: configuration test passed",
-            f"[SIM] Credential rotation complete",
+            "[SIM] Certificate renewed: valid until 2027-02-24",
+            "[SIM] Reloading nginx...",
+            "[SIM] nginx: configuration test passed",
+            "[SIM] Credential rotation complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
 

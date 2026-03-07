@@ -2,10 +2,10 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY frontend/package.json frontend/package-lock.json ./
+COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
 
-COPY frontend/ .
+COPY apps/web/ .
 RUN npm run build
 
 FROM nginx:alpine
@@ -14,7 +14,7 @@ RUN addgroup -g 1001 -S airex && \
     adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G airex -g airex airex
 
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 
 RUN chown -R airex:airex /usr/share/nginx/html && \
     chown -R airex:airex /var/cache/nginx && \

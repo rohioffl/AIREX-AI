@@ -81,9 +81,10 @@ services:
     build:
       context: .
       dockerfile: services/airex-api/Dockerfile
-    command: alembic upgrade head
+    command: bash -c "cd /database && alembic upgrade head"
     volumes:
       - ./backend:/app
+      - ./database:/database
     environment:
       - DATABASE_URL=${DATABASE_URL:-your_passwordql+asyncpg://your_password:your_password@db:5432/airex}
     depends_on:

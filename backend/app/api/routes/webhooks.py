@@ -11,6 +11,9 @@ import json as _json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from importlib import import_module
+from typing import Any, Awaitable, Callable, cast
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -25,11 +28,6 @@ from app.schemas.webhook import GenericWebhookPayload, Site24x7Payload
 from app.core.events import emit_incident_created
 from app.core.metrics import incident_created_total
 from app.core.state_machine import transition_state
-from app.cloud.tag_parser import (
-    parse_tags,
-    merge_context_into_meta,
-    discover_and_enrich,
-)
 
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
@@ -37,6 +35,12 @@ from sqlalchemy.orm.attributes import flag_modified
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+@lru_cache(maxsize=1)
+def _tag_parser_module() -> Any:
+    return import_module("app.cloud.tag_parser")
+
 
 # ── Repeated alert handling ───────────────────────────────────
 # Keep the 5-minute idempotency bucket, but instead of skipping duplicates,
@@ -366,6 +370,16 @@ async def ingest_site24x7(
       Method: POST
       Tags: optional (no tenant tag required in single-tenant mode)
     """
+    parse_tags = cast(Callable[[str], Any], _tag_parser_module().parse_tags)
+    merge_context_into_meta = cast(
+        Callable[[dict[str, Any], Any], None],
+        _tag_parser_module().merge_context_into_meta,
+    )
+    discover_and_enrich = cast(
+        Callable[..., Awaitable[Any]],
+        _tag_parser_module().discover_and_enrich,
+    )
+
     payload = await _parse_site24x7_payload(request)
     monitor_name = payload.get_monitor_name()
     status_str = payload.get_status()
@@ -759,6 +773,16 @@ async def ingest_generic(
     redis: Redis,
 ) -> IncidentCreatedResponse:
     """Ingest a generic alert webhook."""
+    parse_tags = cast(Callable[[str], Any], _tag_parser_module().parse_tags)
+    merge_context_into_meta = cast(
+        Callable[[dict[str, Any], Any], None],
+        _tag_parser_module().merge_context_into_meta,
+    )
+    discover_and_enrich = cast(
+        Callable[..., Awaitable[Any]],
+        _tag_parser_module().discover_and_enrich,
+    )
+
     severity = SEVERITY_MAP.get(payload.severity.lower(), SeverityLevel.MEDIUM)
 
     idem_key = _generate_idempotency_key(

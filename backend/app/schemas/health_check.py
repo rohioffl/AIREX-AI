@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,8 +20,8 @@ class HealthCheckResponse(BaseModel):
     target_id: str
     target_name: str
     status: str
-    metrics: dict | None = None
-    anomalies: list | None = None
+    metrics: dict[str, Any] | None = None
+    anomalies: list[Any] | None = None
     incident_created: bool = False
     incident_id: uuid.UUID | None = None
     checked_at: datetime
@@ -50,7 +51,7 @@ class TargetStatus(BaseModel):
     status: str
     last_checked: datetime | None = None
     anomaly_count: int = 0
-    latest_metrics: dict | None = None
+    latest_metrics: dict[str, Any] | None = None
     incident_id: uuid.UUID | None = None
 
 

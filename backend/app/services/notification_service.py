@@ -4,8 +4,9 @@ Notification service for Slack and Email.
 Sends notifications on critical incident state changes.
 """
 
-import json
 from datetime import datetime, timezone
+import smtplib
+from typing import Any
 
 import aiohttp
 import structlog
@@ -27,19 +28,21 @@ async def send_slack_notification(
 ) -> bool:
     """
     Send Slack notification via webhook.
-    
+
     Returns True if sent successfully, False otherwise.
     """
+    correlation_id = incident_id
+
     if not settings.SLACK_WEBHOOK_URL:
         return False
-    
+
     color_map = {
         SeverityLevel.CRITICAL: "#ff0000",
         SeverityLevel.HIGH: "#ff8800",
         SeverityLevel.MEDIUM: "#ffaa00",
         SeverityLevel.LOW: "#00aa00",
     }
-    
+
     state_emoji = {
         IncidentState.RECEIVED: "🔔",
         IncidentState.INVESTIGATING: "🔍",
@@ -53,8 +56,8 @@ async def send_slack_notification(
         IncidentState.FAILED_EXECUTION: "⚠️",
         IncidentState.FAILED_VERIFICATION: "⚠️",
     }
-    
-    payload = {
+
+    payload: dict[str, Any] = {
         "text": f"{state_emoji.get(state, '📋')} Incident {state.value}",
         "attachments": [
             {
@@ -69,12 +72,12 @@ async def send_slack_notification(
             }
         ],
     }
-    
+
     if message:
         payload["attachments"][0]["fields"].append(
             {"title": "Details", "value": message, "short": False}
         )
-    
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -85,6 +88,7 @@ async def send_slack_notification(
                 if response.status == 200:
                     logger.info(
                         "slack_notification_sent",
+                        correlation_id=correlation_id,
                         incident_id=incident_id,
                         tenant_id=tenant_id,
                         state=state.value,
@@ -93,13 +97,15 @@ async def send_slack_notification(
                 else:
                     logger.warning(
                         "slack_notification_failed",
+                        correlation_id=correlation_id,
                         incident_id=incident_id,
                         status=response.status,
                     )
                     return False
-    except Exception as exc:
+    except (aiohttp.ClientError, TimeoutError) as exc:
         logger.error(
             "slack_notification_error",
+            correlation_id=correlation_id,
             incident_id=incident_id,
             error=str(exc),
         )
@@ -117,25 +123,28 @@ async def send_email_notification(
 ) -> bool:
     """
     Send email notification via SMTP.
-    
+
     Returns True if sent successfully, False otherwise.
     """
-    if not all([
-        settings.EMAIL_SMTP_HOST,
-        settings.EMAIL_FROM,
-    ]):
+    correlation_id = incident_id
+
+    if not all(
+        [
+            settings.EMAIL_SMTP_HOST,
+            settings.EMAIL_FROM,
+        ]
+    ):
         return False
-    
+
     try:
-        import smtplib
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
-        
+
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"[AIREX] {severity.value}: {title}"
         msg["From"] = settings.EMAIL_FROM
         msg["To"] = recipient
-        
+
         text_content = f"""
 Incident {incident_id} - {state.value}
 
@@ -145,22 +154,22 @@ Title: {title}
 
 View details: /incidents/{incident_id}
 """
-        
+
         html_content = f"""
 <html>
 <body>
 <h2>Incident {incident_id} - {state.value}</h2>
 <p><strong>Severity:</strong> {severity.value}</p>
 <p><strong>Title:</strong> {title}</p>
-{f'<p>{message}</p>' if message else ''}
+{f"<p>{message}</p>" if message else ""}
 <p><a href="/incidents/{incident_id}">View Details</a></p>
 </body>
 </html>
 """
-        
+
         msg.attach(MIMEText(text_content, "plain"))
         msg.attach(MIMEText(html_content, "html"))
-        
+
         # Use async SMTP if available, otherwise sync
         # For production, use aiosmtplib or send via background task
         with smtplib.SMTP(
@@ -171,18 +180,20 @@ View details: /incidents/{incident_id}
                 server.starttls()
                 server.login(settings.EMAIL_SMTP_USER, settings.EMAIL_SMTP_PASSWORD)
             server.send_message(msg)
-        
+
         logger.info(
             "email_notification_sent",
+            correlation_id=correlation_id,
             incident_id=incident_id,
             tenant_id=tenant_id,
             recipient=recipient,
             state=state.value,
         )
         return True
-    except Exception as exc:
+    except (OSError, smtplib.SMTPException) as exc:
         logger.error(
             "email_notification_error",
+            correlation_id=correlation_id,
             incident_id=incident_id,
             error=str(exc),
         )
@@ -200,27 +211,24 @@ async def notify_incident_state_change(
 ) -> None:
     """
     Send notifications for critical state changes.
-    
+
     Only notifies on:
     - CRITICAL severity incidents
     - State changes to AWAITING_APPROVAL, RESOLVED, or FAILED states
     """
     # Only notify for critical incidents or important state changes
-    should_notify = (
-        severity == SeverityLevel.CRITICAL
-        or new_state in [
-            IncidentState.AWAITING_APPROVAL,
-            IncidentState.RESOLVED,
-            IncidentState.FAILED_EXECUTION,
-            IncidentState.FAILED_VERIFICATION,
-        ]
-    )
-    
+    should_notify = severity == SeverityLevel.CRITICAL or new_state in [
+        IncidentState.AWAITING_APPROVAL,
+        IncidentState.RESOLVED,
+        IncidentState.FAILED_EXECUTION,
+        IncidentState.FAILED_VERIFICATION,
+    ]
+
     if not should_notify:
         return
-    
+
     message = f"State changed from {old_state.value} to {new_state.value}"
-    
+
     # Send Slack notification
     await send_slack_notification(
         incident_id=incident_id,
@@ -230,6 +238,7 @@ async def notify_incident_state_change(
         title=title,
         message=message,
     )
-    
+
     # Email notifications would require tenant/user email lookup
     # For now, skip email unless explicitly configured per tenant
+    _ = session

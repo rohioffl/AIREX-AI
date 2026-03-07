@@ -1,8 +1,7 @@
-"""
-The State Machine — THE LAW.
+"""Incident state transition graph and audited transition helper.
 
-All incident state transitions MUST go through transition_state().
-Direct mutation of incident.state is PROHIBITED everywhere else.
+All incident state transitions MUST go through :func:`transition_state`.
+Direct mutation of ``incident.state`` is prohibited everywhere else.
 """
 
 import hashlib
@@ -105,10 +104,24 @@ async def transition_state(
 
     Raises IllegalStateTransition if the transition is not allowed.
     """
+    correlation_id = str(uuid.uuid4())
+    transition_logger = logger.bind(
+        correlation_id=correlation_id,
+        tenant_id=str(incident.tenant_id),
+        incident_id=str(incident.id),
+        actor=actor,
+    )
+
     from app.core.metrics import state_transition_total
 
     allowed = ALLOWED_TRANSITIONS.get(incident.state, [])
     if new_state not in allowed:
+        transition_logger.warning(
+            "illegal_state_transition_attempt",
+            from_state=incident.state.value,
+            to_state=new_state.value,
+            reason=reason,
+        )
         raise IllegalStateTransition(incident.state, new_state)
 
     old_state = incident.state
@@ -165,8 +178,14 @@ async def transition_state(
             to_state=new_state.value,
             reason=reason,
         )
-    except Exception:
-        pass
+    except (ConnectionError, TimeoutError, OSError, RuntimeError, ValueError) as exc:
+        transition_logger.warning(
+            "state_changed_event_emit_failed",
+            from_state=old_state.value,
+            to_state=new_state.value,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
 
     # Send notifications for critical state changes (fire-and-forget)
     try:
@@ -181,8 +200,14 @@ async def transition_state(
             severity=incident.severity,
             title=incident.title,
         )
-    except Exception:
-        pass  # Don't fail state transition if notifications fail
+    except (ConnectionError, TimeoutError, OSError, RuntimeError, ValueError) as exc:
+        transition_logger.warning(
+            "state_change_notification_failed",
+            from_state=old_state.value,
+            to_state=new_state.value,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
 
     if new_state in TERMINAL_STATES:
         # Record structured resolution outcome (Phase 2 ARE)
@@ -190,11 +215,17 @@ async def transition_state(
             from app.services.resolution_service import record_resolution
 
             await record_resolution(session, incident)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning(
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            RuntimeError,
+            ValueError,
+        ) as exc:
+            transition_logger.warning(
                 "resolution_recording_failed",
-                incident_id=str(incident.id),
                 error=str(exc),
+                error_type=type(exc).__name__,
             )
 
         # Upsert embedding for RAG similarity search
@@ -204,11 +235,17 @@ async def transition_state(
             )
 
             await upsert_incident_embedding(session, incident)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning(
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            RuntimeError,
+            ValueError,
+        ) as exc:
+            transition_logger.warning(
                 "incident_embedding_upsert_failed",
-                incident_id=str(incident.id),
                 error=str(exc),
+                error_type=type(exc).__name__,
             )
 
         # Enqueue runbook auto-generation for resolved incidents (Phase 5 ARE)
@@ -218,9 +255,7 @@ async def transition_state(
                 from arq.connections import RedisSettings
                 from app.core.config import settings as _settings
 
-                pool = await create_pool(
-                    RedisSettings.from_dsn(_settings.REDIS_URL)
-                )
+                pool = await create_pool(RedisSettings.from_dsn(_settings.REDIS_URL))
                 await pool.enqueue_job(
                     "generate_runbook_task",
                     str(incident.tenant_id),
@@ -228,11 +263,24 @@ async def transition_state(
                     _defer_by=5,  # slight delay to let resolution recording finish
                 )
                 await pool.aclose()
-            except Exception as exc:
-                logger.warning(
+            except (
+                ConnectionError,
+                TimeoutError,
+                OSError,
+                RuntimeError,
+                ValueError,
+            ) as exc:
+                transition_logger.warning(
                     "runbook_generation_enqueue_failed",
-                    incident_id=str(incident.id),
                     error=str(exc),
+                    error_type=type(exc).__name__,
                 )
+
+    transition_logger.info(
+        "state_transition_completed",
+        from_state=old_state.value,
+        to_state=new_state.value,
+        reason=reason,
+    )
 
     return transition

@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import json
 import os
-from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
+from structlog.contextvars import get_contextvars
 
 if TYPE_CHECKING:
     from app.cloud.tenant_config import AWSConfig
@@ -28,10 +28,16 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 
+def _get_correlation_id() -> str:
+    """Return correlation ID from structlog contextvars, if present."""
+    value = get_contextvars().get("correlation_id")
+    return str(value) if value is not None else ""
+
+
 def get_aws_session(
     aws_config: AWSConfig | None = None,
     region: str = "",
-) -> "boto3.Session":
+) -> Any:  # boto3.Session
     """
     Build a boto3 Session using the tenant's AWS config.
 
@@ -40,12 +46,21 @@ def get_aws_session(
       2. Static credentials (credentials_file or inline access_key_id)
       3. CLI profile (if set)
       4. Default chain (instance role, env vars, ~/.aws/credentials)
+
+    AWS APIs/permissions used:
+      - STS AssumeRole (`sts:AssumeRole`) when role-based auth is configured.
+      - Service-specific client credentials inherited from returned session.
     """
-    import boto3
+    import boto3  # type: ignore[import-not-found]
 
     from app.core.config import settings
 
-    effective_region = region or (aws_config.region if aws_config else "") or settings.AWS_REGION or "us-east-1"
+    effective_region = (
+        region
+        or (aws_config.region if aws_config else "")
+        or settings.AWS_REGION
+        or "us-east-1"
+    )
 
     if aws_config:
         # Method 1: Role Assumption
@@ -63,8 +78,8 @@ def get_aws_session(
         if access_key and secret_key:
             logger.info(
                 "aws_auth_static_keys",
-                key_id=access_key[:8] + "****",
                 source="file" if aws_config.credentials_file else "inline",
+                correlation_id=_get_correlation_id(),
             )
             return boto3.Session(
                 aws_access_key_id=access_key,
@@ -74,7 +89,11 @@ def get_aws_session(
 
         # Method 3: CLI profile
         if aws_config.profile:
-            logger.info("aws_auth_profile", profile=aws_config.profile)
+            logger.info(
+                "aws_auth_profile",
+                profile=aws_config.profile,
+                correlation_id=_get_correlation_id(),
+            )
             return boto3.Session(
                 profile_name=aws_config.profile,
                 region_name=effective_region,
@@ -86,7 +105,12 @@ def get_aws_session(
     if profile:
         session_kwargs["profile_name"] = profile
 
-    logger.info("aws_auth_default_chain", region=effective_region, has_profile=bool(profile))
+    logger.info(
+        "aws_auth_default_chain",
+        region=effective_region,
+        has_profile=bool(profile),
+        correlation_id=_get_correlation_id(),
+    )
     return boto3.Session(**session_kwargs)
 
 
@@ -94,7 +118,7 @@ def get_aws_client(
     service: str,
     aws_config: AWSConfig | None = None,
     region: str = "",
-):
+) -> Any:
     """
     Build a boto3 client for a specific AWS service using tenant credentials.
 
@@ -102,8 +126,17 @@ def get_aws_client(
         ec2 = get_aws_client("ec2", tenant.aws)
         ssm = get_aws_client("ssm", tenant.aws)
         logs = get_aws_client("logs", tenant.aws)
+
+    AWS APIs/permissions used:
+      - Initializes boto3 service client for caller-owned API operations.
     """
     session = get_aws_session(aws_config, region)
+    logger.debug(
+        "aws_client_created",
+        service=service,
+        region=region or (aws_config.region if aws_config else ""),
+        correlation_id=_get_correlation_id(),
+    )
     return session.client(service)
 
 
@@ -112,14 +145,17 @@ def _assume_role_session(
     external_id: str = "",
     region: str = "ap-south-1",
     base_config: AWSConfig | None = None,
-) -> "boto3.Session":
+) -> Any:  # boto3.Session
     """
     Assume an IAM role via STS and return a session with temporary credentials.
 
     If the tenant also has static keys or a profile, those are used as the
     base credentials for the AssumeRole call (cross-account from a central account).
+
+    AWS APIs/permissions used:
+      - STS AssumeRole (`sts:AssumeRole`) to obtain temporary session credentials.
     """
-    import boto3
+    import boto3  # type: ignore[import-not-found]
 
     # Build a base session for the STS call
     base_kwargs: dict = {"region_name": region}
@@ -148,6 +184,7 @@ def _assume_role_session(
         "aws_auth_assuming_role",
         role_arn=role_arn,
         has_external_id=bool(external_id),
+        correlation_id=_get_correlation_id(),
     )
 
     response = sts.assume_role(**assume_kwargs)
@@ -183,30 +220,50 @@ def _load_static_credentials(aws_config: AWSConfig) -> tuple[str, str]:
         return "", ""
 
     if not os.path.exists(creds_file):
-        logger.warning("aws_credentials_file_not_found", path=creds_file)
+        logger.warning(
+            "aws_credentials_file_not_found",
+            path=creds_file,
+            correlation_id=_get_correlation_id(),
+        )
         return "", ""
 
     try:
-        with open(creds_file) as f:
+        with open(creds_file, encoding="utf-8") as f:
             content = f.read().strip()
 
         # Try JSON first
         if content.startswith("{"):
             data = json.loads(content)
         else:
-            import yaml
+            import yaml  # type: ignore[import-untyped]
+
             data = yaml.safe_load(content)
 
         access_key = data.get("access_key_id") or data.get("aws_access_key_id") or ""
-        secret_key = data.get("secret_access_key") or data.get("aws_secret_access_key") or ""
+        secret_key = (
+            data.get("secret_access_key") or data.get("aws_secret_access_key") or ""
+        )
 
         if access_key and secret_key:
-            logger.info("aws_credentials_loaded_from_file", path=creds_file)
+            logger.info(
+                "aws_credentials_loaded_from_file",
+                path=creds_file,
+                correlation_id=_get_correlation_id(),
+            )
             return access_key, secret_key
 
-        logger.warning("aws_credentials_file_incomplete", path=creds_file)
+        logger.warning(
+            "aws_credentials_file_incomplete",
+            path=creds_file,
+            correlation_id=_get_correlation_id(),
+        )
         return "", ""
 
-    except Exception as exc:
-        logger.error("aws_credentials_file_read_failed", path=creds_file, error=str(exc))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        logger.error(
+            "aws_credentials_file_read_failed",
+            path=creds_file,
+            error=str(exc),
+            correlation_id=_get_correlation_id(),
+        )
         return "", ""

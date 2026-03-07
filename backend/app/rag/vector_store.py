@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 import structlog
 from sqlalchemy import select

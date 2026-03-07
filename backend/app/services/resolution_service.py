@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.enums import IncidentState
 from app.models.incident import Incident
@@ -93,12 +92,16 @@ def build_resolution_summary(incident: Incident) -> str:
 
     # Retry info
     retries = []
-    if incident.investigation_retry_count > 0:
-        retries.append(f"investigation={incident.investigation_retry_count}")
-    if incident.execution_retry_count > 0:
-        retries.append(f"execution={incident.execution_retry_count}")
-    if incident.verification_retry_count > 0:
-        retries.append(f"verification={incident.verification_retry_count}")
+    investigation_retries = incident.investigation_retry_count or 0
+    execution_retries = incident.execution_retry_count or 0
+    verification_retries = incident.verification_retry_count or 0
+
+    if investigation_retries > 0:
+        retries.append(f"investigation={investigation_retries}")
+    if execution_retries > 0:
+        retries.append(f"execution={execution_retries}")
+    if verification_retries > 0:
+        retries.append(f"verification={verification_retries}")
     if retries:
         parts.append(f"Retries: {', '.join(retries)}")
 
@@ -118,6 +121,7 @@ async def record_resolution(
     log = logger.bind(
         tenant_id=str(incident.tenant_id),
         incident_id=str(incident.id),
+        correlation_id=str(incident.id),
         state=incident.state.value,
     )
 

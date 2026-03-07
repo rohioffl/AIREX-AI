@@ -130,8 +130,8 @@ class ClearLogsAction(BaseAction):
         logs_lines = [
             f"[SIM] Connecting to {host}...",
             f"[SIM] Cleaning {log_path}/*.log.* older than 3 days",
-            f"[SIM] Removed rotated log files",
-            f"[SIM] Journal vacuum complete",
+            "[SIM] Removed rotated log files",
+            "[SIM] Journal vacuum complete",
             f"[SIM] Freed: {freed_gb}GB",
             f"[SIM] Current disk usage: {random.randint(40, 70)}%",
         ]

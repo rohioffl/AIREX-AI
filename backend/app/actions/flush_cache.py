@@ -134,9 +134,9 @@ class FlushCacheAction(BaseAction):
         logs_lines = [
             f"[SIM] Connecting to {host}...",
             f"[SIM] Flushing {cache_type} cache...",
-            f"[SIM] FLUSHDB: OK",
+            "[SIM] FLUSHDB: OK",
             f"[SIM] Memory freed: ~{freed_mb}MB",
-            f"[SIM] Cache flush complete",
+            "[SIM] Cache flush complete",
         ]
         return ActionResult(success=True, logs="\n".join(logs_lines), exit_code=0)
 

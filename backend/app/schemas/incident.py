@@ -1,7 +1,12 @@
+"""Incident request/response schemas for API endpoints."""
+
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import ExecutionStatus, IncidentState, RiskLevel, SeverityLevel
 
@@ -10,6 +15,8 @@ from app.models.enums import ExecutionStatus, IncidentState, RiskLevel, Severity
 
 
 class EvidenceResponse(BaseModel):
+    """Evidence artifact collected during incident investigation."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -19,6 +26,8 @@ class EvidenceResponse(BaseModel):
 
 
 class StateTransitionResponse(BaseModel):
+    """Audit record of an incident state transition."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -30,6 +39,8 @@ class StateTransitionResponse(BaseModel):
 
 
 class ExecutionResponse(BaseModel):
+    """Execution attempt metadata for remediation actions."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -43,6 +54,8 @@ class ExecutionResponse(BaseModel):
 
 
 class RecommendationResponse(BaseModel):
+    """Normalized recommendation details returned in incident payloads."""
+
     root_cause: str
     proposed_action: str
     risk_level: RiskLevel
@@ -53,6 +66,8 @@ class RecommendationResponse(BaseModel):
 
 
 class IncidentListItem(BaseModel):
+    """Compact incident representation used by list endpoints."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -66,7 +81,7 @@ class IncidentListItem(BaseModel):
     verification_retry_count: int
     created_at: datetime
     updated_at: datetime
-    meta: dict | None = None
+    meta: dict[str, Any] | None = None
     host_key: str | None = None
     correlation_group_id: str | None = None
     # Resolution tracking
@@ -105,25 +120,27 @@ class CorrelationGroupSummary(BaseModel):
     alert_type: str
     incident_count: int
     affected_hosts: int
-    host_keys: list[str] = []
-    states: dict[str, int] = {}
-    severities: dict[str, int] = {}
+    host_keys: list[str] = Field(default_factory=list)
+    states: dict[str, int] = Field(default_factory=dict)
+    severities: dict[str, int] = Field(default_factory=dict)
     first_seen: str | None = None
     last_seen: str | None = None
     span_seconds: int = 0
 
 
 class IncidentDetail(IncidentListItem):
-    evidence: list[EvidenceResponse] = []
-    state_transitions: list[StateTransitionResponse] = []
-    executions: list[ExecutionResponse] = []
+    """Expanded incident payload with linked investigation and resolution data."""
+
+    evidence: list[EvidenceResponse] = Field(default_factory=list)
+    state_transitions: list[StateTransitionResponse] = Field(default_factory=list)
+    executions: list[ExecutionResponse] = Field(default_factory=list)
     recommendation: RecommendationResponse | None = None
-    related_incidents: list[RelatedIncidentItem] = []
+    related_incidents: list[RelatedIncidentItem] = Field(default_factory=list)
     rag_context: str | None = None
     host_key: str | None = None
     # Correlation grouping
     correlation_group_id: str | None = None
-    correlated_incidents: list[CorrelatedIncidentItem] = []
+    correlated_incidents: list[CorrelatedIncidentItem] = Field(default_factory=list)
     correlation_summary: CorrelationGroupSummary | None = None
     # Resolution tracking
     resolution_type: str | None = None
@@ -138,16 +155,35 @@ class IncidentDetail(IncidentListItem):
 
 
 class ApproveRequest(BaseModel):
+    """Operator approval payload to trigger deterministic execution."""
+
     action: str
     idempotency_key: str
 
+    @field_validator("action", "idempotency_key", mode="before")
+    @classmethod
+    def normalize_required_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
 
 class RejectRequest(BaseModel):
+    """Operator rejection payload for incidents requiring manual handling."""
+
     reason: str | None = Field(
         default=None,
         max_length=500,
         description="Operator-provided note explaining why the incident was rejected",
     )
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def normalize_reason(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped_value = value.strip()
+            return stripped_value or None
+        return value
 
 
 class FeedbackRequest(BaseModel):
@@ -167,6 +203,8 @@ class FeedbackRequest(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
+    """Server acknowledgment payload for stored incident feedback."""
+
     incident_id: uuid.UUID
     feedback_score: int
     feedback_note: str | None = None
@@ -176,6 +214,8 @@ class FeedbackResponse(BaseModel):
 
 
 class IncidentCreatedResponse(BaseModel):
+    """Minimal response returned immediately after incident creation."""
+
     incident_id: uuid.UUID
 
 

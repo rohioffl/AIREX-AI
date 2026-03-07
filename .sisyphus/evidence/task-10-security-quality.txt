@@ -1,0 +1,43 @@
+Task 10 Evidence — Security Core Quality Enhancement
+Date: 2026-03-07
+
+Scope:
+- backend/app/core/security.py
+- backend/app/core/csrf.py
+- backend/app/core/rbac.py
+- backend/app/core/rate_limit.py
+
+Implemented changes:
+- Added/strengthened type hints on middleware/dependency factory signatures.
+- Added/strengthened public API docstrings for security token decode paths and middleware dispatch behavior.
+- Replaced broad runtime failure handling in rate limiting path with specific RedisError handling.
+- Added structured logging for authentication decode failures and rate-limit events with correlation_id field.
+- Preserved existing auth, RBAC permission mappings, and rate-limit policy thresholds.
+- Ensured no secrets/tokens/passwords are logged.
+
+Verification commands and outputs:
+
+1) Format
+Command:
+python3 -m ruff format app/core/security.py app/core/csrf.py app/core/rbac.py app/core/rate_limit.py
+Output:
+4 files left unchanged
+
+2) Ruff check
+Command:
+python3 -m ruff check app/core/security.py app/core/csrf.py app/core/rbac.py app/core/rate_limit.py
+Output:
+All checks passed!
+
+3) Mypy check
+Command:
+python3 -m mypy app/core/security.py app/core/csrf.py app/core/rbac.py app/core/rate_limit.py --ignore-missing-imports
+Output:
+Success: no issues found in 4 source files
+
+4) LSP diagnostics on changed files
+Output:
+- security.py: No diagnostics found
+- csrf.py: No diagnostics found
+- rbac.py: No diagnostics found
+- rate_limit.py: No diagnostics found

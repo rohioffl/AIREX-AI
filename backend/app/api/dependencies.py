@@ -4,7 +4,7 @@ FastAPI dependencies for tenant context, DB sessions, Redis, and RBAC.
 
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, TypeAlias
 
 import redis.asyncio as aioredis
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -12,9 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_tenant_session
-from app.core.rbac import Permission, has_permission, has_any_permission
+from app.core.rbac import Permission, has_any_permission
 from app.core.security import TokenData, decode_access_token
-from app.models.enums import UserRole
 
 
 async def get_tenant_id() -> uuid.UUID:
@@ -51,7 +50,7 @@ def require_role(*allowed_roles: str):
 
     async def _check(
         authorization: str | None = Header(None),
-    ):
+    ) -> None:
         if not authorization or not authorization.startswith("Bearer "):
             # Allow dev mode without auth
             return
@@ -63,11 +62,11 @@ def require_role(*allowed_roles: str):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=str(exc),
             ) from exc
-        
+
         # Normalize role names (case-insensitive)
         user_role = data.role.lower()
         allowed_normalized = [r.lower() for r in allowed_roles]
-        
+
         if user_role not in allowed_normalized:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -87,7 +86,7 @@ def require_permission(*permissions: Permission):
 
     async def _check(
         authorization: str | None = Header(None),
-    ):
+    ) -> None:
         if not authorization or not authorization.startswith("Bearer "):
             # Allow dev mode without auth
             return
@@ -99,7 +98,7 @@ def require_permission(*permissions: Permission):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=str(exc),
             ) from exc
-        
+
         if not has_any_permission(data.role, *permissions):
             perm_names = ", ".join(p.value for p in permissions)
             raise HTTPException(
@@ -124,11 +123,11 @@ async def get_redis(request: Request) -> aioredis.Redis:
 
 
 # Type aliases for cleaner route signatures
-TenantId = Annotated[uuid.UUID, Depends(get_tenant_id)]
-TenantSession = Annotated[AsyncSession, Depends(get_db_session)]
-Redis = Annotated[aioredis.Redis, Depends(get_redis)]
-CurrentUser = Annotated[TokenData | None, Depends(get_current_user)]
+TenantId: TypeAlias = Annotated[uuid.UUID, Depends(get_tenant_id)]
+TenantSession: TypeAlias = Annotated[AsyncSession, Depends(get_db_session)]
+Redis: TypeAlias = Annotated[aioredis.Redis, Depends(get_redis)]
+CurrentUser: TypeAlias = Annotated[TokenData | None, Depends(get_current_user)]
 
 # RBAC type aliases
-RequireAdmin = Annotated[None, Depends(require_role("admin"))]
-RequireOperator = Annotated[None, Depends(require_role("operator", "admin"))]
+RequireAdmin: TypeAlias = Annotated[None, Depends(require_role("admin"))]
+RequireOperator: TypeAlias = Annotated[None, Depends(require_role("operator", "admin"))]

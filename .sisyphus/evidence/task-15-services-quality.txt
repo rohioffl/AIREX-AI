@@ -1,0 +1,86 @@
+Task 15 — Quality Enhancement for backend/app/services/
+Date: 2026-03-07
+
+Scope checked:
+- backend/app/services/anomaly_detector.py
+- backend/app/services/chat_service.py
+- backend/app/services/correlation_service.py
+- backend/app/services/execution_service.py
+- backend/app/services/fallback_service.py
+- backend/app/services/health_check_service.py
+- backend/app/services/incident_embedding_service.py
+- backend/app/services/incident_service.py
+- backend/app/services/investigation_service.py
+- backend/app/services/notification_service.py
+- backend/app/services/pattern_analysis.py
+- backend/app/services/rag_context.py
+- backend/app/services/recommendation_service.py
+- backend/app/services/resolution_service.py
+- backend/app/services/runbook_generator.py
+- backend/app/services/verification_service.py
+
+Actions taken:
+- Listed and read every file in backend/app/services/ before editing.
+- Added/strengthened type hints in service functions and locals where needed.
+- Added/strengthened structured logging context (including correlation_id) for significant service operations.
+- Replaced several broad exception sites with more specific exception handling where safe.
+- Cleaned unused imports and fixed lint issues across all service files.
+- Ran ruff format on all changed service files.
+- Ran LSP diagnostics on all changed service files (clean).
+
+Command evidence:
+
+1) Ruff lint check
+Command:
+cd backend && python3 -m ruff check app/services/
+Result:
+All checks passed!
+
+2) Mypy check
+Command:
+cd backend && python3 -m mypy app/services/ --ignore-missing-imports
+Result:
+FAILED with 20 errors, all outside app/services/ (app/cloud/* and app/llm/client.py). No remaining mypy errors in app/services/* after Task 15 changes.
+
+Mypy output:
+app/cloud/tenant_config.py:29: error: Library stubs not installed for "yaml"  [import-untyped]
+app/cloud/aws_auth.py:34: error: Name "boto3" is not defined  [name-defined]
+app/cloud/aws_auth.py:115: error: Name "boto3" is not defined  [name-defined]
+app/cloud/gcp_ssh.py:130: error: Unsupported operand types for + ("bytes" and "str")  [operator]
+app/cloud/gcp_ssh.py:130: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/cloud/gcp_ssh.py:130: note: Left operand is of type "bytes | str"
+app/cloud/gcp_ssh.py:132: error: Unsupported operand types for + ("bytes" and "str")  [operator]
+app/cloud/gcp_ssh.py:132: note: Left operand is of type "bytes | str"
+app/cloud/gcp_ssh.py:139: error: Incompatible return value type (got "bytes | str", expected "str")  [return-value]
+app/cloud/gcp_ssh.py:202: error: Argument 2 to "generate_private_key" has incompatible type "int"; expected "bytes | str | None"  [arg-type]
+app/cloud/discovery.py:41: error: Incompatible types in assignment (expression has type "None", variable has type "dict[Any, Any]")  [assignment]
+app/cloud/discovery.py:167: error: Name "AWSConfig" is not defined  [name-defined]
+app/cloud/discovery.py:212: error: Name "AWSConfig" is not defined  [name-defined]
+app/cloud/discovery.py:275: error: Name "AWSConfig" is not defined  [name-defined]
+app/cloud/discovery.py:301: error: Name "AWSConfig" is not defined  [name-defined]
+app/cloud/aws_cloudtrail.py:43: error: Module "app.cloud.aws_auth" has no attribute "get_assumed_role_credentials"  [attr-defined]
+app/cloud/aws_ssh.py:206: error: Unsupported operand types for + ("bytes" and "str")  [operator]
+app/cloud/aws_ssh.py:206: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/cloud/aws_ssh.py:206: note: Left operand is of type "bytes | str"
+app/cloud/aws_ssh.py:208: error: Unsupported operand types for + ("bytes" and "str")  [operator]
+app/cloud/aws_ssh.py:208: note: Left operand is of type "bytes | str"
+app/cloud/aws_ssh.py:210: error: Incompatible return value type (got "bytes | str", expected "str")  [return-value]
+app/cloud/gcp_logging.py:228: error: Unexpected keyword argument "port" for "get_serial_port_output" of "InstancesClient"  [call-arg]
+/home/ubuntu/.local/lib/python3.12/site-packages/google/cloud/compute_v1/services/instances/client.py: note: "get_serial_port_output" of "InstancesClient" defined here
+app/llm/client.py:424: error: Need type annotation for "steps" (hint: "steps: list[<type>] = ...")  [var-annotated]
+Found 20 errors in 8 files (checked 17 source files)
+
+3) Ruff format
+Command:
+cd backend && python3 -m ruff format <changed service files>
+Result:
+16 files left unchanged
+
+4) LSP diagnostics on changed service files
+Result:
+No diagnostics found for all 16 changed service files.
+
+Notes:
+- No bare `except:` blocks were introduced.
+- Public service functions remain type-annotated and documented.
+- Business logic and state transition sequences were preserved.

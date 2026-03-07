@@ -25,3 +25,12 @@ class TenantLimit(Base):
     max_daily_executions: Mapped[int] = mapped_column(
         Integer, nullable=False, default=200
     )
+
+    def __repr__(self) -> str:
+        return (
+            "TenantLimit("
+            f"tenant_id={self.tenant_id!s}, "
+            f"max_concurrent_incidents={self.max_concurrent_incidents}, "
+            f"max_daily_executions={self.max_daily_executions}"
+            ")"
+        )

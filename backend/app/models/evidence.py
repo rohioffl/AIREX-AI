@@ -25,6 +25,8 @@ def _utcnow() -> datetime:
 
 
 class Evidence(Base, TenantMixin):
+    """Captured investigation evidence tied to a single incident."""
+
     __tablename__ = "evidence"
     __table_args__ = (
         PrimaryKeyConstraint("tenant_id", "id"),
@@ -54,3 +56,13 @@ class Evidence(Base, TenantMixin):
             "Evidence.incident_id == Incident.id)"
         ),
     )
+
+    def __repr__(self) -> str:
+        return (
+            "Evidence("
+            f"tenant_id={self.tenant_id!s}, "
+            f"id={self.id!s}, "
+            f"incident_id={self.incident_id!s}, "
+            f"tool_name={self.tool_name!r}"
+            ")"
+        )

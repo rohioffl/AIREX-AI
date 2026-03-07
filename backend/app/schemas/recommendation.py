@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import RiskLevel
 
@@ -20,6 +20,13 @@ class AlternativeRecommendation(BaseModel):
     rationale: str
     confidence: float = Field(ge=0.0, le=1.0)
     risk_level: RiskLevel = RiskLevel.MED
+
+    @field_validator("action", "rationale", mode="before")
+    @classmethod
+    def normalize_text_fields(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 class Recommendation(BaseModel):
@@ -41,3 +48,10 @@ class Recommendation(BaseModel):
     alternatives: list[AlternativeRecommendation] = Field(default_factory=list)
     evidence_annotations: list[str] = Field(default_factory=list)
     verification_criteria: list[str] = Field(default_factory=list)
+
+    @field_validator("root_cause", "proposed_action", mode="before")
+    @classmethod
+    def normalize_core_text_fields(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
