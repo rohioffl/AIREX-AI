@@ -23,6 +23,10 @@ Services:
 - `airex-litellm`
 - `airex-langfuse`
 
+The `airex-api` and `airex-worker` images are both built from `services/backend/Dockerfile`
+using separate Docker targets so they stay deployable as independent containers while sharing
+the same backend source tree in `backend/`.
+
 One-off task:
 
 - `airex-migrate` (runs `alembic upgrade head`)

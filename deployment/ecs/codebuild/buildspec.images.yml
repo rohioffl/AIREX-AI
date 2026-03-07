@@ -16,8 +16,8 @@ phases:
       - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}
   build:
     commands:
-      - docker build -f services/airex-api/Dockerfile -t $ECR_REGISTRY/$ECR_API_REPO:$IMAGE_TAG .
-      - docker build -f services/airex-worker/Dockerfile -t $ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG .
+      - docker build --target api -f services/backend/Dockerfile -t $ECR_REGISTRY/$ECR_API_REPO:$IMAGE_TAG .
+      - docker build --target worker -f services/backend/Dockerfile -t $ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG .
       - docker build -f services/litellm/Dockerfile -t $ECR_REGISTRY/$ECR_LITELLM_REPO:$IMAGE_TAG .
   post_build:
     commands:

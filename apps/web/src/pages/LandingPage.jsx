@@ -35,7 +35,7 @@ const FEATURES = [
   {
     icon: Zap,
     title: 'AI recommendations',
-    description: 'LiteLLM-backed suggestions with registered runbook actions. Circuit breaker and fallbacks keep the system reliable.',
+    description: 'LiteLLM-backed suggestions with registered runbook actions, model routing, and reliable fallbacks for production incident workflows.',
   },
   {
     icon: ShieldCheck,
@@ -60,7 +60,7 @@ const FEATURES = [
   {
     icon: BarChart3,
     title: 'Observability',
-    description: 'Prometheus metrics, hash-chained state transitions, and DLQ visibility for failed work.',
+    description: 'Prometheus metrics, Langfuse traces for LLM calls, hash-chained state transitions, and DLQ visibility for failed work.',
   },
 ]
 
@@ -82,6 +82,8 @@ const INTEGRATIONS = [
   { name: 'AWS', type: 'Cloud' },
   { name: 'GCP', type: 'Cloud' },
   { name: 'PagerDuty', type: 'Alerting' },
+  { name: 'LiteLLM', type: 'LLM Gateway' },
+  { name: 'Langfuse', type: 'Tracing' },
 ]
 
 /* Hook for scroll reveal animation */

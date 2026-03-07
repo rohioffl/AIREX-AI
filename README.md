@@ -40,9 +40,10 @@ AIREX is designed to reduce mean time to resolution for operational incidents wi
 backend/                 FastAPI app, worker code, services, models, tests
 apps/web/                React + Vite frontend
 database/                Alembic migrations and standalone migration image
-services/airex-api/      API Dockerfile
-services/airex-worker/   Worker Dockerfile
+services/backend/        Shared backend image targets for API and worker
 services/airex-frontend/ Frontend Dockerfile
+services/litellm/        LiteLLM container config
+services/langfuse/       Langfuse deployment notes
 deployment/              ECS and CodeBuild assets
 docs/                    Project architecture, skills, and runbooks
 infra/                   Prometheus, Grafana, and AI platform config
@@ -52,8 +53,9 @@ e2e/                     Playwright end-to-end tests
 ## Architecture Overview
 
 ### Core Services
-- `backend`: FastAPI API, domain services, state machine, policies, schemas, and integrations.
-- `worker`: ARQ background worker using the shared `backend/` codebase.
+- `backend/`: shared Python codebase for the API and worker runtimes, including domain services, state machine, policies, schemas, and integrations.
+- `backend` (Compose) / `airex-api` (image): FastAPI runtime packaged from the shared `backend/` codebase.
+- `worker` (Compose) / `airex-worker` (image): ARQ runtime packaged from the shared `backend/` codebase.
 - `apps/web`: operational UI for incident review, approvals, evidence, runbooks, and health dashboards.
 - `database`: isolated migration pipeline with Alembic under `database/alembic/`.
 
@@ -119,6 +121,8 @@ docker-compose up -d
 docker-compose run migrate
 ```
 
+`docker-compose up -d` brings up the full local stack, including `frontend` on `http://localhost:5173`, backend on `http://localhost:8000`, Redis, PostgreSQL, LiteLLM, and observability services. The frontend now waits for a healthy backend before it starts.
+
 ## Verification Commands
 
 ### Backend
@@ -149,8 +153,7 @@ npm run test
 
 ## Deployment Notes
 
-- `services/airex-api/Dockerfile` builds the API image.
-- `services/airex-worker/Dockerfile` builds the worker image.
+- `services/backend/Dockerfile` builds the shared backend image targets for the API and worker runtimes.
 - `services/airex-frontend/Dockerfile` builds the frontend image from `apps/web/`.
 - `database/Dockerfile` builds a standalone migration image.
 - `deployment/ecs/codebuild/buildspec.frontend.yml` publishes the frontend from `apps/web/dist` to S3 + CloudFront.

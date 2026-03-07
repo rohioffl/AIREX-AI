@@ -215,7 +215,7 @@
 | 2 | No route guards — all pages accessible without login | `apps/web/src/App.jsx` |
 | 3 | `backend/.env` appears committed with real GCP project/IP | `backend/.env` |
 | 4 | SECRET_KEY is placeholder: `CHANGE_THIS_IN_PRODUCTION...` | `backend/.env` |
-| 5 | Some deploy images historically ran as root | `services/airex-api/Dockerfile`, `services/airex-worker/Dockerfile` |
+| 5 | Some deploy images historically ran as root | `services/backend/Dockerfile` |
 
 ### P1 — Data Integrity
 
