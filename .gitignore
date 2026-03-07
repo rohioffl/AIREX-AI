@@ -81,6 +81,8 @@ frontend/test-results/
 
 # Screenshots (dev artifacts)
 *.png
+!airex-homepage-desktop-final.png
+!airex-public-domain-home.png
 *.mp4
 
 # MCP config (local dev)
