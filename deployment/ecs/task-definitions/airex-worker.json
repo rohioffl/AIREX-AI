@@ -1,0 +1,36 @@
+{
+  "family": "airex-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "__EXECUTION_ROLE_ARN__",
+  "taskRoleArn": "__TASK_ROLE_ARN__",
+  "containerDefinitions": [
+    {
+      "name": "airex-worker",
+      "image": "__WORKER_IMAGE__",
+      "essential": true,
+      "command": ["arq", "app.core.worker.WorkerSettings"],
+      "environment": [
+        { "name": "LLM_BASE_URL", "value": "__LLM_BASE_URL__" },
+        { "name": "LLM_PRIMARY_MODEL", "value": "__LLM_PRIMARY_MODEL__" },
+        { "name": "LLM_FALLBACK_MODEL", "value": "__LLM_FALLBACK_MODEL__" },
+        { "name": "LLM_EMBEDDING_MODEL", "value": "__LLM_EMBEDDING_MODEL__" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "__SECRET_DATABASE_URL_ARN__" },
+        { "name": "REDIS_URL", "valueFrom": "__SECRET_REDIS_URL_ARN__" },
+        { "name": "LLM_API_KEY", "valueFrom": "__SECRET_LITELLM_MASTER_KEY_ARN__" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/airex-worker",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

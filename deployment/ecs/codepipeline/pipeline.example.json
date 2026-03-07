@@ -1,0 +1,90 @@
+{
+  "pipeline": {
+    "name": "airex-prod",
+    "roleArn": "arn:aws:iam::123456789012:role/airex-prod-codepipeline-role",
+    "artifactStore": {
+      "type": "S3",
+      "location": "airex-prod-codepipeline-artifacts"
+    },
+    "version": 1,
+    "stages": [
+      {
+        "name": "Source",
+        "actions": [
+          {
+            "name": "GitHubSource",
+            "actionTypeId": {
+              "category": "Source",
+              "owner": "AWS",
+              "provider": "CodeStarSourceConnection",
+              "version": "1"
+            },
+            "configuration": {
+              "ConnectionArn": "arn:aws:codestar-connections:ap-south-1:123456789012:connection/replace-me",
+              "FullRepositoryId": "rohioffl/AIREX-AI",
+              "BranchName": "main"
+            },
+            "outputArtifacts": [{ "name": "SourceArtifact" }],
+            "runOrder": 1
+          }
+        ]
+      },
+      {
+        "name": "BuildImages",
+        "actions": [
+          {
+            "name": "BuildAndPush",
+            "actionTypeId": {
+              "category": "Build",
+              "owner": "AWS",
+              "provider": "CodeBuild",
+              "version": "1"
+            },
+            "configuration": {
+              "ProjectName": "airex-prod-build-images"
+            },
+            "inputArtifacts": [{ "name": "SourceArtifact" }],
+            "outputArtifacts": [{ "name": "ImageArtifact" }],
+            "runOrder": 1
+          }
+        ]
+      },
+      {
+        "name": "Deploy",
+        "actions": [
+          {
+            "name": "DeployEcs",
+            "actionTypeId": {
+              "category": "Build",
+              "owner": "AWS",
+              "provider": "CodeBuild",
+              "version": "1"
+            },
+            "configuration": {
+              "ProjectName": "airex-prod-deploy-ecs"
+            },
+            "inputArtifacts": [
+              { "name": "SourceArtifact" },
+              { "name": "ImageArtifact" }
+            ],
+            "runOrder": 1
+          },
+          {
+            "name": "DeployFrontend",
+            "actionTypeId": {
+              "category": "Build",
+              "owner": "AWS",
+              "provider": "CodeBuild",
+              "version": "1"
+            },
+            "configuration": {
+              "ProjectName": "airex-prod-deploy-frontend"
+            },
+            "inputArtifacts": [{ "name": "SourceArtifact" }],
+            "runOrder": 2
+          }
+        ]
+      }
+    ]
+  }
+}

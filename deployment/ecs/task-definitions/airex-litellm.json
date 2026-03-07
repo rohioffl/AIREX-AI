@@ -1,0 +1,47 @@
+{
+  "family": "airex-litellm",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "__EXECUTION_ROLE_ARN__",
+  "taskRoleArn": "__TASK_ROLE_ARN__",
+  "containerDefinitions": [
+    {
+      "name": "airex-litellm",
+      "image": "__LITELLM_IMAGE__",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 4000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "LANGFUSE_HOST", "value": "__LANGFUSE_HOST__" }
+      ],
+      "secrets": [
+        { "name": "LITELLM_MASTER_KEY", "valueFrom": "__SECRET_LITELLM_MASTER_KEY_ARN__" },
+        { "name": "LANGFUSE_PUBLIC_KEY", "valueFrom": "__SECRET_LANGFUSE_PUBLIC_KEY_ARN__" },
+        { "name": "LANGFUSE_SECRET_KEY", "valueFrom": "__SECRET_LANGFUSE_SECRET_KEY_ARN__" },
+        { "name": "OPENAI_API_KEY", "valueFrom": "__SECRET_OPENAI_KEY_ARN__" },
+        { "name": "GEMINI_API_KEY", "valueFrom": "__SECRET_GEMINI_KEY_ARN__" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/airex-litellm",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""] ,
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 30
+      }
+    }
+  ]
+}

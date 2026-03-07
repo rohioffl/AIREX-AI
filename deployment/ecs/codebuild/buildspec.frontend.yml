@@ -1,0 +1,20 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: ap-south-1
+    FRONTEND_BUCKET: airex-prod-frontend
+    CLOUDFRONT_DISTRIBUTION_ID: REPLACE_ME
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+  build:
+    commands:
+      - npm ci --prefix frontend
+      - npm run build --prefix frontend
+  post_build:
+    commands:
+      - aws s3 sync frontend/dist s3://$FRONTEND_BUCKET --delete
+      - aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DISTRIBUTION_ID --paths "/*"

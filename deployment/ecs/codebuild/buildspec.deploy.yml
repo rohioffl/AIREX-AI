@@ -1,0 +1,25 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: ap-south-1
+    ECS_CLUSTER: airex-prod
+    ECS_SERVICE_API: airex-api
+    ECS_SERVICE_WORKER: airex-worker
+    ECS_SERVICE_LITELLM: airex-litellm
+    ECS_SERVICE_LANGFUSE: airex-langfuse
+    ECS_MIGRATE_TASKDEF: airex-migrate
+
+phases:
+  install:
+    commands:
+      - chmod +x deployment/ecs/scripts/*.sh
+  build:
+    commands:
+      - echo "Rendering and registering task definitions"
+      - ./deployment/ecs/scripts/render-task-defs.sh
+      - ./deployment/ecs/scripts/register-task-defs.sh
+      - echo "Running migrations"
+      - ./deployment/ecs/scripts/run-migration.sh
+      - echo "Updating ECS services"
+      - ./deployment/ecs/scripts/deploy-services.sh

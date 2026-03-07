@@ -1,0 +1,39 @@
+{
+  "family": "airex-langfuse",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "__EXECUTION_ROLE_ARN__",
+  "taskRoleArn": "__TASK_ROLE_ARN__",
+  "containerDefinitions": [
+    {
+      "name": "airex-langfuse",
+      "image": "langfuse/langfuse:2",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NEXTAUTH_URL", "value": "__NEXTAUTH_URL__" },
+        { "name": "TELEMETRY_ENABLED", "value": "false" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "__SECRET_LANGFUSE_DATABASE_URL_ARN__" },
+        { "name": "NEXTAUTH_SECRET", "valueFrom": "__SECRET_LANGFUSE_NEXTAUTH_SECRET_ARN__" },
+        { "name": "SALT", "valueFrom": "__SECRET_LANGFUSE_SALT_ARN__" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/airex-langfuse",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

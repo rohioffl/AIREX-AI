@@ -1,0 +1,28 @@
+{
+  "family": "airex-migrate",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "__EXECUTION_ROLE_ARN__",
+  "taskRoleArn": "__TASK_ROLE_ARN__",
+  "containerDefinitions": [
+    {
+      "name": "airex-migrate",
+      "image": "__API_IMAGE__",
+      "essential": true,
+      "command": ["alembic", "upgrade", "head"],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "__SECRET_DATABASE_URL_ARN__" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/airex-migrate",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

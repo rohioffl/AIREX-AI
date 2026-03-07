@@ -1,0 +1,20 @@
+aws_region       = "ap-south-1"
+environment      = "prod"
+project_name     = "airex"
+
+domain_root      = "rohitpt.online"
+frontend_domain  = "airex.rohitpt.online"
+litellm_domain   = "litellm.rohitpt.online"
+langfuse_domain  = "langfuse.rohitpt.online"
+
+vpc_id            = "vpc-xxxxxxxx"
+public_subnet_ids = ["subnet-aaaa", "subnet-bbbb"]
+private_subnet_ids = ["subnet-cccc", "subnet-dddd"]
+
+api_image      = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-api:latest"
+worker_image   = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-worker:latest"
+litellm_image  = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-litellm:latest"
+
+# Optional: use existing certs if already created
+# certificate_arn_ap_south_1 = "arn:aws:acm:ap-south-1:123456789012:certificate/xxxx"
+# frontend_certificate_arn_us_east_1 = "arn:aws:acm:us-east-1:123456789012:certificate/yyyy"

@@ -1,0 +1,36 @@
+model_list:
+  - model_name: gemini-2.0-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+
+  - model_name: nova-lite
+    litellm_params:
+      model: bedrock/amazon.nova-lite-v1:0
+
+  - model_name: nova-pro
+    litellm_params:
+      model: bedrock/amazon.nova-pro-v1:0
+
+  - model_name: text-embedding
+    litellm_params:
+      model: bedrock/amazon.titan-embed-text-v2:0
+      dimensions: 1024
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+  num_retries: 3
+  request_timeout: 120
+
+environment_variables:
+  LANGFUSE_PUBLIC_KEY: os.environ/LANGFUSE_PUBLIC_KEY
+  LANGFUSE_SECRET_KEY: os.environ/LANGFUSE_SECRET_KEY
+  LANGFUSE_HOST: os.environ/LANGFUSE_HOST
+
+langfuse_settings:
+  public_key: os.environ/LANGFUSE_PUBLIC_KEY
+  secret_key: os.environ/LANGFUSE_SECRET_KEY
+  host: os.environ/LANGFUSE_HOST
