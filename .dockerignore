@@ -1,0 +1,53 @@
+# Version control
+.git
+.gitignore
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+htmlcov
+.coverage
+*.egg-info
+dist/
+build/
+
+# Node
+node_modules
+npm-debug.log*
+
+# Environment files (never send secrets to Docker)
+.env
+.env.*
+*.env
+
+# Test / E2E
+e2e/
+
+# Deployment / infra
+deployment/
+infra/
+infrastructure/
+
+# Docs
+docs/
+
+# Apps (S3-deployed frontend, not Docker)
+apps/
+
+# Sisyphus / CI artifacts
+.sisyphus/
+.opencodeignore
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# NOTE: backend/, frontend/, services/ are intentionally NOT excluded
+# They are required by Dockerfile COPY instructions

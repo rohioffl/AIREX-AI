@@ -1,0 +1,19 @@
+Task 1: frontend/Dockerfile removed
+PASS: frontend/Dockerfile not found
+
+Task 2: Subdirectory .dockerignore files removed
+PASS: backend/.dockerignore not found
+PASS: frontend/.dockerignore not found
+
+Task 3: Root .dockerignore created
+PASS: .dockerignore exists
+2 .git exclusions
+1 node_modules exclusions
+1 .venv exclusions
+4 .env exclusions
+No backend/ exclusion: 0
+0
+No frontend/ exclusion: 0
+0
+No services/ exclusion: 0
+0

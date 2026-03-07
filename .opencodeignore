@@ -1,0 +1,11 @@
+node_modules/
+frontend/node_modules/
+e2e/node_modules/
+backend/.venv/
+backend/__pycache__/
+**/__pycache__/
+**/*.pyc
+.git/
+frontend/dist/
+backend/.pytest_cache/
+backend/htmlcov/
