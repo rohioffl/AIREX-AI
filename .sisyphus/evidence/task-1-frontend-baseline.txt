@@ -1,0 +1,14 @@
+# Frontend Baseline — 2026-03-07
+
+## npm run build
+✓ built in 5.44s (success)
+
+## npm run test -- --run
+Test Files: 17 passed (17)
+Tests: 165 passed (165)
+Duration: 17.12s
+
+## Notes
+- Node v22.22.0, npm 10.9.4
+- Dependencies installed via: npm install
+- Build succeeds, all 165 tests pass

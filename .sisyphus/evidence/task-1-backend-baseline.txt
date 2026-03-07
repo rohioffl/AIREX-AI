@@ -1,0 +1,16 @@
+# Backend Baseline — 2026-03-07
+
+## pytest
+510 passed, 17 warnings in 40.97s
+
+## ruff check app/
+Found 100 errors (93 fixable with --fix)
+
+## mypy app/ --ignore-missing-imports
+Found 39 errors in 14 files (checked 126 source files)
+
+## Notes
+- Dependencies installed via: pip install --break-system-packages -r requirements.txt
+- No virtualenv — system Python 3.12.3
+- LSP errors in editor (redis, fastapi, structlog, sqlalchemy, arq) are from missing virtualenv on host — NOT actual code errors
+- All 510 tests pass
