@@ -1,153 +1,154 @@
 # AGENTS.md
-
 > [!IMPORTANT]
-> **READ BEFORE CODING OR TESTING.** This project enforces strict architectural, style, test, and safety rules defined in this file and the `docs/` dir. Non-conformance risks automated or human PR rejection.
->
-> - Frontend: [docs/frontend_skill.md](docs/frontend_skill.md)
-> - Backend: [docs/backend_skill.md](docs/backend_skill.md)
-> - Database: [docs/database_skill.md](docs/database_skill.md)
-> - Resume: [docs/skills/resume_formatter/SKILL.md](docs/skills/resume_formatter/SKILL.md)
+> Read this before coding, reviewing, or running tests. AIREX is safety-critical incident automation software; prioritize determinism, auditability, and secure defaults.
 
----
+## Canonical Rule Sources
+- Backend: `docs/backend_skill.md`
+- Frontend: `docs/frontend_skill.md`
+- Database: `docs/database_skill.md`
 
-## 1. Build, Lint, and Test Commands
+## Cursor/Copilot Rule Files
+- `.cursor/rules/`: not present
+- `.cursorrules`: not present
+- `.github/copilot-instructions.md`: not present
 
-### 1.1 Backend: Python (FastAPI, AsyncIO, ARQ)
-
-**Setup:**
+## 1) Build, Lint, and Test Commands
+### 1.1 Backend (FastAPI + SQLAlchemy Async + ARQ)
+Setup:
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
-**Migrations:**
-```bash
-alembic upgrade head
-```
-**Run API:**
+Run API + worker:
 ```bash
 uvicorn app.main:app --reload
-```
-**Run Worker:**
-```bash
 arq app.core.worker.WorkerSettings
 ```
-**Lint:**
+Migrations:
 ```bash
-ruff check app/           # If ruff is installed
+alembic upgrade head
+alembic history
+```
+Lint + type-check:
+```bash
+ruff check app/
 mypy app/ --ignore-missing-imports
 ```
-**Full Test:**
+Tests:
 ```bash
-pytest         # Or: python -m pytest
+pytest
+python -m pytest
 ```
-**Single Test (by file or method):**
+Run a single backend test:
 ```bash
 python -m pytest tests/test_llm_client.py
-python -m pytest tests/ -k 'TestRecommendation and not slow'
-```
-**Run Ingestion Script:**
-```bash
-python scripts/ingest_runbooks.py --tenant-id <uuid>
+python -m pytest tests/test_state_machine.py::test_valid_transition
+python -m pytest tests/ -k "recommendation and not slow"
 ```
 
-### 1.2 Frontend: React (Vite, Tailwind)
+### 1.2 Frontend (React 19 + Vite + Vitest)
+Setup and run:
 ```bash
 cd frontend
 npm install
-npm run dev         # Local dev server
-npm run lint        # ESLint
-npm run build       # Vite production build
-npm run test        # Vitest suite
-npm run test -- --run "Incident*"  # Run specific tests
+npm run dev
+npm run build
+npm run preview
+```
+Lint + tests:
+```bash
+npm run lint
+npm run test
+npm run test:watch
+```
+Run a single frontend test:
+```bash
+npm run test -- --run "Incident*"
 ```
 
-### 1.3 Infrastructure
+### 1.3 E2E (Playwright)
+```bash
+cd e2e
+npm install
+npm run test
+npm run test:headed
+npm run test:ui
+npm run report
+```
+Run a single E2E file:
+```bash
+npx playwright test tests/incident-lifecycle.spec.js
+```
+
+### 1.4 Local Stack / Infra
 ```bash
 docker-compose up -d db redis ai-platform
-alembic upgrade head
-# (optionally) ./backend/scripts/ingest_runbooks.py
+docker-compose up -d
+docker-compose run migrate
+docker-compose ps
 ```
 
----
-
-## 2. Code Style & Convention Guidelines
-
+## 2) Code Style Guidelines
 ### 2.1 Python Backend
-- **Type Hints:** Required everywhere, including function signatures and class attributes. Run `mypy`.
-- **Formatting:** Recommend `black` for code and `ruff` for lint. Max line length = 100.
-- **Imports:** Standard > Third party > Local. Alphabetize within blocks. No relative imports outside package.
-- **Naming:**
-  - Classes: PascalCase
-  - Functions, modules: snake_case
-  - Constants: UPPER_SNAKE
-  - No ambiguous two-letter vars outside comprehensions.
-- **Error Handling:**
-  - Always catch specific exceptions. Never catch bare `except:`.
-  - Use custom exceptions where business logic demands.
-- **Async:** All I/O, DB, HTTP, and worker code **must** be async/await. No blocking calls!
-- **Logging:** Use `structlog` JSON logging. Always attach `correlation_id` where possible.
-- **Transitional Safety:** Only mutate incident state with `transition_state()`; never direct attribute assignment.
-- **No direct OS commands. All shell logic uses SSM, OS Login, or whitelisted templates.**
+- Type hints required on public and internal functions.
+- Keep I/O async for DB, HTTP, cloud APIs, and workers.
+- Imports: stdlib -> third-party -> local, alphabetized by block.
+- Naming: `PascalCase` classes, `snake_case` funcs/modules, `UPPER_SNAKE_CASE` constants.
+- Black-compatible formatting, max line length 100.
+- Lint with Ruff and type-check with mypy.
+- Catch specific exceptions only; never use bare `except:`.
+- Prefer domain-specific exceptions with actionable messages.
+- Use structured logging (`structlog`) and include `correlation_id`.
 
-### 2.2 Frontend (React)
-- **Only functional components, hooks, Tailwind. No class components.**
-- **Formatting:** Autosave with Prettier and ESLint rules (`npm run lint`).
-- **Naming:**
-  - Components: PascalCase
-  - Hooks: `useCamelCase`
-  - Files: PascalCase for components, kebab-case for utils.
-- **No inline fetches. All HTTP via central API client. No direct DOM manipulation.**
-- **Real-time state from backend only, via SSE. Never simulate or optimistically update UI state.**
-- **All user-generated content is rendered as plain text. Never inject HTML from backend.**
+### 2.2 Frontend
+- Functional components + hooks only (no class components).
+- Prefer Tailwind utilities; avoid ad-hoc CSS.
+- Keep API calls in `src/services/*`; avoid inline fetch in components.
+- Naming: components `PascalCase`, hooks `useCamelCase`.
+- Avoid direct DOM mutation; use React state/refs.
+- Treat backend/user strings as untrusted input; never inject raw HTML.
 
----
+### 2.3 Database
+- PostgreSQL is authoritative; use Alembic for schema changes.
+- Keep constraints explicit: enums/checks/indexes.
+- Preserve auditable state transition and execution history.
+- Follow `docs/database_skill.md` for RLS and tenant-safe patterns.
 
-## 3. Testing Guidelines & CI/Coverage
-- **Backend unit/integration:**
-  - All new code must be covered by `pytest`.
-  - Put tests in `backend/tests/`, matching module/test names.
-  - Use `pytest-asyncio` for async tests.
-  - Can run single test like: `pytest tests/test_investigations.py -k some_method`.
-- **Frontend:**
-  - Use Vitest/Jest with React Testing Library. No Enzyme.
-  - Always snapshot test critical components. No shallow tests.
-- **CI:**
-  - Actions: backend lint (ruff, mypy), backend test (pytest), frontend lint (eslint), frontend test (vitest), docker build.
-  - See `.github/workflows/ci.yml` for env vars, matrix, reporting.
+## 3) Architecture and Safety Rules
+- Incident lifecycle must follow the backend state machine.
+- Use `transition_state(...)` helpers instead of direct state mutation.
+- Keep automation failures explicit (`FAILED_*`) unless human-rejected.
+- Route LLM calls through LiteLLM with deterministic action policy checks.
+- Never execute arbitrary shell generated from LLM output.
+- Never commit credentials, tokens, or cloud secrets.
 
-## 4. Architectural, Plugin, and Tooling Rules
-- **Follow docs/backend_skill.md, docs/frontend_skill.md, and docs/database_skill.md.**
-- **Backend State:** Use strict state machine enums and transitions for Incident, no side-effects outside approved plugin boundaries.
-- **LLM/RAG:**
-  - All LLM calls must go through LiteLLM proxy and be traced with `correlation_id`/Langfuse.
-  - All RAG operations must sanitize, chunk, and deduplicate context; see `rag_context.py`.
-- **Prohibitions:**
-  - No subprocess.run for arbitrary shell commands.
-  - No secrets in repos. Use local `.env` for dev.
-  - No prompt injection. Sanitize everything sent to LLM; harden prompts in `app/llm/prompts.py`.
-  - Never use blocking IO, global queries, or unbounded loops.
-  - No business logic leaks between frontend/backend.
-  - No direct DB access in frontend, only via approved API routes.
-- **Auditability:**
-  - All side-effectful actions (state transitions, executions) must be persisted and auditable/logged.
+Single-tenant runtime note:
+- Current runtime uses DEV tenant `00000000-0000-0000-0000-000000000000`.
+- Continue writing tenant-safe code for future multi-tenant re-enablement.
 
-## 5. Commit, PR & Review
-- **Atomicity:** Single-feature/fix per PR and commit. No ops mixed with logic changes.
-- **Naming:** Prefix as `feat:`, `fix:`, `refactor:`, `chore:`. Messages must be descriptive (no “Update file” commits).
-- **Self-review:** Run lints, tests, and CI locally before pushing. Confirm conformance to skill docs.
-- **No secrets, keys, or credentials of any kind in PRs.**
-- **Change doc/skills if changing domain rules or critical pipeline sections.**
+## 4) Testing Expectations
+- Add/adjust tests for every meaningful behavior change.
+- Backend tests: `backend/tests/` with `pytest` + `pytest-asyncio`.
+- Frontend tests: Vitest + React Testing Library.
+- E2E tests: Playwright in `e2e/tests/`.
+- During iteration, run targeted tests first, then broader suites.
 
-## 6. References & Troubleshooting
-- **Ref skill docs for all workflow or code questions.** If agent/coder is unsure about state flows, plugin structure, DB, or RAG/LLM context steps, see `docs/{backend,frontend,database}_skill.md`.
-- **Infra tips:**
-  - If DB migration fails: ensure up-to-date Alembic heads, run `alembic history`.
-  - If SSE hangs: check Redis, check backend logs, use `/health` endpoint.
-  - If agent fails: check Langfuse or LiteLLM logs for context.
-- **General:** When stuck, ask for a safety review, and always fall back to secure/manual mode if core invariants are in doubt.
+Recommended pre-PR validation:
+```bash
+# backend
+cd backend && ruff check app/ && mypy app/ --ignore-missing-imports && pytest
+# frontend
+cd frontend && npm run lint && npm run test && npm run build
+# e2e (for UI/API flow changes)
+cd e2e && npm run test
+```
 
----
+## 5) PR Hygiene
+- Keep changes scoped and atomic.
+- Use clear prefixes: `feat:`, `fix:`, `refactor:`, `chore:`.
+- Document migration, infra, and rollback implications in PR descriptions.
+- Do not merge known failures unless explicitly documented as pre-existing.
 
-By following these rules, Opencode/coding agents (and humans!) keep the AIREX platform robust, consistent, safe, and fast to review/ship changes. All agents are equally bound by these standards.
+If uncertain, follow the stricter rule path from the docs above.

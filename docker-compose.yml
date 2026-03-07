@@ -34,8 +34,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/airex-api/Dockerfile
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./backend:/app
@@ -58,8 +58,8 @@ services:
 
   worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/airex-worker/Dockerfile
     command: arq app.core.worker.WorkerSettings
     volumes:
       - ./backend:/app
@@ -79,8 +79,8 @@ services:
 
   migrate:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/airex-api/Dockerfile
     command: alembic upgrade head
     volumes:
       - ./backend:/app
@@ -92,8 +92,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/airex-frontend/Dockerfile
     ports:
       - "5173:80"
     depends_on:
