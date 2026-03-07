@@ -15,8 +15,8 @@ Portfolio: `rohitpt.online`
 LinkedIn: `linkedin.com/in/rohitpt`  
 GitHub: `github.com/rohioffl`
 
-> [!IMPORTANT]
-> Developers and AI agents should start with [AGENTS.md](AGENTS.md). It defines project workflow rules, Memory MCP usage, connected MCP tool preferences, safety constraints, and validation commands.
+
+
 
 AIREX stands for **Autonomous Incident Resolution Engine Xecution**. It is a safety-conscious incident automation platform that ingests alerts, investigates affected systems, generates AI-assisted recommendations, applies policy and approval rules, executes deterministic remediation actions, and verifies the outcome.
 
