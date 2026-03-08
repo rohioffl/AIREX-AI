@@ -9,10 +9,10 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - your_password_data:/var/lib/your_passwordql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./database/scripts/init-multi-db.sql:/docker-entrypoint-initdb.d/init-multi-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U your_password"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -180,7 +180,7 @@ services:
       - backend
 
 volumes:
-  your_password_data:
+  postgres_data:
   redis_data:
   prometheus_data:
   grafana_data:
