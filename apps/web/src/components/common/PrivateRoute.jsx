@@ -4,17 +4,9 @@ import { useAuth } from '../../context/AuthContext'
 /**
  * PrivateRoute - Protects routes that require authentication.
  * Redirects to /login if user is not authenticated.
- *
- * Set VITE_BYPASS_AUTH=true in .env to bypass auth during development.
  */
 export default function PrivateRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()
-
-  const BYPASS_AUTH = import.meta.env.VITE_BYPASS_AUTH === 'true'
-
-  if (BYPASS_AUTH) {
-    return children
-  }
 
   if (loading) {
     return (

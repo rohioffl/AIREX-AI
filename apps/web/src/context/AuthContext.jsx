@@ -4,16 +4,6 @@ import { getRefreshToken, getValidAccessToken } from '../services/tokenStorage'
 
 const AuthContext = createContext()
 
-const BYPASS_AUTH = import.meta.env.VITE_BYPASS_AUTH === 'true'
-
-const DEV_USER = {
-  email: 'dev@airex.local',
-  role: 'operator',
-  tenantId: '00000000-0000-0000-0000-000000000000',
-  userId: 'dev-user',
-  displayName: 'Dev User'
-}
-
 function parseTokenUser(t) {
   try {
     const payload = JSON.parse(atob(t.split('.')[1]))
@@ -28,21 +18,13 @@ function parseTokenUser(t) {
   }
 }
 
-function getInitialUser() {
-  if (BYPASS_AUTH) return DEV_USER
-  const t = getValidAccessToken()
-  return t ? parseTokenUser(t) : null
-}
-
-function getInitialToken() {
-  if (BYPASS_AUTH) return 'dev-token'
-  return getValidAccessToken() || null
-}
-
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(getInitialUser)
-  const [token, setToken] = useState(getInitialToken)
-  const [loading, setLoading] = useState(() => !BYPASS_AUTH && !getValidAccessToken() && !!getRefreshToken())
+  const [user, setUser] = useState(() => {
+    const t = getValidAccessToken()
+    return t ? parseTokenUser(t) : null
+  })
+  const [token, setToken] = useState(() => getValidAccessToken() || null)
+  const [loading, setLoading] = useState(() => !getValidAccessToken() && !!getRefreshToken())
 
   const login = useCallback(async ({ email, password }) => {
     const res = await apiLogin({ email, password })
@@ -73,7 +55,7 @@ export function AuthProvider({ children }) {
   }, [logout])
 
   useEffect(() => {
-    if (BYPASS_AUTH || token) {
+    if (token) {
       setLoading(false)
       return
     }
@@ -111,11 +93,9 @@ export function AuthProvider({ children }) {
     }
   }, [logout, token])
 
-  const isAuth = BYPASS_AUTH ? true : !!token
-
   const value = useMemo(() => ({
-    user, token, loading, login, logout, refresh, isAuthenticated: isAuth
-  }), [user, token, loading, login, logout, refresh, isAuth])
+    user, token, loading, login, logout, refresh, isAuthenticated: !!token
+  }), [user, token, loading, login, logout, refresh])
 
   return (
     <AuthContext.Provider value={value}>
