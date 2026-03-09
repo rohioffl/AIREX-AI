@@ -6,7 +6,7 @@ import {
   ChevronRight, ExternalLink, Zap, Server
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { fetchHealthCheckDashboard, triggerHealthCheck } from '../services/api'
+import { fetchHealthCheckDashboard, triggerHealthCheck, fetchMonitorInventory } from '../services/api'
 
 const STATUS_CONFIG = {
   healthy:  { label: 'Healthy',  icon: CheckCircle2,  color: 'text-emerald-400', bg: 'bg-emerald-500/10', ring: 'ring-emerald-500/30', dot: 'bg-emerald-400' },
@@ -121,6 +121,9 @@ export default function HealthChecksPage() {
   const [error, setError] = useState(null)
   const [running, setRunning] = useState(false)
   const [filter, setFilter] = useState('all')
+  const [monitors, setMonitors] = useState(null)
+  const [monitorsLoading, setMonitorsLoading] = useState(false)
+  const [monitorsRefreshing, setMonitorsRefreshing] = useState(false)
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -139,6 +142,23 @@ export default function HealthChecksPage() {
     const interval = setInterval(loadDashboard, 60000)
     return () => clearInterval(interval)
   }, [loadDashboard])
+
+  const loadMonitors = useCallback(async (refresh = false) => {
+    refresh ? setMonitorsRefreshing(true) : setMonitorsLoading(true)
+    try {
+      const data = await fetchMonitorInventory({ refresh })
+      setMonitors(data)
+    } catch {
+      // non-fatal — monitor inventory is best-effort
+    } finally {
+      setMonitorsLoading(false)
+      setMonitorsRefreshing(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadMonitors()
+  }, [loadMonitors])
 
   const handleRunNow = async () => {
     setRunning(true)
@@ -270,6 +290,87 @@ export default function HealthChecksPage() {
           {dashboard.recent_checks.slice(0, 20).map(c => (
             <RecentCheckRow key={c.id} check={c} />
           ))}
+        </div>
+      )}
+
+      {/* Monitor Inventory — only shown when Site24x7 is enabled */}
+      {monitors?.site24x7_enabled && (
+        <div className="glass rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              <Server size={14} className="inline mr-2 text-[var(--neon-cyan)]" />
+              Site24x7 Monitor Inventory ({monitors.total})
+            </h2>
+            <button
+              onClick={() => loadMonitors(true)}
+              disabled={monitorsRefreshing}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}
+            >
+              <RefreshCw size={11} className={monitorsRefreshing ? 'animate-spin' : ''} />
+              {monitorsRefreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+
+          {monitorsLoading ? (
+            <div className="px-4 py-6 space-y-2">
+              {[1, 2, 3].map(i => <div key={i} className="h-8 skeleton rounded" />)}
+            </div>
+          ) : monitors.monitors?.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-[var(--text-muted)]">
+              No monitors returned from Site24x7.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-input)' }}>
+                    {['Name', 'Type', 'Status', 'Last Checked', 'Incident'].map(h => (
+                      <th key={h} className="px-4 py-2 text-left font-medium text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {monitors.monitors.map(m => {
+                    const cfg = STATUS_CONFIG[m.current_status] || STATUS_CONFIG.unknown
+                    return (
+                      <tr key={m.monitor_id} style={{ borderBottom: '1px solid var(--border)' }} className="hover:bg-[var(--bg-input)] transition-colors">
+                        <td className="px-4 py-2.5 text-[var(--text-primary)] font-medium">{m.monitor_name}</td>
+                        <td className="px-4 py-2.5 text-[var(--text-secondary)]">{m.monitor_type || '—'}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.color} ring-1 ${cfg.ring}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                            {cfg.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-[var(--text-secondary)] font-mono">
+                          {m.last_checked_at ? new Date(m.last_checked_at).toLocaleString() : '—'}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {m.last_incident_id ? (
+                            <button
+                              onClick={() => navigate(`/incidents/${m.last_incident_id}`)}
+                              className="inline-flex items-center gap-1 text-[var(--neon-cyan)] hover:underline"
+                            >
+                              <ExternalLink size={11} /> View
+                            </button>
+                          ) : (
+                            <span className="text-[var(--text-muted)]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {monitors.last_synced_at && (
+            <div className="px-4 py-2 text-xs text-[var(--text-muted)] border-t border-[var(--border)]">
+              Synced {new Date(monitors.last_synced_at).toLocaleString()}
+            </div>
+          )}
         </div>
       )}
     </div>

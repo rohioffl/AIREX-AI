@@ -5,6 +5,7 @@ import { fetchMetrics } from '../services/api'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import MetricCard from '../components/common/MetricCard'
 import SystemGraph from '../components/common/SystemGraph'
+import AlertHistoryWidget from '../components/common/AlertHistoryWidget'
 import AlertRow from '../components/alert/AlertRow'
 import { formatTimestamp, formatDuration } from '../utils/formatters'
 
@@ -107,8 +108,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 flex flex-col gap-6">
           <SystemGraph incidents={incidents} type={graphType} />
+          <AlertHistoryWidget days={7} />
         </div>
         <div className="glass glass-purple p-5 flex flex-col gap-4">
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Telemetry</span>

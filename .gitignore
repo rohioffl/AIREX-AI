@@ -130,3 +130,6 @@ TECH_STACK.docx
 
 # Added by ggshield
 .cache_ggshield
+
+# Claude Code local state (settings, plans, tasks, cache)
+.claude/

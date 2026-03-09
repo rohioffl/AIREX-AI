@@ -7,12 +7,13 @@ Provides aggregated metrics for the frontend dashboard.
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import cast, Date, func, select
 
 from app.api.dependencies import TenantId, TenantSession
 from app.models.enums import IncidentState
+from app.models.health_check import HealthCheck
 from app.models.incident import Incident
 from app.models.state_transition import StateTransition
 
@@ -185,4 +186,78 @@ async def get_metrics(
         total_resolved_24h=total_resolved_24h,
         active_incidents=active_incidents,
         critical_incidents=critical_incidents,
+    )
+
+
+class AlertHistoryDay(BaseModel):
+    date: str  # ISO date string "YYYY-MM-DD"
+    alerts: int
+
+
+class AlertHistoryResponse(BaseModel):
+    days: int
+    series: list[AlertHistoryDay]
+    total_alerts: int
+    most_affected_monitor: str | None = None
+
+
+@router.get("/alert-history", response_model=AlertHistoryResponse)
+async def get_alert_history(
+    tenant_id: TenantId,
+    session: TenantSession,
+    days: int = Query(default=7, ge=1, le=90),
+) -> AlertHistoryResponse:
+    """
+    Get daily alert counts (degraded + down) from health_checks for the last N days.
+
+    Used by the AlertHistoryWidget on the dashboard.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=days)
+
+    # Daily alert counts
+    day_col = cast(HealthCheck.checked_at, Date).label("day")
+    rows = await session.execute(
+        select(day_col, func.count().label("alert_count"))
+        .where(
+            HealthCheck.tenant_id == tenant_id,
+            HealthCheck.checked_at >= cutoff,
+            HealthCheck.status.in_(["degraded", "down"]),
+        )
+        .group_by(day_col)
+        .order_by(day_col)
+    )
+    daily: dict[str, int] = {str(r.day): r.alert_count for r in rows}
+
+    # Fill in zeros for days with no alerts
+    series: list[AlertHistoryDay] = []
+    for i in range(days):
+        d = (cutoff + timedelta(days=i + 1)).date()
+        series.append(AlertHistoryDay(date=str(d), alerts=daily.get(str(d), 0)))
+
+    total_alerts = sum(s.alerts for s in series)
+
+    # Most affected monitor (highest alert count over the period)
+    most_affected: str | None = None
+    if total_alerts > 0:
+        top_row = await session.execute(
+            select(HealthCheck.target_name, func.count().label("cnt"))
+            .where(
+                HealthCheck.tenant_id == tenant_id,
+                HealthCheck.checked_at >= cutoff,
+                HealthCheck.status.in_(["degraded", "down"]),
+            )
+            .group_by(HealthCheck.target_name)
+            .order_by(func.count().desc())
+            .limit(1)
+        )
+        top = top_row.first()
+        if top:
+            most_affected = top.target_name
+
+    return AlertHistoryResponse(
+        days=days,
+        series=series,
+        total_alerts=total_alerts,
+        most_affected_monitor=most_affected,
     )

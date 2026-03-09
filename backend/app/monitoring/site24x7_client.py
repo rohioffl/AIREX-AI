@@ -196,3 +196,26 @@ class Site24x7Client:
             "monitor": monitor,
             "current_status": status,
         }
+
+    async def list_monitors(self) -> list[dict[str, Any]]:
+        """List all monitors with id, name, and type."""
+        result = await self._get("/monitors")
+        data = result.get("data", [])
+        return data if isinstance(data, list) else []
+
+    async def get_all_current_status(self) -> list[dict[str, Any]]:
+        """Get current status for all monitors in one call."""
+        result = await self._get("/current_status", params={"apm_required": "true"})
+        monitors_data = result.get("data", {})
+        monitor_groups = monitors_data.get("monitors", [])
+        if not monitor_groups and isinstance(monitors_data, list):
+            monitor_groups = monitors_data
+
+        flat: list[dict[str, Any]] = []
+        if isinstance(monitor_groups, list):
+            for item in monitor_groups:
+                if isinstance(item, dict) and "monitors" in item:
+                    flat.extend(item["monitors"])
+                elif isinstance(item, dict) and "monitor_id" in item:
+                    flat.append(item)
+        return flat

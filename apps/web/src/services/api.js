@@ -210,4 +210,15 @@ export async function triggerHealthCheck() {
   return res.data
 }
 
+export async function fetchMonitorInventory({ refresh = false } = {}) {
+  const res = await api.get('/health-checks/monitors', { params: refresh ? { refresh: true } : {} })
+  return res.data
+}
+
+// Alert history widget (7-day degraded/down counts from health_checks)
+export async function fetchAlertHistory({ days = 7 } = {}) {
+  const res = await api.get('/metrics/alert-history', { params: { days } })
+  return res.data
+}
+
 export default api

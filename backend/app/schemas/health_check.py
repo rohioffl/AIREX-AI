@@ -69,3 +69,23 @@ class HealthCheckDashboard(BaseModel):
     summary: HealthCheckSummary
     targets: list[TargetStatus] = Field(default_factory=list)
     recent_checks: list[HealthCheckResponse] = Field(default_factory=list)
+
+
+class MonitorItem(BaseModel):
+    """A single Site24x7 monitor with current status from DB."""
+
+    monitor_id: str
+    monitor_name: str
+    monitor_type: str = ""
+    current_status: str = "unknown"
+    last_checked_at: datetime | None = None
+    last_incident_id: uuid.UUID | None = None
+
+
+class MonitorInventoryResponse(BaseModel):
+    """Response for GET /health-checks/monitors."""
+
+    monitors: list[MonitorItem] = Field(default_factory=list)
+    total: int = 0
+    last_synced_at: datetime | None = None
+    site24x7_enabled: bool = False
