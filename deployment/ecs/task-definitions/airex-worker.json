@@ -1,5 +1,5 @@
 {
-  "family": "airex-worker",
+  "family": "__TASKDEF_FAMILY_WORKER__",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
@@ -8,7 +8,7 @@
   "taskRoleArn": "__TASK_ROLE_ARN__",
   "containerDefinitions": [
     {
-      "name": "airex-worker",
+      "name": "worker",
       "image": "__WORKER_IMAGE__",
       "essential": true,
       "command": ["arq", "app.core.worker.WorkerSettings"],
@@ -26,8 +26,8 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/airex-worker",
-          "awslogs-region": "ap-south-1",
+          "awslogs-group": "__LOG_GROUP_WORKER__",
+          "awslogs-region": "__AWS_REGION__",
           "awslogs-stream-prefix": "ecs"
         }
       }

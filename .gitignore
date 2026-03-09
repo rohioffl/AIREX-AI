@@ -95,9 +95,9 @@ backend/.venv/bin/f2py
 backend/.venv/bin/numpy-config
 
 # Terraform / deployment artifacts
-.terraform/
-*.tfstate
-*.tfstate.*
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
 crash.log
 override.tf
 override.tf.json
@@ -106,6 +106,9 @@ override.tf.json
 .terraform.lock.hcl
 deployment/ecs/.rendered-task-definitions/
 deployment/ecs/**/.rendered-task-definitions/
+**/*.tfvars
+**/*.tfvars.json
+backend.hcl
 
 # Local scaffolds / imported templates
 source-code/

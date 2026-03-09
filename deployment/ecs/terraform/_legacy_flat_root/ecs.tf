@@ -105,9 +105,9 @@ resource "aws_ecs_task_definition" "api" {
 
   container_definitions = jsonencode([
     {
-      name  = "api"
-      image = var.api_image
-      essential = true
+      name         = "api"
+      image        = var.api_image
+      essential    = true
       portMappings = [{ containerPort = 8000, protocol = "tcp" }]
       environment = [
         { name = "LLM_BASE_URL", value = aws_ssm_parameter.litellm_host.value },
@@ -187,9 +187,9 @@ resource "aws_ecs_task_definition" "litellm" {
 
   container_definitions = jsonencode([
     {
-      name      = "litellm"
-      image     = var.litellm_image
-      essential = true
+      name         = "litellm"
+      image        = var.litellm_image
+      essential    = true
       portMappings = [{ containerPort = 4000, protocol = "tcp" }]
       environment = [
         { name = "LANGFUSE_HOST", value = aws_ssm_parameter.langfuse_host.value }
@@ -224,9 +224,9 @@ resource "aws_ecs_task_definition" "langfuse" {
 
   container_definitions = jsonencode([
     {
-      name      = "langfuse"
-      image     = var.langfuse_image
-      essential = true
+      name         = "langfuse"
+      image        = var.langfuse_image
+      essential    = true
       portMappings = [{ containerPort = 3000, protocol = "tcp" }]
       environment = [
         { name = "NEXTAUTH_URL", value = "https://${var.langfuse_domain}" },
@@ -241,38 +241,6 @@ resource "aws_ecs_task_definition" "langfuse" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.langfuse.name
-          awslogs-region        = var.aws_region
-          awslogs-stream-prefix = "ecs"
-        }
-      }
-    }
-  ])
-
-  tags = local.tags
-}
-
-resource "aws_ecs_task_definition" "migrate" {
-  family                   = "${local.name_prefix}-migrate"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = "512"
-  memory                   = "1024"
-  network_mode             = "awsvpc"
-  execution_role_arn       = aws_iam_role.execution_role.arn
-  task_role_arn            = aws_iam_role.task_role.arn
-
-  container_definitions = jsonencode([
-    {
-      name      = "migrate"
-      image     = var.api_image
-      command   = ["alembic", "upgrade", "head"]
-      essential = true
-      secrets = [
-        { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.backend_database_url.arn }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.api.name
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "ecs"
         }

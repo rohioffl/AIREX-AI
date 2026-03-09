@@ -11,10 +11,6 @@ output "ecs_services" {
   }
 }
 
-output "migrate_task_definition_arn" {
-  value = aws_ecs_task_definition.migrate.arn
-}
-
 output "alb_dns_name" {
   value = aws_lb.public.dns_name
 }
@@ -27,8 +23,12 @@ output "frontend_bucket_name" {
   value = aws_s3_bucket.frontend.bucket
 }
 
+output "frontend_cloudfront_distribution_id" {
+  value = aws_cloudfront_distribution.frontend.id
+}
+
 output "hostinger_dns_records" {
-  value = {
+  value = var.frontend_domain == "" && var.litellm_domain == "" && var.langfuse_domain == "" ? null : {
     frontend = {
       type  = "CNAME"
       name  = var.frontend_domain
@@ -45,26 +45,6 @@ output "hostinger_dns_records" {
       value = aws_lb.public.dns_name
     }
   }
-}
-
-output "acm_dns_validation_records_ap_south_1" {
-  value = var.certificate_arn_ap_south_1 == "" ? [
-    for dvo in aws_acm_certificate.alb_wildcard[0].domain_validation_options : {
-      name  = dvo.resource_record_name
-      type  = dvo.resource_record_type
-      value = dvo.resource_record_value
-    }
-  ] : []
-}
-
-output "acm_dns_validation_records_us_east_1" {
-  value = var.frontend_certificate_arn_us_east_1 == "" ? [
-    for dvo in aws_acm_certificate.cloudfront_frontend[0].domain_validation_options : {
-      name  = dvo.resource_record_name
-      type  = dvo.resource_record_type
-      value = dvo.resource_record_value
-    }
-  ] : []
 }
 
 output "secrets_created" {

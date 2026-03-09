@@ -1,0 +1,28 @@
+aws_region   = "ap-south-1"
+environment  = "prod"
+project_name = "airex"
+
+domain_root      = "rohitpt.online"
+frontend_domain  = "airex.rohitpt.online"
+litellm_domain   = "litellm.rohitpt.online"
+langfuse_domain  = "langfuse.rohitpt.online"
+enable_custom_domains = false
+
+create_vpc           = true
+vpc_cidr             = "10.40.0.0/16"
+public_subnet_cidrs  = ["10.40.0.0/24", "10.40.1.0/24"]
+private_subnet_cidrs = ["10.40.10.0/24", "10.40.11.0/24"]
+
+# If reusing an existing VPC instead, set create_vpc = false and provide:
+# vpc_id             = "vpc-xxxxxxxx"
+# public_subnet_ids  = ["subnet-aaaa", "subnet-bbbb"]
+# private_subnet_ids = ["subnet-cccc", "subnet-dddd"]
+
+api_image      = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-api:latest"
+worker_image   = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-worker:latest"
+litellm_image  = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-litellm:latest"
+langfuse_image = "langfuse/langfuse:2"
+
+# Set these when you are ready to attach custom domains
+alb_certificate_arn        = ""
+cloudfront_certificate_arn = ""

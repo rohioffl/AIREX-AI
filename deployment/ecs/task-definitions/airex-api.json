@@ -1,5 +1,5 @@
 {
-  "family": "airex-api",
+  "family": "__TASKDEF_FAMILY_API__",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
@@ -8,7 +8,7 @@
   "taskRoleArn": "__TASK_ROLE_ARN__",
   "containerDefinitions": [
     {
-      "name": "airex-api",
+      "name": "api",
       "image": "__API_IMAGE__",
       "essential": true,
       "portMappings": [
@@ -33,8 +33,8 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/airex-api",
-          "awslogs-region": "ap-south-1",
+          "awslogs-group": "__LOG_GROUP_API__",
+          "awslogs-region": "__AWS_REGION__",
           "awslogs-stream-prefix": "ecs"
         }
       },

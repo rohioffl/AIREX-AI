@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 resource "aws_s3_bucket" "frontend" {
   bucket = "${local.name_prefix}-frontend-${data.aws_caller_identity.current.account_id}"
   tags   = local.tags
@@ -24,7 +26,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
-  aliases             = [var.frontend_domain]
+  aliases             = local.cloudfront_aliases
 
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
@@ -33,13 +35,13 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   origin {
-    domain_name = aws_lb.public.dns_name
+    domain_name = var.alb_dns_name
     origin_id   = "api-alb"
 
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "https-only"
+      origin_protocol_policy = local.cloudfront_origin_policy
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
@@ -108,9 +110,10 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = local.cf_certificate_arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
+    acm_certificate_arn            = local.custom_domains_enabled ? var.cloudfront_certificate_arn : null
+    cloudfront_default_certificate = local.custom_domains_enabled ? null : true
+    ssl_support_method             = local.custom_domains_enabled ? "sni-only" : null
+    minimum_protocol_version       = local.custom_domains_enabled ? "TLSv1.2_2021" : null
   }
 
   tags = local.tags

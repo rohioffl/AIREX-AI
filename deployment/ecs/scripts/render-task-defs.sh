@@ -8,11 +8,21 @@ OUT_DIR="$ROOT_DIR/.rendered-task-definitions"
 mkdir -p "$OUT_DIR"
 
 required_env=(
+  AWS_REGION
   API_IMAGE
   WORKER_IMAGE
   LITELLM_IMAGE
+  LANGFUSE_IMAGE
   EXECUTION_ROLE_ARN
   TASK_ROLE_ARN
+  TASKDEF_FAMILY_API
+  TASKDEF_FAMILY_WORKER
+  TASKDEF_FAMILY_LITELLM
+  TASKDEF_FAMILY_LANGFUSE
+  LOG_GROUP_API
+  LOG_GROUP_WORKER
+  LOG_GROUP_LITELLM
+  LOG_GROUP_LANGFUSE
   SECRET_DATABASE_URL_ARN
   SECRET_REDIS_URL_ARN
   SECRET_APP_SECRET_KEY_ARN
@@ -43,11 +53,21 @@ render_file() {
   local output_file="$2"
 
   sed \
+    -e "s|__AWS_REGION__|$AWS_REGION|g" \
     -e "s|__API_IMAGE__|$API_IMAGE|g" \
     -e "s|__WORKER_IMAGE__|$WORKER_IMAGE|g" \
     -e "s|__LITELLM_IMAGE__|$LITELLM_IMAGE|g" \
+    -e "s|__LANGFUSE_IMAGE__|$LANGFUSE_IMAGE|g" \
     -e "s|__EXECUTION_ROLE_ARN__|$EXECUTION_ROLE_ARN|g" \
     -e "s|__TASK_ROLE_ARN__|$TASK_ROLE_ARN|g" \
+    -e "s|__TASKDEF_FAMILY_API__|$TASKDEF_FAMILY_API|g" \
+    -e "s|__TASKDEF_FAMILY_WORKER__|$TASKDEF_FAMILY_WORKER|g" \
+    -e "s|__TASKDEF_FAMILY_LITELLM__|$TASKDEF_FAMILY_LITELLM|g" \
+    -e "s|__TASKDEF_FAMILY_LANGFUSE__|$TASKDEF_FAMILY_LANGFUSE|g" \
+    -e "s|__LOG_GROUP_API__|$LOG_GROUP_API|g" \
+    -e "s|__LOG_GROUP_WORKER__|$LOG_GROUP_WORKER|g" \
+    -e "s|__LOG_GROUP_LITELLM__|$LOG_GROUP_LITELLM|g" \
+    -e "s|__LOG_GROUP_LANGFUSE__|$LOG_GROUP_LANGFUSE|g" \
     -e "s|__SECRET_DATABASE_URL_ARN__|$SECRET_DATABASE_URL_ARN|g" \
     -e "s|__SECRET_REDIS_URL_ARN__|$SECRET_REDIS_URL_ARN|g" \
     -e "s|__SECRET_APP_SECRET_KEY_ARN__|$SECRET_APP_SECRET_KEY_ARN|g" \
@@ -71,6 +91,5 @@ render_file "$TEMPLATE_DIR/airex-api.json" "$OUT_DIR/airex-api.json"
 render_file "$TEMPLATE_DIR/airex-worker.json" "$OUT_DIR/airex-worker.json"
 render_file "$TEMPLATE_DIR/airex-litellm.json" "$OUT_DIR/airex-litellm.json"
 render_file "$TEMPLATE_DIR/airex-langfuse.json" "$OUT_DIR/airex-langfuse.json"
-render_file "$TEMPLATE_DIR/airex-migrate.json" "$OUT_DIR/airex-migrate.json"
 
 echo "Rendered task definitions in: $OUT_DIR"

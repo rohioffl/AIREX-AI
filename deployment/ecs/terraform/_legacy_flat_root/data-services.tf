@@ -1,7 +1,7 @@
 resource "aws_security_group" "data" {
   name        = "${local.name_prefix}-data-sg"
   description = "RDS and Redis security group"
-  vpc_id      = var.vpc_id
+  vpc_id      = local.vpc_id
 
   ingress {
     description     = "Postgres from ECS"
@@ -31,13 +31,13 @@ resource "aws_security_group" "data" {
 
 resource "aws_db_subnet_group" "main" {
   name       = "${local.name_prefix}-db-subnet-group"
-  subnet_ids = var.private_subnet_ids
+  subnet_ids = local.private_subnet_ids
   tags       = local.tags
 }
 
 resource "aws_elasticache_subnet_group" "main" {
   name       = "${local.name_prefix}-redis-subnet-group"
-  subnet_ids = var.private_subnet_ids
+  subnet_ids = local.private_subnet_ids
 }
 
 resource "random_password" "db_airex_password" {
@@ -147,7 +147,7 @@ resource "aws_secretsmanager_secret_version" "backend_database_url" {
 
 resource "aws_secretsmanager_secret_version" "backend_redis_url" {
   secret_id     = aws_secretsmanager_secret.backend_redis_url.id
-  secret_string = "rediss://:${random_password.redis_auth_token.result}@${aws_elasticache_replication_group.redis.configuration_endpoint_address}:6379/0"
+  secret_string = "rediss://:${random_password.redis_auth_token.result}@${aws_elasticache_replication_group.redis.primary_endpoint_address}:6379/0"
 }
 
 resource "aws_secretsmanager_secret_version" "backend_secret_key" {

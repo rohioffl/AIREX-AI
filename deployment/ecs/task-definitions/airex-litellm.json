@@ -1,5 +1,5 @@
 {
-  "family": "airex-litellm",
+  "family": "__TASKDEF_FAMILY_LITELLM__",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
@@ -8,7 +8,7 @@
   "taskRoleArn": "__TASK_ROLE_ARN__",
   "containerDefinitions": [
     {
-      "name": "airex-litellm",
+      "name": "litellm",
       "image": "__LITELLM_IMAGE__",
       "essential": true,
       "portMappings": [
@@ -28,8 +28,8 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/airex-litellm",
-          "awslogs-region": "ap-south-1",
+          "awslogs-group": "__LOG_GROUP_LITELLM__",
+          "awslogs-region": "__AWS_REGION__",
           "awslogs-stream-prefix": "ecs"
         }
       },

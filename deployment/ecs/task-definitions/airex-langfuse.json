@@ -1,5 +1,5 @@
 {
-  "family": "airex-langfuse",
+  "family": "__TASKDEF_FAMILY_LANGFUSE__",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
@@ -8,8 +8,8 @@
   "taskRoleArn": "__TASK_ROLE_ARN__",
   "containerDefinitions": [
     {
-      "name": "airex-langfuse",
-      "image": "langfuse/langfuse:2",
+      "name": "langfuse",
+      "image": "__LANGFUSE_IMAGE__",
       "essential": true,
       "portMappings": [
         {
@@ -29,8 +29,8 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/airex-langfuse",
-          "awslogs-region": "ap-south-1",
+          "awslogs-group": "__LOG_GROUP_LANGFUSE__",
+          "awslogs-region": "__AWS_REGION__",
           "awslogs-stream-prefix": "ecs"
         }
       }

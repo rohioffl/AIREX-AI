@@ -8,18 +8,26 @@ env:
     ECS_SERVICE_WORKER: airex-prod-worker
     ECS_SERVICE_LITELLM: airex-prod-litellm
     ECS_SERVICE_LANGFUSE: airex-prod-langfuse
-    ECS_MIGRATE_TASKDEF: airex-prod-migrate
 
 phases:
   install:
     commands:
       - chmod +x deployment/ecs/scripts/*.sh
+      - python3 -m pip install --upgrade pip
+      - python3 -m pip install -r backend/requirements.txt
   build:
     commands:
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - IMAGE_TAG=$(python3 -c 'import json; print(json.load(open("image-detail.json"))["imageTag"])')
+      - ECR_REGISTRY=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - export API_IMAGE=$ECR_REGISTRY/$ECR_API_REPO:$IMAGE_TAG
+      - export WORKER_IMAGE=$ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG
+      - export LITELLM_IMAGE=$ECR_REGISTRY/$ECR_LITELLM_REPO:$IMAGE_TAG
+      - export PYTHONPATH="$CODEBUILD_SRC_DIR/backend"
       - echo "Rendering and registering task definitions"
       - ./deployment/ecs/scripts/render-task-defs.sh
       - ./deployment/ecs/scripts/register-task-defs.sh
       - echo "Running migrations"
-      - ./deployment/ecs/scripts/run-migration.sh
+      - cd database && alembic upgrade head && cd ..
       - echo "Updating ECS services"
       - ./deployment/ecs/scripts/deploy-services.sh

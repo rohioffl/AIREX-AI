@@ -12,6 +12,16 @@ COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
+COPY database /app/database
+
+RUN python - <<'PY'
+from pathlib import Path
+
+alembic_ini = Path('/app/database/alembic.ini')
+text = alembic_ini.read_text()
+text = text.replace('prepend_sys_path = ../backend', 'prepend_sys_path = /app')
+alembic_ini.write_text(text)
+PY
 
 RUN chown -R airex:airex /app
 

@@ -1,0 +1,6 @@
+aws_region        = "ap-south-1"
+project_name      = "airex"
+environment       = "prod"
+state_bucket_name = "airex-prod-terraform-state-123456789012"
+lock_table_name   = "airex-prod-terraform-locks"
+force_destroy     = false

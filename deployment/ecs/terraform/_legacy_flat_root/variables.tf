@@ -1,3 +1,37 @@
+variable "create_vpc" {
+  description = "Create a dedicated VPC, subnets, routes, and NAT gateways for this stack"
+  type        = bool
+  default     = true
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for the Terraform-managed VPC"
+  type        = string
+  default     = "10.40.0.0/16"
+}
+
+variable "public_subnet_cidrs" {
+  description = "Public subnet CIDR blocks used when create_vpc is true"
+  type        = list(string)
+  default     = ["10.40.0.0/24", "10.40.1.0/24"]
+
+  validation {
+    condition     = length(var.public_subnet_cidrs) >= 2
+    error_message = "At least two public subnet CIDRs are required when create_vpc is true."
+  }
+}
+
+variable "private_subnet_cidrs" {
+  description = "Private subnet CIDR blocks used when create_vpc is true"
+  type        = list(string)
+  default     = ["10.40.10.0/24", "10.40.11.0/24"]
+
+  validation {
+    condition     = length(var.private_subnet_cidrs) >= 2
+    error_message = "At least two private subnet CIDRs are required when create_vpc is true."
+  }
+}
+
 variable "aws_region" {
   description = "Primary deployment region"
   type        = string
@@ -19,40 +53,60 @@ variable "project_name" {
 variable "domain_root" {
   description = "Root domain name"
   type        = string
-  default     = "rohitpt.online"
+  default     = ""
 }
 
 variable "frontend_domain" {
   description = "Frontend public domain"
   type        = string
-  default     = "airex.rohitpt.online"
+  default     = ""
 }
 
 variable "litellm_domain" {
   description = "LiteLLM public domain"
   type        = string
-  default     = "litellm.rohitpt.online"
+  default     = ""
 }
 
 variable "langfuse_domain" {
   description = "Langfuse public domain"
   type        = string
-  default     = "langfuse.rohitpt.online"
+  default     = ""
+}
+
+variable "enable_custom_domains" {
+  description = "Attach custom domains and ACM certificates now; disable to deploy first on AWS default domains"
+  type        = bool
+  default     = false
+
+  validation {
+    condition = var.enable_custom_domains ? (
+      trimspace(var.frontend_domain) != "" &&
+      trimspace(var.litellm_domain) != "" &&
+      trimspace(var.langfuse_domain) != "" &&
+      trimspace(var.alb_certificate_arn) != "" &&
+      trimspace(var.cloudfront_certificate_arn) != ""
+    ) : true
+    error_message = "When enable_custom_domains is true, set frontend_domain, litellm_domain, langfuse_domain, alb_certificate_arn, and cloudfront_certificate_arn."
+  }
 }
 
 variable "vpc_id" {
   description = "Existing VPC ID"
   type        = string
+  default     = ""
 }
 
 variable "public_subnet_ids" {
   description = "Public subnet IDs for ALB"
   type        = list(string)
+  default     = []
 }
 
 variable "private_subnet_ids" {
   description = "Private subnet IDs for ECS services"
   type        = list(string)
+  default     = []
 }
 
 variable "api_desired_count" {
@@ -124,14 +178,14 @@ variable "llm_embedding_model" {
   default     = "text-embedding"
 }
 
-variable "certificate_arn_ap_south_1" {
-  description = "Optional existing ACM cert ARN in ap-south-1 for ALB"
+variable "alb_certificate_arn" {
+  description = "Existing ACM certificate ARN in the deployment region for the ALB"
   type        = string
   default     = ""
 }
 
-variable "frontend_certificate_arn_us_east_1" {
-  description = "Optional existing ACM cert ARN in us-east-1 for CloudFront"
+variable "cloudfront_certificate_arn" {
+  description = "Existing ACM certificate ARN in us-east-1 for CloudFront"
   type        = string
   default     = ""
 }

@@ -1,0 +1,24 @@
+aws_region   = "ap-south-1"
+environment  = "prod"
+project_name = "airex"
+
+domain_root           = "example.com"
+frontend_domain       = "airex.example.com"
+litellm_domain        = "airex-litellm.example.com"
+langfuse_domain       = "airex-langfuse.example.com"
+enable_custom_domains = true
+
+create_vpc           = true
+vpc_cidr             = "10.40.0.0/16"
+public_subnet_cidrs  = ["10.40.0.0/24", "10.40.1.0/24"]
+private_subnet_cidrs = ["10.40.10.0/24", "10.40.11.0/24"]
+
+api_image      = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-api:latest"
+worker_image   = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-worker:latest"
+litellm_image  = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/airex-prod-litellm:latest"
+langfuse_image = "langfuse/langfuse:2"
+
+alb_certificate_arn        = "arn:aws:acm:ap-south-1:123456789012:certificate/xxxx-xxxx-xxxx"
+cloudfront_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/yyyy-yyyy-yyyy"
+
+cors_origins = "[\"https://airex.example.com\"]"
