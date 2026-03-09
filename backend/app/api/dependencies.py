@@ -16,6 +16,19 @@ from app.core.rbac import Permission, has_any_permission
 from app.core.security import TokenData, decode_access_token
 
 
+AUTH_ERROR_DETAIL = "Invalid or expired token"
+
+
+def _decode_bearer_token_or_401(token: str) -> TokenData:
+    try:
+        return decode_access_token(token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=AUTH_ERROR_DETAIL,
+        ) from exc
+
+
 async def get_tenant_id() -> uuid.UUID:
     """Single-tenant mode: always use the primary DEV tenant ID."""
     return uuid.UUID(settings.DEV_TENANT_ID)
@@ -30,13 +43,7 @@ async def get_current_user(
     """
     if authorization and authorization.startswith("Bearer "):
         token = authorization[len("Bearer ") :]
-        try:
-            return decode_access_token(token)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(exc),
-            ) from exc
+        return _decode_bearer_token_or_401(token)
     return None
 
 
@@ -55,13 +62,7 @@ def require_role(*allowed_roles: str):
             # Allow dev mode without auth
             return
         token = authorization[len("Bearer ") :]
-        try:
-            data = decode_access_token(token)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(exc),
-            ) from exc
+        data = _decode_bearer_token_or_401(token)
 
         # Normalize role names (case-insensitive)
         user_role = data.role.lower()
@@ -91,13 +92,7 @@ def require_permission(*permissions: Permission):
             # Allow dev mode without auth
             return
         token = authorization[len("Bearer ") :]
-        try:
-            data = decode_access_token(token)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(exc),
-            ) from exc
+        data = _decode_bearer_token_or_401(token)
 
         if not has_any_permission(data.role, *permissions):
             perm_names = ", ".join(p.value for p in permissions)

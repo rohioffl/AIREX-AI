@@ -21,6 +21,8 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
+AUTH_ERROR_DETAIL = "Invalid or expired token"
+
 
 def _resolve_tenant(token: str | None = None) -> uuid.UUID:
     """Single-tenant mode: optionally validate token, always return default tenant."""
@@ -30,7 +32,7 @@ def _resolve_tenant(token: str | None = None) -> uuid.UUID:
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(exc),
+                detail=AUTH_ERROR_DETAIL,
             ) from exc
 
     return uuid.UUID(settings.DEV_TENANT_ID)

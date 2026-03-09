@@ -3,6 +3,12 @@
  */
 
 import api from './api'
+import {
+  clearTokens,
+  getToken as readAccessToken,
+  hasValidAccessToken,
+  setTokens,
+} from './tokenStorage'
 
 export async function register({ email, password, displayName, tenantId }) {
   const res = await api.post('/auth/register', {
@@ -18,11 +24,7 @@ export async function login({ email, password }) {
   const res = await api.post('/auth/login', { email, password })
   const { access_token, refresh_token, expires_in } = res.data
 
-  localStorage.setItem('airex-token', access_token)
-  if (refresh_token) {
-    localStorage.setItem('airex-refresh-token', refresh_token)
-  }
-  localStorage.setItem('airex-token-expiry', String(Date.now() + expires_in * 1000))
+  setTokens({ accessToken: access_token, refreshToken: refresh_token, expiresIn: expires_in })
 
   return res.data
 }
@@ -34,26 +36,19 @@ export async function refreshToken() {
   const res = await api.post('/auth/refresh', { refresh_token: rt })
   const { access_token, expires_in } = res.data
 
-  localStorage.setItem('airex-token', access_token)
-  localStorage.setItem('airex-token-expiry', String(Date.now() + expires_in * 1000))
+  setTokens({ accessToken: access_token, expiresIn: expires_in })
 
   return res.data
 }
 
 export function logout() {
-  localStorage.removeItem('airex-token')
-  localStorage.removeItem('airex-refresh-token')
-  localStorage.removeItem('airex-token-expiry')
+  clearTokens()
 }
 
 export function isAuthenticated() {
-  const token = localStorage.getItem('airex-token')
-  const expiry = localStorage.getItem('airex-token-expiry')
-  if (!token) return false
-  if (expiry && Date.now() > Number(expiry)) return false
-  return true
+  return hasValidAccessToken()
 }
 
 export function getToken() {
-  return localStorage.getItem('airex-token')
+  return readAccessToken()
 }

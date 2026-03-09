@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react'
-import { login as apiLogin, logout as apiLogout, getToken, refreshToken } from '../services/auth'
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
+import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken } from '../services/auth'
+import { getRefreshToken, getValidAccessToken } from '../services/tokenStorage'
 
 const AuthContext = createContext()
 
@@ -29,19 +30,19 @@ function parseTokenUser(t) {
 
 function getInitialUser() {
   if (BYPASS_AUTH) return DEV_USER
-  const t = getToken()
+  const t = getValidAccessToken()
   return t ? parseTokenUser(t) : null
 }
 
 function getInitialToken() {
   if (BYPASS_AUTH) return 'dev-token'
-  return getToken() || null
+  return getValidAccessToken() || null
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(getInitialUser)
   const [token, setToken] = useState(getInitialToken)
-  const loading = false
+  const [loading, setLoading] = useState(() => !BYPASS_AUTH && !getValidAccessToken() && !!getRefreshToken())
 
   const login = useCallback(async ({ email, password }) => {
     const res = await apiLogin({ email, password })
@@ -62,7 +63,7 @@ export function AuthProvider({ children }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await refreshToken()
+      const res = await apiRefreshToken()
       const parsed = parseTokenUser(res.access_token)
       setUser(parsed)
       setToken(res.access_token)
@@ -70,6 +71,45 @@ export function AuthProvider({ children }) {
       logout()
     }
   }, [logout])
+
+  useEffect(() => {
+    if (BYPASS_AUTH || token) {
+      setLoading(false)
+      return
+    }
+
+    if (!getRefreshToken()) {
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    async function bootstrapSession() {
+      setLoading(true)
+      try {
+        const res = await apiRefreshToken()
+        if (cancelled) return
+        const parsed = parseTokenUser(res.access_token)
+        setUser(parsed)
+        setToken(res.access_token)
+      } catch {
+        if (!cancelled) {
+          logout()
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    bootstrapSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [logout, token])
 
   const isAuth = BYPASS_AUTH ? true : !!token
 

@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import structlog
+from jose.exceptions import ExpiredSignatureError
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
@@ -130,6 +131,12 @@ def decode_access_token(token: str) -> TokenData:
         user_id = uuid.UUID(payload["user_id"]) if "user_id" in payload else None
         role = payload.get("role", "operator")
         return TokenData(tenant_id=tenant_id, sub=subject, user_id=user_id, role=role)
+    except ExpiredSignatureError as exc:
+        logger.debug(
+            "auth_access_token_expired",
+            correlation_id=None,
+        )
+        raise ValueError(f"Invalid token: {exc}") from exc
     except (JWTError, KeyError, ValueError) as exc:
         logger.warning(
             "auth_access_token_decode_failed",
@@ -154,6 +161,12 @@ def decode_refresh_token(token: str) -> TokenData:
         tenant_id = uuid.UUID(payload["tenant_id"])
         subject: str = payload["sub"]
         return TokenData(tenant_id=tenant_id, sub=subject)
+    except ExpiredSignatureError as exc:
+        logger.debug(
+            "auth_refresh_token_expired",
+            correlation_id=None,
+        )
+        raise ValueError(f"Invalid refresh token: {exc}") from exc
     except (JWTError, KeyError, ValueError) as exc:
         logger.warning(
             "auth_refresh_token_decode_failed",

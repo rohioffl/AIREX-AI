@@ -8,6 +8,8 @@
  * API does not support custom headers). Falls back to tenant ID.
  */
 
+import { clearAccessToken, getValidAccessToken } from './tokenStorage'
+
 const MAX_RETRY_DELAY = 10000
 const INITIAL_RETRY_DELAY = 300
 const MAX_JITTER = 200
@@ -23,11 +25,13 @@ export function createSSEConnection(handlers, onConnectionChange) {
   function connect() {
     if (closed) return
 
-    const token = localStorage.getItem('airex-token')
+    const token = getValidAccessToken(5000)
     const params = new URLSearchParams()
 
     if (token) {
       params.set('token', token)
+    } else {
+      clearAccessToken()
     }
 
     const url = `/api/v1/events/stream?${params.toString()}`

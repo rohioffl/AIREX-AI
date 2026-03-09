@@ -14,6 +14,7 @@ RUN addgroup -g 1001 -S airex && \
     adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G airex -g airex airex
 
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY apps/web/nginx-main.conf /etc/nginx/nginx.conf
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 
 RUN chown -R airex:airex /usr/share/nginx/html && \

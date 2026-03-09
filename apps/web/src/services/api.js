@@ -1,5 +1,12 @@
 import axios from 'axios'
 
+import {
+  clearAccessToken,
+  getRefreshToken,
+  getValidAccessToken,
+  setTokens,
+} from './tokenStorage'
+
 const api = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
@@ -14,9 +21,12 @@ function getCsrfToken() {
 
 /** Inject auth token or tenant header on every request. */
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('airex-token')
+  const token = getValidAccessToken(5000)
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`
+  } else {
+    clearAccessToken()
+    delete config.headers['Authorization']
   }
   const csrf = getCsrfToken()
   if (csrf) {
@@ -32,17 +42,17 @@ api.interceptors.response.use(
     const original = error.config
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true
-      const refreshToken = localStorage.getItem('airex-refresh-token')
+      const refreshToken = getRefreshToken()
       if (refreshToken) {
         try {
           const res = await axios.post('/api/v1/auth/refresh', {
             refresh_token: refreshToken,
           })
-          localStorage.setItem('airex-token', res.data.access_token)
+          setTokens({ accessToken: res.data.access_token, expiresIn: res.data.expires_in })
           original.headers['Authorization'] = `Bearer ${res.data.access_token}`
           return api(original)
         } catch {
-          localStorage.removeItem('airex-token')
+          clearAccessToken()
           localStorage.removeItem('airex-refresh-token')
         }
       }
