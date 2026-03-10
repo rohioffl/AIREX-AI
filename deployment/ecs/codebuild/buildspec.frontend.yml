@@ -3,8 +3,12 @@ version: 0.2
 env:
   variables:
     AWS_REGION: ap-south-1
-    FRONTEND_BUCKET: airex-prod-frontend
+    # Optional override; if unset we default to "airex-prod-frontend-${ACCOUNT_ID}".
+    FRONTEND_BUCKET: ""
+    # Required: CloudFront distribution id for the frontend bucket.
     CLOUDFRONT_DISTRIBUTION_ID: REPLACE_ME
+    # Secrets Manager secret id containing either a plain client id string, or a Google web credentials JSON.
+    FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID: /airex/prod/frontend/google_oauth_client_id
 
 phases:
   install:
@@ -12,6 +16,34 @@ phases:
       nodejs: 20
   build:
     commands:
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - |
+          if [[ -z "${FRONTEND_BUCKET:-}" ]]; then
+            FRONTEND_BUCKET="airex-prod-frontend-${ACCOUNT_ID}"
+          fi
+      - |
+          RAW_CLIENT_ID_SECRET=$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID" \
+            --query SecretString \
+            --output text)
+
+          export VITE_GOOGLE_CLIENT_ID=$(python3 - <<'PY'
+import json, os
+s = os.environ['RAW_CLIENT_ID_SECRET']
+if s.strip().startswith('{'):
+    data = json.loads(s)
+    # google "web" credentials json
+    if isinstance(data, dict) and isinstance(data.get('web'), dict) and data['web'].get('client_id'):
+        print(data['web']['client_id'])
+    elif isinstance(data, dict) and data.get('client_id'):
+        print(data['client_id'])
+    else:
+        raise SystemExit('Could not extract client_id from JSON secret')
+else:
+    print(s)
+PY
+)
       - npm ci --prefix apps/web
       - npm run build --prefix apps/web
   post_build:
