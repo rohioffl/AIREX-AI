@@ -1,0 +1,44 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:PutObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::airex-prod-codepipeline-547361935557",
+        "arn:aws:s3:::airex-prod-codepipeline-547361935557/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "codebuild:StartBuild",
+        "codebuild:BatchGetBuilds"
+      ],
+      "Resource": [
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-images",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-images-api",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-images-worker",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-deploy",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-db-migrate",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-deploy-api",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-deploy-worker",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-frontend",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-images-litellm",
+        "arn:aws:codebuild:ap-south-1:547361935557:project/airex-prod-deploy-litellm"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "codestar-connections:UseConnection"
+      ],
+      "Resource": "arn:aws:codestar-connections:ap-south-1:547361935557:connection/e18dc1b1-4de5-4187-84f0-254e5a4c3e99"
+    }
+  ]
+}

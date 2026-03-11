@@ -20,6 +20,7 @@ import SetPasswordPage from './pages/SetPasswordPage'
 import NotFoundPage from './pages/NotFoundPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import KnowledgeBasePage from './pages/KnowledgeBasePage'
+import ReportsPage from './pages/ReportsPage'
 
 export default function App() {
   return (
@@ -44,7 +45,9 @@ export default function App() {
                       <Route path="/live" element={<LiveFeed />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/analytics" element={<AnalyticsPage />} />
-                      <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+                      <Route path="/knowledge-base" element={<KnowledgeBasePage />
+        <Route path="/reports" element={<PrivateRoute><ReportsPage /></PrivateRoute>} />
+} />
                       <Route path="/health-checks" element={<HealthChecksPage />} />
                       <Route path="/admin/users" element={
                         <RequireRole roles="admin">

@@ -1,0 +1,34 @@
+{
+  "name": "airex-prod-db-migrate",
+  "source": {
+    "type": "CODEPIPELINE",
+    "buildspec": "deployment/ecs/codebuild/buildspec.db-migrate.yml",
+    "insecureSsl": false
+  },
+  "artifacts": {
+    "type": "CODEPIPELINE",
+    "name": "airex-prod-db-migrate",
+    "packaging": "NONE",
+    "encryptionDisabled": false
+  },
+  "environment": {
+    "type": "LINUX_CONTAINER",
+    "image": "aws/codebuild/standard:7.0",
+    "computeType": "BUILD_GENERAL1_MEDIUM",
+    "privilegedMode": false,
+    "imagePullCredentialsType": "CODEBUILD",
+    "environmentVariables": [
+      { "name": "DATABASE_URL", "value": "/airex/prod/backend/database_url", "type": "SECRETS_MANAGER" }
+    ]
+  },
+  "serviceRole": "arn:aws:iam::547361935557:role/airex-prod-codebuild-deploy-role",
+  "timeoutInMinutes": 60,
+  "queuedTimeoutInMinutes": 480,
+  "encryptionKey": "arn:aws:kms:ap-south-1:547361935557:alias/aws/s3",
+  "cache": { "type": "NO_CACHE" },
+  "vpcConfig": {
+    "vpcId": "vpc-05d39e94669d61871",
+    "subnets": ["subnet-0fd132c3519225981", "subnet-001d594aac89b816c"],
+    "securityGroupIds": ["sg-0294a1d44e61d4fb5"]
+  }
+}

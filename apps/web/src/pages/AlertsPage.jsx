@@ -12,6 +12,7 @@ import AlertRow from '../components/alert/AlertRow'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
 import { useAuth } from '../context/AuthContext'
+import CreateIncidentModal from '../components/incident/CreateIncidentModal'
 
 const ACTION_STATES = ['RECOMMENDATION_READY', 'AWAITING_APPROVAL']
 const INVESTIGATING_STATES = ['RECEIVED', 'INVESTIGATING']
@@ -43,6 +44,7 @@ export default function AlertsPage() {
     host_key: hostFilter || null
   })
   const [alertFilter, setAlertFilter] = useState('all')
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const [sortBy, setSortBy] = useState('created_desc')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState({
@@ -237,6 +239,15 @@ export default function AlertsPage() {
 
       {hostFilter && (
         <div className="glass rounded-xl p-4 flex items-center justify-between" style={{ borderLeft: '3px solid rgba(99,102,241,0.4)' }}>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="px-4 py-2 rounded-lg text-white flex items-center gap-2 transition-colors ml-auto"
+          style={{ background: '#34d399', fontSize: 13 }}
+        >
+          <Plus size={16} />
+          Create Incident
+        </button>
+
           <div className="flex items-center gap-2">
             <Server size={14} style={{ color: '#818cf8' }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>

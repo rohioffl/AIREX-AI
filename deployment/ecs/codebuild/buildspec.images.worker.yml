@@ -1,0 +1,31 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: ap-south-1
+    ECR_WORKER_REPO: airex-prod-worker
+
+phases:
+  pre_build:
+    commands:
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - ECR_REGISTRY=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+      - docker pull public.ecr.aws/docker/library/python:3.12-slim && docker tag public.ecr.aws/docker/library/python:3.12-slim python:3.12-slim
+      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}
+  build:
+    commands:
+      - |
+          if [ -f services/airex-worker/Dockerfile ]; then
+            docker build -f services/airex-worker/Dockerfile -t $ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG .
+          else
+            docker build --target worker -f services/backend/Dockerfile -t $ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG .
+          fi
+  post_build:
+    commands:
+      - docker push $ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG
+      - printf '{"imageTag":"%s"}' "$IMAGE_TAG" > image-detail-worker.json
+
+artifacts:
+  files:
+    - image-detail-worker.json

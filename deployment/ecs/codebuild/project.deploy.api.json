@@ -1,0 +1,50 @@
+{
+  "name": "airex-prod-deploy-api",
+  "source": {
+    "type": "CODEPIPELINE",
+    "buildspec": "deployment/ecs/codebuild/buildspec.deploy.api.yml",
+    "insecureSsl": false
+  },
+  "artifacts": {
+    "type": "CODEPIPELINE",
+    "name": "airex-prod-deploy-api",
+    "packaging": "NONE",
+    "encryptionDisabled": false
+  },
+  "environment": {
+    "type": "LINUX_CONTAINER",
+    "image": "aws/codebuild/standard:7.0",
+    "computeType": "BUILD_GENERAL1_MEDIUM",
+    "privilegedMode": false,
+    "imagePullCredentialsType": "CODEBUILD",
+    "environmentVariables": [
+      { "name": "AWS_REGION", "value": "ap-south-1", "type": "PLAINTEXT" },
+      { "name": "ECR_API_REPO", "value": "airex-prod-api", "type": "PLAINTEXT" },
+      { "name": "ECS_CLUSTER", "value": "airex-prod-cluster", "type": "PLAINTEXT" },
+      { "name": "ECS_SERVICE_API", "value": "airex-prod-api", "type": "PLAINTEXT" },
+      { "name": "EXECUTION_ROLE_ARN", "value": "arn:aws:iam::547361935557:role/airex-prod-ecs-execution-role", "type": "PLAINTEXT" },
+      { "name": "TASK_ROLE_ARN", "value": "arn:aws:iam::547361935557:role/airex-prod-ecs-task-role", "type": "PLAINTEXT" },
+      { "name": "TASKDEF_FAMILY_API", "value": "airex-prod-api", "type": "PLAINTEXT" },
+      { "name": "LOG_GROUP_API", "value": "/ecs/airex-prod-api", "type": "PLAINTEXT" },
+      { "name": "LLM_BASE_URL", "value": "https://airex-litellm.ankercloud.com/v1", "type": "PLAINTEXT" },
+      { "name": "LLM_PRIMARY_MODEL", "value": "gemini-2.0-flash", "type": "PLAINTEXT" },
+      { "name": "LLM_FALLBACK_MODEL", "value": "nova-lite", "type": "PLAINTEXT" },
+      { "name": "LLM_EMBEDDING_MODEL", "value": "text-embedding", "type": "PLAINTEXT" },
+      { "name": "CORS_ORIGINS", "value": "https://airex.ankercloud.com", "type": "PLAINTEXT" },
+      { "name": "SECRET_DATABASE_URL_ARN", "value": "arn:aws:secretsmanager:ap-south-1:547361935557:secret:/airex/prod/backend/database_url-q2ZkxJ", "type": "PLAINTEXT" },
+      { "name": "SECRET_REDIS_URL_ARN", "value": "arn:aws:secretsmanager:ap-south-1:547361935557:secret:/airex/prod/backend/redis_url-BF9Pew", "type": "PLAINTEXT" },
+      { "name": "SECRET_APP_SECRET_KEY_ARN", "value": "arn:aws:secretsmanager:ap-south-1:547361935557:secret:/airex/prod/backend/secret_key-CDmpEw", "type": "PLAINTEXT" },
+      { "name": "SECRET_LITELLM_MASTER_KEY_ARN", "value": "arn:aws:secretsmanager:ap-south-1:547361935557:secret:/airex/prod/litellm/master_key-Ypo9CU", "type": "PLAINTEXT" }
+    ]
+  },
+  "serviceRole": "arn:aws:iam::547361935557:role/airex-prod-codebuild-deploy-role",
+  "timeoutInMinutes": 60,
+  "queuedTimeoutInMinutes": 480,
+  "encryptionKey": "arn:aws:kms:ap-south-1:547361935557:alias/aws/s3",
+  "cache": { "type": "NO_CACHE" },
+  "vpcConfig": {
+    "vpcId": "vpc-05d39e94669d61871",
+    "subnets": ["subnet-0fd132c3519225981", "subnet-001d594aac89b816c"],
+    "securityGroupIds": ["sg-0294a1d44e61d4fb5"]
+  }
+}

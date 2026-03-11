@@ -1,0 +1,30 @@
+{
+  "name": "airex-prod-images-api",
+  "source": {
+    "type": "CODEPIPELINE",
+    "buildspec": "deployment/ecs/codebuild/buildspec.images.api.yml",
+    "insecureSsl": false
+  },
+  "artifacts": {
+    "type": "CODEPIPELINE",
+    "name": "airex-prod-images-api",
+    "packaging": "NONE",
+    "encryptionDisabled": false
+  },
+  "environment": {
+    "type": "LINUX_CONTAINER",
+    "image": "aws/codebuild/standard:7.0",
+    "computeType": "BUILD_GENERAL1_LARGE",
+    "privilegedMode": true,
+    "imagePullCredentialsType": "CODEBUILD",
+    "environmentVariables": [
+      { "name": "AWS_REGION", "value": "ap-south-1", "type": "PLAINTEXT" },
+      { "name": "ECR_API_REPO", "value": "airex-prod-api", "type": "PLAINTEXT" }
+    ]
+  },
+  "serviceRole": "arn:aws:iam::547361935557:role/airex-prod-codebuild-images-role",
+  "timeoutInMinutes": 60,
+  "queuedTimeoutInMinutes": 480,
+  "encryptionKey": "arn:aws:kms:ap-south-1:547361935557:alias/aws/s3",
+  "cache": { "type": "NO_CACHE" }
+}

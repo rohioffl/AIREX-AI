@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airex-api"
+version = "0.1.0"
+description = "AIREX API service"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn[standard]>=0.34.0,<1.0.0",
+    "sse-starlette>=2.2.0,<3.0.0",
+    "python-multipart>=0.0.20,<1.0.0",
+]

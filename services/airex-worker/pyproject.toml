@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airex-worker"
+version = "0.1.0"
+description = "AIREX Worker service"
+requires-python = ">=3.12"
+dependencies = [
+    "arq>=0.26.1,<1.0.0",
+]

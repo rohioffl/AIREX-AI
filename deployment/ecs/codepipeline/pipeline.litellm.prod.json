@@ -1,0 +1,93 @@
+{
+  "pipeline": {
+    "name": "airex-prod-litellm",
+    "roleArn": "arn:aws:iam::547361935557:role/airex-prod-codepipeline-role",
+    "artifactStore": {
+      "type": "S3",
+      "location": "airex-prod-codepipeline-547361935557"
+    },
+    "version": 1,
+    "stages": [
+      {
+        "name": "Source",
+        "actions": [
+          {
+            "name": "GitHubSource",
+            "actionTypeId": {
+              "category": "Source",
+              "owner": "AWS",
+              "provider": "CodeStarSourceConnection",
+              "version": "1"
+            },
+            "configuration": {
+              "ConnectionArn": "arn:aws:codestar-connections:ap-south-1:547361935557:connection/e18dc1b1-4de5-4187-84f0-254e5a4c3e99",
+              "FullRepositoryId": "anker-cloud/airex",
+              "BranchName": "main"
+            },
+            "outputArtifacts": [
+              {
+                "name": "SourceArtifact"
+              }
+            ],
+            "runOrder": 1
+          }
+        ]
+      },
+      {
+        "name": "BuildLitellm",
+        "actions": [
+          {
+            "name": "BuildAndPushLitellm",
+            "actionTypeId": {
+              "category": "Build",
+              "owner": "AWS",
+              "provider": "CodeBuild",
+              "version": "1"
+            },
+            "configuration": {
+              "ProjectName": "airex-prod-images-litellm"
+            },
+            "inputArtifacts": [
+              {
+                "name": "SourceArtifact"
+              }
+            ],
+            "outputArtifacts": [
+              {
+                "name": "ImageArtifact"
+              }
+            ],
+            "runOrder": 1
+          }
+        ]
+      },
+      {
+        "name": "DeployLitellm",
+        "actions": [
+          {
+            "name": "DeployLitellmEcs",
+            "actionTypeId": {
+              "category": "Build",
+              "owner": "AWS",
+              "provider": "CodeBuild",
+              "version": "1"
+            },
+            "configuration": {
+              "ProjectName": "airex-prod-deploy-litellm",
+              "PrimarySource": "SourceArtifact"
+            },
+            "inputArtifacts": [
+              {
+                "name": "SourceArtifact"
+              },
+              {
+                "name": "ImageArtifact"
+              }
+            ],
+            "runOrder": 1
+          }
+        ]
+      }
+    ]
+  }
+}

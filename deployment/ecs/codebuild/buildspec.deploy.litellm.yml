@@ -1,0 +1,41 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: ap-south-1
+    ECS_CLUSTER: airex-prod-cluster
+    ECS_SERVICE_LITELLM: airex-prod-litellm
+
+phases:
+  install:
+    commands:
+      - chmod +x deployment/ecs/scripts/*.sh
+  build:
+    commands:
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - |
+          if [ -f image-detail-litellm.json ]; then
+            IMAGE_TAG=$(python3 -c 'import json; print(json.load(open("image-detail-litellm.json"))["imageTag"])')
+          else
+            IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}
+          fi
+      - ECR_REGISTRY=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - export LITELLM_IMAGE=$ECR_REGISTRY/$ECR_LITELLM_REPO:$IMAGE_TAG
+      - OUT_DIR=deployment/ecs/.rendered-task-definitions
+      - mkdir -p "$OUT_DIR"
+      - |
+          sed \
+            -e "s|__AWS_REGION__|$AWS_REGION|g" \
+            -e "s|__LITELLM_IMAGE__|$LITELLM_IMAGE|g" \
+            -e "s|__EXECUTION_ROLE_ARN__|$EXECUTION_ROLE_ARN|g" \
+            -e "s|__TASK_ROLE_ARN__|$TASK_ROLE_ARN|g" \
+            -e "s|__TASKDEF_FAMILY_LITELLM__|$TASKDEF_FAMILY_LITELLM|g" \
+            -e "s|__LOG_GROUP_LITELLM__|$LOG_GROUP_LITELLM|g" \
+            -e "s|__SECRET_LITELLM_MASTER_KEY_ARN__|$SECRET_LITELLM_MASTER_KEY_ARN|g" \
+            -e "s|__SECRET_GEMINI_API_KEY_ARN__|$SECRET_GEMINI_API_KEY_ARN|g" \
+            -e "s|__SECRET_LANGFUSE_PUBLIC_KEY_ARN__|$SECRET_LANGFUSE_PUBLIC_KEY_ARN|g" \
+            -e "s|__SECRET_LANGFUSE_SECRET_KEY_ARN__|$SECRET_LANGFUSE_SECRET_KEY_ARN|g" \
+            -e "s|__LANGFUSE_HOST__|$LANGFUSE_HOST|g" \
+            deployment/ecs/task-definitions/airex-litellm.json > "$OUT_DIR/airex-litellm.json"
+      - LITELLM_TASKDEF_ARN=$(aws ecs register-task-definition --cli-input-json "file://$OUT_DIR/airex-litellm.json" --query 'taskDefinition.taskDefinitionArn' --output text)
+      - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE_LITELLM" --task-definition "$LITELLM_TASKDEF_ARN" --force-new-deployment

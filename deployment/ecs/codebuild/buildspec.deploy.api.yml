@@ -1,0 +1,45 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: ap-south-1
+    ECS_CLUSTER: airex-prod-cluster
+    ECS_SERVICE_API: airex-prod-api
+
+phases:
+  install:
+    commands:
+      - python3 -m pip install --upgrade pip
+  build:
+    commands:
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - |
+          if [ -f image-detail-api.json ]; then
+            IMAGE_TAG=$(python3 -c 'import json; print(json.load(open("image-detail-api.json"))["imageTag"])')
+          else
+            IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}
+          fi
+      - ECR_REGISTRY=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - API_IMAGE=$ECR_REGISTRY/$ECR_API_REPO:$IMAGE_TAG
+      - OUT_DIR=deployment/ecs/.rendered-task-definitions
+      - mkdir -p "$OUT_DIR"
+      - |
+          sed \
+            -e "s|__AWS_REGION__|$AWS_REGION|g" \
+            -e "s|__API_IMAGE__|$API_IMAGE|g" \
+            -e "s|__EXECUTION_ROLE_ARN__|$EXECUTION_ROLE_ARN|g" \
+            -e "s|__TASK_ROLE_ARN__|$TASK_ROLE_ARN|g" \
+            -e "s|__TASKDEF_FAMILY_API__|$TASKDEF_FAMILY_API|g" \
+            -e "s|__LOG_GROUP_API__|$LOG_GROUP_API|g" \
+            -e "s|__SECRET_DATABASE_URL_ARN__|$SECRET_DATABASE_URL_ARN|g" \
+            -e "s|__SECRET_REDIS_URL_ARN__|$SECRET_REDIS_URL_ARN|g" \
+            -e "s|__SECRET_APP_SECRET_KEY_ARN__|$SECRET_APP_SECRET_KEY_ARN|g" \
+            -e "s|__SECRET_LITELLM_MASTER_KEY_ARN__|$SECRET_LITELLM_MASTER_KEY_ARN|g" \
+            -e "s|__LLM_BASE_URL__|$LLM_BASE_URL|g" \
+            -e "s|__LLM_PRIMARY_MODEL__|$LLM_PRIMARY_MODEL|g" \
+            -e "s|__LLM_FALLBACK_MODEL__|$LLM_FALLBACK_MODEL|g" \
+            -e "s|__LLM_EMBEDDING_MODEL__|$LLM_EMBEDDING_MODEL|g" \
+            -e "s|__CORS_ORIGINS__|$CORS_ORIGINS|g" \
+            deployment/ecs/task-definitions/airex-api.json > "$OUT_DIR/airex-api.json"
+      - API_TASKDEF_ARN=$(aws ecs register-task-definition --cli-input-json "file://$OUT_DIR/airex-api.json" --query 'taskDefinition.taskDefinitionArn' --output text)
+      - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE_API" --task-definition "$API_TASKDEF_ARN" --force-new-deployment

@@ -79,6 +79,12 @@ export async function fetchIncident(id) {
   return res.data
 }
 
+export async function createIncident(data, templateId = null) {
+  const params = templateId ? { template_id: templateId } : {}
+  const res = await api.post('/incidents/', data, { params })
+  return res.data
+}
+
 export async function approveIncident(id, action, idempotencyKey) {
   const res = await api.post(`/incidents/${id}/approve`, {
     action,
@@ -352,3 +358,34 @@ export async function deleteKnowledgeBaseEntry(entryId) {
 }
 
 export default api
+
+// Report templates
+export async function fetchReports(activeOnly = false) {
+  const res = await api.get('/reports', { params: { active_only: activeOnly } })
+  return res.data
+}
+
+export async function getReport(templateId) {
+  const res = await api.get(`/reports/${templateId}`)
+  return res.data
+}
+
+export async function createReport(data) {
+  const res = await api.post('/reports', data)
+  return res.data
+}
+
+export async function updateReport(templateId, data) {
+  const res = await api.put(`/reports/${templateId}`, data)
+  return res.data
+}
+
+export async function deleteReport(templateId) {
+  await api.delete(`/reports/${templateId}`)
+}
+
+export async function generateReport(templateId) {
+  const res = await api.post(`/reports/${templateId}/generate`)
+  return res.data
+}
+
