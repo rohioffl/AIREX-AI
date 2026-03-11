@@ -46,8 +46,11 @@ module "platform" {
   llm_primary_model        = var.llm_primary_model
   llm_fallback_model       = var.llm_fallback_model
   llm_embedding_model      = var.llm_embedding_model
+  frontend_url             = var.frontend_url
 }
 
+frontend_url = var.frontend_url
+  }
 module "frontend" {
   source = "../../modules/frontend"
 

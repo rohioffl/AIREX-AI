@@ -179,6 +179,7 @@ fi
 if [[ "$SKIP_MIGRATIONS" != "true" ]]; then
   echo "Running database migrations..."
   export DATABASE_URL="$(aws secretsmanager get-secret-value --region "$AWS_REGION" --secret-id "$BACKEND_DATABASE_URL_SECRET_ID" --query SecretString --output text)"
+  export PYTHONPATH="$REPO_ROOT/services/airex-core:$PYTHONPATH"
   VENV_DIR="$ROOT_DIR/.manual-deploy-venv"
   if [[ ! -d "$VENV_DIR" ]]; then
     python3 -m venv "$VENV_DIR"
@@ -186,8 +187,12 @@ if [[ "$SKIP_MIGRATIONS" != "true" ]]; then
   # shellcheck disable=SC1091
   source "$VENV_DIR/bin/activate"
   pip install --upgrade pip >/dev/null
-  pip install -r "$REPO_ROOT/services/airex-api/requirements.txt" >/dev/null
-  alembic -c "$REPO_ROOT/database/alembic.ini" upgrade head
+  # Install airex-core first (shared models required by Alembic)
+  pip install -e "$REPO_ROOT/services/airex-core/" >/dev/null
+  # Install API requirements (includes all ORM deps)
+  grep -v "^-e " "$REPO_ROOT/services/airex-api/requirements.txt" > /tmp/req.txt
+  pip install -r /tmp/req.txt >/dev/null
+  alembic -c "$REPO_ROOT/database/alembic.ini" upgrade heads
   deactivate
 fi
 

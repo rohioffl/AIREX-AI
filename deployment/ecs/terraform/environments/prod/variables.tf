@@ -219,3 +219,9 @@ variable "database_username" {
   type        = string
   default     = "airexadmin"
 }
+variable "frontend_url" {
+  description = "Frontend URL for invitation links and email notifications"
+  type        = string
+  default     = ""
+}
+

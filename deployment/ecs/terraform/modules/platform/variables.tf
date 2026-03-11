@@ -27,6 +27,12 @@ variable "llm_primary_model" { type = string }
 variable "llm_fallback_model" { type = string }
 variable "llm_embedding_model" { type = string }
 
+variable "frontend_url" {
+  description = "Frontend URL for invitation links and email notifications"
+  type        = string
+  default     = "http://localhost:5173"
+}
+
 locals {
   name_prefix              = "${var.project_name}-${var.environment}"
   custom_domains_enabled   = var.enable_custom_domains

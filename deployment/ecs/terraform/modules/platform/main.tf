@@ -40,6 +40,13 @@ resource "aws_ssm_parameter" "langfuse_host" {
   tags  = local.tags
 }
 
+resource "aws_ssm_parameter" "frontend_url" {
+  name  = "/${var.project_name}/${var.environment}/app/frontend_url"
+  type  = "String"
+  value = var.frontend_url
+  tags  = local.tags
+}
+
 resource "aws_secretsmanager_secret" "backend_database_url" {
   name = "/${var.project_name}/${var.environment}/backend/database_url"
   tags = local.tags
@@ -82,6 +89,46 @@ resource "aws_secretsmanager_secret" "langfuse_public_key" {
 
 resource "aws_secretsmanager_secret" "langfuse_secret_key" {
   name = "/${var.project_name}/${var.environment}/langfuse/secret_key"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret" "email_smtp_host" {
+  name = "/${var.project_name}/${var.environment}/backend/email_smtp_host"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret" "email_smtp_port" {
+  name = "/${var.project_name}/${var.environment}/backend/email_smtp_port"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret" "email_smtp_user" {
+  name = "/${var.project_name}/${var.environment}/backend/email_smtp_user"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret" "email_smtp_password" {
+  name = "/${var.project_name}/${var.environment}/backend/email_smtp_password"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret" "email_from" {
+  name = "/${var.project_name}/${var.environment}/backend/email_from"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret" "site24x7_client_id" {
+  name = "/${var.project_name}/${var.environment}/backend/site24x7_client_id"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret" "site24x7_client_secret" {
+  name = "/${var.project_name}/${var.environment}/backend/site24x7_client_secret"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret" "site24x7_refresh_token" {
+  name = "/${var.project_name}/${var.environment}/backend/site24x7_refresh_token"
   tags = local.tags
 }
 
@@ -181,6 +228,14 @@ data "aws_iam_policy_document" "execution_secrets_access" {
       aws_secretsmanager_secret.langfuse_salt.arn,
       aws_secretsmanager_secret.langfuse_public_key.arn,
       aws_secretsmanager_secret.langfuse_secret_key.arn,
+      aws_secretsmanager_secret.email_smtp_host.arn,
+      aws_secretsmanager_secret.email_smtp_port.arn,
+      aws_secretsmanager_secret.email_smtp_user.arn,
+      aws_secretsmanager_secret.email_smtp_password.arn,
+      aws_secretsmanager_secret.email_from.arn,
+      aws_secretsmanager_secret.site24x7_client_id.arn,
+      aws_secretsmanager_secret.site24x7_client_secret.arn,
+      aws_secretsmanager_secret.site24x7_refresh_token.arn,
       aws_ssm_parameter.cors_origins.arn,
       aws_ssm_parameter.llm_primary_model.arn,
       aws_ssm_parameter.llm_fallback_model.arn,
@@ -230,48 +285,7 @@ resource "aws_ecs_task_definition" "api" {
       essential    = true
       portMappings = [{ containerPort = 8000, protocol = "tcp" }]
       environment = [
-        { name = "LLM_BASE_URL", value = aws_ssm_parameter.litellm_host.value },
-        { name = "LLM_PRIMARY_MODEL", value = aws_ssm_parameter.llm_primary_model.value },
-        { name = "LLM_FALLBACK_MODEL", value = aws_ssm_parameter.llm_fallback_model.value },
-        { name = "LLM_EMBEDDING_MODEL", value = aws_ssm_parameter.llm_embedding_model.value },
-        { name = "CORS_ORIGINS", value = aws_ssm_parameter.cors_origins.value }
-      ]
-      secrets = [
-        { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.backend_database_url.arn },
-        { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.backend_redis_url.arn },
-        { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.backend_secret_key.arn },
-        { name = "LLM_API_KEY", valueFrom = aws_secretsmanager_secret.litellm_master_key.arn }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.api.name
-          awslogs-region        = var.aws_region
-          awslogs-stream-prefix = "ecs"
-        }
-      }
-    }
-  ])
-
-  tags = local.tags
-}
-
-resource "aws_ecs_task_definition" "worker" {
-  family                   = "${local.name_prefix}-worker"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = "1024"
-  memory                   = "2048"
-  network_mode             = "awsvpc"
-  execution_role_arn       = aws_iam_role.execution_role.arn
-  task_role_arn            = aws_iam_role.task_role.arn
-
-  container_definitions = jsonencode([
-    {
-      name      = "worker"
-      image     = var.worker_image
-      command   = ["arq", "app.core.worker.WorkerSettings"]
-      essential = true
-      environment = [
+        { name = "PYTHONPATH", value = "/app" },
         { name = "LLM_BASE_URL", value = aws_ssm_parameter.litellm_host.value },
         { name = "LLM_PRIMARY_MODEL", value = aws_ssm_parameter.llm_primary_model.value },
         { name = "LLM_FALLBACK_MODEL", value = aws_ssm_parameter.llm_fallback_model.value },
@@ -280,7 +294,16 @@ resource "aws_ecs_task_definition" "worker" {
       secrets = [
         { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.backend_database_url.arn },
         { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.backend_redis_url.arn },
-        { name = "LLM_API_KEY", valueFrom = aws_secretsmanager_secret.litellm_master_key.arn }
+        { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.backend_secret_key.arn },
+        { name = "LLM_API_KEY", valueFrom = aws_secretsmanager_secret.litellm_master_key.arn },
+        { name = "EMAIL_SMTP_HOST", valueFrom = aws_secretsmanager_secret.email_smtp_host.arn },
+        { name = "EMAIL_SMTP_PORT", valueFrom = aws_secretsmanager_secret.email_smtp_port.arn },
+        { name = "EMAIL_SMTP_USER", valueFrom = aws_secretsmanager_secret.email_smtp_user.arn },
+        { name = "EMAIL_SMTP_PASSWORD", valueFrom = aws_secretsmanager_secret.email_smtp_password.arn },
+        { name = "EMAIL_FROM", valueFrom = aws_secretsmanager_secret.email_from.arn },
+        { name = "SITE24X7_CLIENT_ID", valueFrom = aws_secretsmanager_secret.site24x7_client_id.arn },
+        { name = "SITE24X7_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.site24x7_client_secret.arn },
+        { name = "SITE24X7_REFRESH_TOKEN", valueFrom = aws_secretsmanager_secret.site24x7_refresh_token.arn }
       ]
       logConfiguration = {
         logDriver = "awslogs"
