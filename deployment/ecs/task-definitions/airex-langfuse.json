@@ -19,7 +19,8 @@
       ],
       "environment": [
         { "name": "NEXTAUTH_URL", "value": "__NEXTAUTH_URL__" },
-        { "name": "TELEMETRY_ENABLED", "value": "false" }
+        { "name": "TELEMETRY_ENABLED", "value": "false" },
+        { "name": "LANGFUSE_DISABLE_SIGNUP", "value": "true" }
       ],
       "secrets": [
         { "name": "DATABASE_URL", "valueFrom": "__SECRET_LANGFUSE_DATABASE_URL_ARN__" },

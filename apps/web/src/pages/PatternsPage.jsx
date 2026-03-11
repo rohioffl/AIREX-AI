@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Layers, TrendingUp, TrendingDown, Minus, AlertTriangle, Activity, Eye, Shield, Cpu, BarChart3 } from 'lucide-react'
 import { fetchPatterns, fetchAnomalies, predictRootCause, getPredictionAccuracy } from '../services/api'
-import { useToast } from '../context/ToastContext'
+import { useToasts } from '../context/ToastContext'
 import { useNavigate } from 'react-router-dom'
 
 const SEVERITY_COLORS = {
@@ -126,7 +126,7 @@ export default function PatternsPage() {
   const [loading, setLoading] = useState(true)
   const [windowDays, setWindowDays] = useState(30)
   const [predAlertType, setPredAlertType] = useState('')
-  const { addToast } = useToast()
+  const { addToast } = useToasts()
 
   const loadPatterns = useCallback(async () => {
     try {

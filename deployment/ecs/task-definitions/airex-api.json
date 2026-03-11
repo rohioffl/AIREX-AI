@@ -22,7 +22,8 @@
         { "name": "LLM_PRIMARY_MODEL", "value": "__LLM_PRIMARY_MODEL__" },
         { "name": "LLM_FALLBACK_MODEL", "value": "__LLM_FALLBACK_MODEL__" },
         { "name": "LLM_EMBEDDING_MODEL", "value": "__LLM_EMBEDDING_MODEL__" },
-        { "name": "CORS_ORIGINS", "value": "__CORS_ORIGINS__" }
+        { "name": "CORS_ORIGINS", "value": "__CORS_ORIGINS__" },
+        { "name": "GOOGLE_OAUTH_CLIENT_ID", "value": "__GOOGLE_OAUTH_CLIENT_ID__" }
       ],
       "secrets": [
         { "name": "DATABASE_URL", "valueFrom": "__SECRET_DATABASE_URL_ARN__" },

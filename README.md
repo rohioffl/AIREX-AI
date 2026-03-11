@@ -24,20 +24,21 @@ AIREX is designed to reduce mean time to resolution for operational incidents wi
 ## Current Monorepo Layout
 
 ```text
-apps/web/                React + Vite frontend + Dockerfile
-config/                  Configuration files (tenants, credentials)
+services/
+  airex-core/            Shared Python package (models, services, core, schemas, actions, cloud, investigations, llm, rag, monitoring)
+  airex-api/             FastAPI service package + Dockerfile (23 API routers)
+  airex-worker/          ARQ worker service package + Dockerfile (6 background tasks)
+  litellm/               LiteLLM container config
+  langfuse/              Langfuse deployment notes
+apps/web/                React 19 + Vite 7 frontend + Dockerfile (19 pages, 165 tests)
+database/                Alembic migrations (21 applied) and standalone migration image
+tests/                   Backend pytest suite (525 tests passing)
+e2e/                     Playwright end-to-end tests
 scripts/                 Utility scripts (admin user creation, etc.)
-tests/                   Test suite
-database/                Alembic migrations and standalone migration image
-services/airex-core/     Shared Python package (models/services/core/schemas/integrations)
-services/airex-api/      FastAPI service package + Dockerfile
-services/airex-worker/   ARQ worker service package + Dockerfile
-services/litellm/        LiteLLM container config
-services/langfuse/       Langfuse deployment notes
-deployment/              ECS and CodeBuild assets
+config/                  Configuration files (tenants, credentials)
+deployment/              ECS Terraform + CodePipeline + CodeBuild assets
 docs/                    Project architecture, skills, and runbooks
 infra/                   Prometheus, Grafana, and AI platform config
-e2e/                     Playwright end-to-end tests
 ```
 
 ## Architecture Overview
@@ -55,18 +56,22 @@ e2e/                     Playwright end-to-end tests
 - LiteLLM for model routing and external AI provider access.
 - Prometheus, Grafana, and Alertmanager for observability.
 
-### Incident Lifecycle
+### Incident Lifecycle (11 States)
 `RECEIVED -> INVESTIGATING -> RECOMMENDATION_READY -> AWAITING_APPROVAL -> EXECUTING -> VERIFYING -> RESOLVED`
 
-Failure states remain explicit: `FAILED_ANALYSIS`, `FAILED_EXECUTION`, `FAILED_VERIFICATION`, and `REJECTED` for human-driven rejection.
+Failure states remain explicit: `FAILED_ANALYSIS` (retryable), `FAILED_EXECUTION`, `FAILED_VERIFICATION` (retryable), and `REJECTED` (human-driven rejection).
+
+Terminal states: `RESOLVED`, `REJECTED`  
+Retryable states: `FAILED_ANALYSIS`, `FAILED_VERIFICATION`
 
 ## Safety Principles
 
-- Deterministic actions only; no arbitrary shell generated from LLM output.
-- Incident state changes must go through `transition_state(...)` helpers.
-- Structured logging and correlation IDs are required across backend flows.
-- Cloud access must avoid hardcoded credentials.
-- Tenant-safe code patterns stay in place even though the current runtime uses the DEV tenant `00000000-0000-0000-0000-000000000000`.
+- **Deterministic actions only** — 12 whitelisted actions in ACTION_REGISTRY, no arbitrary shell from LLM output
+- **State machine is law** — All incident state changes must go through `transition_state(...)` helpers with immutable audit trail
+- **Zero-trust cloud** — No stored credentials, IAM roles/Workload Identity only
+- **Structured logging** — JSON logs with correlation IDs across all backend flows
+- **Policy-first execution** — Confidence-based auto-approval with senior approval gates
+- **Tenant-safe patterns** — Code remains tenant-safe even in single-tenant mode (DEV tenant `00000000-0000-0000-0000-000000000000`)
 
 ## Local Development
 
@@ -121,12 +126,15 @@ docker-compose run migrate
 ### Backend
 
 ```bash
+# Lint + type check
 cd services/airex-core
-python3 -m compileall airex_core
+ruff check airex_core/
+mypy airex_core/ --ignore-missing-imports
 
-# transitional test suite location
-cd ../../backend
+# Tests (525 passing)
+cd tests
 pytest
+python -m pytest tests/test_state_machine.py
 ```
 
 ### Frontend
@@ -134,7 +142,7 @@ pytest
 ```bash
 cd apps/web
 npm run lint
-npm run test -- --run
+npm run test -- --run  # 165 tests
 npm run build
 ```
 

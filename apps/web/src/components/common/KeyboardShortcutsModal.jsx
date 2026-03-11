@@ -1,4 +1,4 @@
-import { X, Search, CheckCircle, XCircle, HelpCircle, Plus, Users, Escape } from 'lucide-react'
+import { X, Search, CheckCircle, XCircle, HelpCircle, Plus, Users } from 'lucide-react'
 
 export default function KeyboardShortcutsModal({ onClose }) {
   const shortcuts = [
@@ -8,7 +8,7 @@ export default function KeyboardShortcutsModal({ onClose }) {
     { key: 'n', description: 'New incident (on alerts page)', icon: Plus },
     { key: 'u', description: 'User management (admin only)', icon: Users },
     { key: '?', description: 'Show this help modal', icon: HelpCircle },
-    { key: 'Esc', description: 'Close modals/dropdowns', icon: Escape },
+    { key: 'Esc', description: 'Close modals/dropdowns', icon: X },
   ]
 
   return (

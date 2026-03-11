@@ -2,14 +2,11 @@ version: 0.2
 
 phases:
   install:
+    runtime-versions:
+      python: 3.12
     commands:
       - python3 -m pip install --upgrade pip
-      - |
-          if [[ -f services/airex-api/requirements.txt ]]; then
-            python3 -m pip install -r services/airex-api/requirements.txt
-          else
-            python3 -m pip install -r backend/requirements.txt
-          fi
+      - python3 -m pip install -e services/airex-core
   build:
     commands:
       - cd database

@@ -40,6 +40,7 @@ required_env=(
   LLM_FALLBACK_MODEL
   LLM_EMBEDDING_MODEL
   CORS_ORIGINS
+  GOOGLE_OAUTH_CLIENT_ID
   LANGFUSE_HOST
   NEXTAUTH_URL
 )
@@ -86,6 +87,7 @@ render_file() {
     -e "s|__LLM_FALLBACK_MODEL__|$LLM_FALLBACK_MODEL|g" \
     -e "s|__LLM_EMBEDDING_MODEL__|$LLM_EMBEDDING_MODEL|g" \
     -e "s|__CORS_ORIGINS__|$CORS_ORIGINS|g" \
+    -e "s|__GOOGLE_OAUTH_CLIENT_ID__|$GOOGLE_OAUTH_CLIENT_ID|g" \
     -e "s|__LANGFUSE_HOST__|$LANGFUSE_HOST|g" \
     -e "s|__NEXTAUTH_URL__|$NEXTAUTH_URL|g" \
     "$input_file" >"$output_file"

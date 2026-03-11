@@ -39,7 +39,32 @@ phases:
             -e "s|__LLM_PRIMARY_MODEL__|$LLM_PRIMARY_MODEL|g" \
             -e "s|__LLM_FALLBACK_MODEL__|$LLM_FALLBACK_MODEL|g" \
             -e "s|__LLM_EMBEDDING_MODEL__|$LLM_EMBEDDING_MODEL|g" \
-            -e "s|__CORS_ORIGINS__|$CORS_ORIGINS|g" \
             deployment/ecs/task-definitions/airex-api.json > "$OUT_DIR/airex-api.json"
+      - |
+          python3 - <<'PY'
+          import json, os
+          path = os.path.join('deployment/ecs/.rendered-task-definitions', 'airex-api.json')
+          with open(path, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          env = data['containerDefinitions'][0].setdefault('environment', [])
+
+          def upsert(name: str, value: str) -> None:
+              for item in env:
+                  if item.get('name') == name:
+                      item['value'] = value
+                      return
+              env.append({'name': name, 'value': value})
+
+          cors = os.environ.get('CORS_ORIGINS', '').strip()
+          if cors:
+              upsert('CORS_ORIGINS', cors)
+
+          cid = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
+          if cid:
+              upsert('GOOGLE_OAUTH_CLIENT_ID', cid)
+
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f)
+          PY
       - API_TASKDEF_ARN=$(aws ecs register-task-definition --cli-input-json "file://$OUT_DIR/airex-api.json" --query 'taskDefinition.taskDefinitionArn' --output text)
       - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE_API" --task-definition "$API_TASKDEF_ARN" --force-new-deployment

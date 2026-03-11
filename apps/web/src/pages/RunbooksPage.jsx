@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Copy, ChevronDown, ChevronUp, GripVertical, Play, Pause, AlertTriangle, Terminal, Globe, Bell, GitBranch } from 'lucide-react'
 import { fetchRunbooks, createRunbook, updateRunbook, deleteRunbook, duplicateRunbook } from '../services/api'
-import { useToast } from '../context/ToastContext'
+import { useToasts } from '../context/ToastContext'
 
 const ACTION_TYPES = [
   { value: 'manual', label: 'Manual Step', icon: '📋', color: 'bg-gray-100 dark:bg-gray-700' },
@@ -230,7 +230,7 @@ export default function RunbooksPage() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null) // null | 'new' | runbook object
   const [filterActive, setFilterActive] = useState(false)
-  const { addToast } = useToast()
+  const { addToast } = useToasts()
 
   const load = useCallback(async () => {
     try {
