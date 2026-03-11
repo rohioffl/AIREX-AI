@@ -34,9 +34,12 @@ Services:
 - `airex-litellm`
 - `airex-langfuse`
 
-The `airex-api` and `airex-worker` images are both built from `services/backend/Dockerfile`
-using separate Docker targets so they stay deployable as independent containers while sharing
-the same backend source tree in `backend/`.
+The `airex-api` and `airex-worker` images are built from separate Dockerfiles:
+
+- `services/airex-api/Dockerfile`
+- `services/airex-worker/Dockerfile`
+
+Both services share business/domain code via the editable package at `services/airex-core`.
 
 ## Terraform
 
@@ -136,6 +139,25 @@ Recommended order:
 3. Update ECS services
 4. Build frontend and sync to S3
 5. Invalidate CloudFront
+
+### One-shot manual deploy script
+
+For manual production deploys from a trusted runner, use:
+
+```bash
+cp deployment/ecs/.manual-deploy.env.example deployment/ecs/.manual-deploy.env
+# fill deployment/ecs/.manual-deploy.env
+deployment/ecs/scripts/manual-deploy-all.sh
+```
+
+Useful flags:
+
+```bash
+deployment/ecs/scripts/manual-deploy-all.sh --image-tag <tag>
+deployment/ecs/scripts/manual-deploy-all.sh --skip-images
+deployment/ecs/scripts/manual-deploy-all.sh --skip-frontend
+deployment/ecs/scripts/manual-deploy-all.sh --skip-backend
+```
 
 ### Secrets policy
 

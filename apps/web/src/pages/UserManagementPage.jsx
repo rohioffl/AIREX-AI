@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
-import { fetchUsers, createUser, updateUser, deleteUser } from '../services/api'
+import { fetchUsers, createUser, updateUser, deleteUser, resendInvitation } from '../services/api'
 import { formatTimestamp, formatRelativeTime } from '../utils/formatters'
 import { extractErrorMessage } from '../utils/errorHandler'
-import { Users, Plus, Edit, Trash2, Shield, ShieldCheck, ShieldOff, Clock, Calendar } from 'lucide-react'
+import { Users, Plus, Edit, Trash2, Shield, ShieldCheck, ShieldOff, Clock, Calendar, Search, X, CheckSquare, Square } from 'lucide-react'
 
 export default function UserManagementPage() {
   const { user: currentUser } = useAuth()
@@ -16,6 +16,10 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedUsers, setSelectedUsers] = useState(new Set())
 
   useEffect(() => {
     loadUsers()
@@ -107,6 +111,71 @@ export default function UserManagementPage() {
     }
   }
 
+  // Filter users
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const matchesSearch = !searchQuery || 
+        u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.display_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesRole = roleFilter === 'all' || u.role?.toLowerCase() === roleFilter.toLowerCase()
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'active' && u.is_active !== false) ||
+        (statusFilter === 'inactive' && u.is_active === false) ||
+        (statusFilter === 'pending' && u.invitation_status === 'pending')
+      return matchesSearch && matchesRole && matchesStatus
+    })
+  }, [users, searchQuery, roleFilter, statusFilter])
+
+  const handleSelectAll = () => {
+    if (selectedUsers.size === filteredUsers.length) {
+      setSelectedUsers(new Set())
+    } else {
+      setSelectedUsers(new Set(filteredUsers.map(u => u.id)))
+    }
+  }
+
+  const handleSelectUser = (userId) => {
+    setSelectedUsers(prev => {
+      const next = new Set(prev)
+      if (next.has(userId)) {
+        next.delete(userId)
+      } else {
+        next.add(userId)
+      }
+      return next
+    })
+  }
+
+  const handleBulkActivate = async () => {
+    if (!confirm(`Activate ${selectedUsers.size} user(s)?`)) return
+    try {
+      for (const userId of selectedUsers) {
+        await updateUser(userId, { is_active: true })
+      }
+      showToast(`${selectedUsers.size} user(s) activated successfully`, 'success')
+      setSelectedUsers(new Set())
+      loadUsers()
+    } catch (err) {
+      showToast(extractErrorMessage(err) || 'Failed to activate users', 'error')
+    }
+  }
+
+  const handleBulkDeactivate = async () => {
+    if (!confirm(`Deactivate ${selectedUsers.size} user(s)?`)) return
+    try {
+      for (const userId of selectedUsers) {
+        if (userId !== currentUser?.userId) {
+          await updateUser(userId, { is_active: false })
+        }
+      }
+      showToast(`${selectedUsers.size} user(s) deactivated successfully`, 'success')
+      setSelectedUsers(new Set())
+      loadUsers()
+    } catch (err) {
+      showToast(extractErrorMessage(err) || 'Failed to deactivate users', 'error')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -117,7 +186,7 @@ export default function UserManagementPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
             <Users size={24} style={{ color: '#94a3b8' }} />
@@ -129,42 +198,164 @@ export default function UserManagementPage() {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all"
-          style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all touch-manipulation"
+          style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', minHeight: 44 }}
         >
           <Plus size={16} />
           Create User
         </button>
       </div>
 
+      {/* Search and Filters */}
+      <div className="glass rounded-xl p-4 space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search */}
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+            <Search size={16} style={{ color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search by email or name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 bg-transparent border-none outline-none"
+              style={{ color: 'var(--text-primary)', fontSize: 13 }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="p-1 rounded hover:bg-elevated transition-colors"
+                style={{ minWidth: 32, minHeight: 32 }}
+              >
+                <X size={14} style={{ color: 'var(--text-muted)' }} />
+              </button>
+            )}
+          </div>
+
+          {/* Role Filter */}
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-border bg-input text-text-primary touch-manipulation"
+            style={{ fontSize: 13, minHeight: 44 }}
+          >
+            <option value="all">All Roles</option>
+            <option value="admin">Admin</option>
+            <option value="operator">Operator</option>
+            <option value="viewer">Viewer</option>
+          </select>
+
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-border bg-input text-text-primary touch-manipulation"
+            style={{ fontSize: 13, minHeight: 44 }}
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="pending">Pending Invitation</option>
+          </select>
+        </div>
+
+        {/* Bulk Actions */}
+        {selectedUsers.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
+            <span className="text-sm text-muted">
+              {selectedUsers.size} user(s) selected
+            </span>
+            <button
+              onClick={handleBulkActivate}
+              className="px-3 py-1.5 rounded text-xs font-semibold transition-colors touch-manipulation"
+              style={{ background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', minHeight: 36 }}
+            >
+              Activate
+            </button>
+            <button
+              onClick={handleBulkDeactivate}
+              className="px-3 py-1.5 rounded text-xs font-semibold transition-colors touch-manipulation"
+              style={{ background: 'rgba(244,63,94,0.15)', color: '#fda4af', minHeight: 36 }}
+            >
+              Deactivate
+            </button>
+            <button
+              onClick={() => setSelectedUsers(new Set())}
+              className="px-3 py-1.5 rounded text-xs font-semibold transition-colors touch-manipulation"
+              style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)', minHeight: 36 }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="glass rounded-xl overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="px-6 py-3 text-left text-sm font-semibold text-heading">User</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-heading">Role</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-heading">Status</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-heading">Created</th>
-              <th className="px-6 py-3 text-right text-sm font-semibold text-heading">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-muted">
-                  No users found
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="px-4 sm:px-6 py-3 text-left">
+                  <button
+                    onClick={handleSelectAll}
+                    className="p-1 rounded hover:bg-elevated transition-colors touch-manipulation"
+                    style={{ minWidth: 32, minHeight: 32 }}
+                    title="Select all"
+                  >
+                    {selectedUsers.size === filteredUsers.length && filteredUsers.length > 0 ? (
+                      <CheckSquare size={18} style={{ color: '#6366f1' }} />
+                    ) : (
+                      <Square size={18} style={{ color: 'var(--text-muted)' }} />
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 sm:px-6 py-3 text-left text-sm font-semibold text-heading">User</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-sm font-semibold text-heading hidden sm:table-cell">Role</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-sm font-semibold text-heading">Status</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-sm font-semibold text-heading hidden lg:table-cell">Invitation</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-sm font-semibold text-heading hidden md:table-cell">Created</th>
+                <th className="px-4 sm:px-6 py-3 text-right text-sm font-semibold text-heading">Actions</th>
               </tr>
-            ) : (
-              users.map((u) => (
+            </thead>
+            <tbody>
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-muted">
+                    {users.length === 0 ? 'No users found' : 'No users match your filters'}
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((u) => (
                 <tr key={u.id} className="border-b border-border hover:bg-elevated transition-colors">
-                  <td className="px-6 py-4">
+                  <td className="px-4 sm:px-6 py-4">
+                    <button
+                      onClick={() => handleSelectUser(u.id)}
+                      className="p-1 rounded hover:bg-elevated transition-colors touch-manipulation"
+                      style={{ minWidth: 32, minHeight: 32 }}
+                    >
+                      {selectedUsers.has(u.id) ? (
+                        <CheckSquare size={18} style={{ color: '#6366f1' }} />
+                      ) : (
+                        <Square size={18} style={{ color: 'var(--text-muted)' }} />
+                      )}
+                    </button>
+                  </td>
+                  <td className="px-4 sm:px-6 py-4">
                     <div>
                       <div className="font-medium">{u.display_name || u.email}</div>
                       <div className="text-sm text-muted">{u.email}</div>
+                      {/* Mobile: Show role badge */}
+                      <div className="sm:hidden mt-2 flex items-center gap-2">
+                        {getRoleIcon(u.role)}
+                        <span className="px-2 py-1 rounded text-xs font-semibold" style={getRoleBadgeStyle(u.role)}>
+                          {u.role?.toUpperCase() || 'OPERATOR'}
+                        </span>
+                        {u.id === currentUser?.userId && (
+                          <span className="text-xs text-muted">(You)</span>
+                        )}
+                      </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 sm:px-6 py-4 hidden sm:table-cell">
                     <div className="flex items-center gap-2">
                       {getRoleIcon(u.role)}
                       <span className="px-2 py-1 rounded text-xs font-semibold" style={getRoleBadgeStyle(u.role)}>
@@ -175,18 +366,60 @@ export default function UserManagementPage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className="px-2 py-1 rounded text-xs font-semibold"
-                      style={u.is_active !== false
-                        ? { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7' }
-                        : { background: 'rgba(244,63,94,0.15)', color: '#fda4af' }
-                      }
-                    >
-                      {u.is_active !== false ? 'Active' : 'Inactive'}
-                    </span>
+                  <td className="px-4 sm:px-6 py-4">
+                    <div className="flex flex-col gap-1">
+                      <span
+                        className="px-2 py-1 rounded text-xs font-semibold inline-block w-fit"
+                        style={u.is_active !== false
+                          ? { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7' }
+                          : { background: 'rgba(244,63,94,0.15)', color: '#fda4af' }
+                        }
+                      >
+                        {u.is_active !== false ? 'Active' : 'Inactive'}
+                      </span>
+                      {/* Mobile: Show invitation status */}
+                      <div className="sm:hidden">
+                        {u.invitation_status === 'pending' && (
+                          <span className="px-2 py-1 rounded text-xs font-semibold inline-block mt-1" style={{ background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24' }}>
+                            Pending
+                          </span>
+                        )}
+                        {u.invitation_status === 'accepted' && (
+                          <span className="px-2 py-1 rounded text-xs font-semibold inline-block mt-1" style={{ background: 'rgba(16,185,129,0.15)', color: '#6ee7b7' }}>
+                            Accepted
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 sm:px-6 py-4 hidden lg:table-cell">
+                    {u.invitation_status === 'pending' && (
+                      <div className="flex flex-col gap-1">
+                        <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24' }}>
+                          Pending
+                        </span>
+                        {u.invitation_expires_at && (
+                          <span className="text-xs text-muted">
+                            Expires {formatRelativeTime(u.invitation_expires_at)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {u.invitation_status === 'accepted' && (
+                      <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: 'rgba(16,185,129,0.15)', color: '#6ee7b7' }}>
+                        Accepted
+                      </span>
+                    )}
+                    {u.invitation_status === 'expired' && (
+                      <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: 'rgba(244,63,94,0.15)', color: '#fda4af' }}>
+                        Expired
+                      </span>
+                    )}
+                    {!u.invitation_status && (
+                      <span className="text-xs text-muted">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 hidden md:table-cell">
                     {u.created_at ? (
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1 text-xs text-muted">
@@ -204,11 +437,31 @@ export default function UserManagementPage() {
                       <span className="text-xs text-muted">—</span>
                     )}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 sm:px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
+                      {u.invitation_status === 'pending' && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await resendInvitation(u.id)
+                              showToast('Invitation resent successfully', 'success')
+                              loadUsers()
+                            } catch (err) {
+                              showToast(extractErrorMessage(err) || 'Failed to resend invitation', 'error')
+                            }
+                          }}
+                          className="px-2 sm:px-3 py-1 rounded text-xs font-semibold transition-colors touch-manipulation"
+                          style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', minHeight: 32 }}
+                          title="Resend invitation"
+                        >
+                          <span className="hidden sm:inline">Resend</span>
+                          <span className="sm:hidden">↻</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => setEditingUser(u)}
-                        className="p-2 rounded-lg hover:bg-elevated transition-colors"
+                        className="p-2 rounded-lg hover:bg-elevated transition-colors touch-manipulation"
+                        style={{ minWidth: 36, minHeight: 36 }}
                         title="Edit user"
                       >
                         <Edit size={16} className="text-muted" />
@@ -216,8 +469,8 @@ export default function UserManagementPage() {
                       {u.id !== currentUser?.userId && (
                         <button
                           onClick={() => handleDelete(u.id)}
-                          className="p-2 rounded-lg transition-colors"
-                          style={{ ':hover': { background: 'rgba(244,63,94,0.1)' } }}
+                          className="p-2 rounded-lg transition-colors touch-manipulation"
+                          style={{ minWidth: 36, minHeight: 36 }}
                           onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
                           onMouseLeave={(e) => e.currentTarget.style.background = ''}
                           title="Deactivate user"
@@ -232,6 +485,7 @@ export default function UserManagementPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showCreateModal && (
@@ -256,7 +510,6 @@ function UserModal({ user, onClose, onSave }) {
   const { user: currentUser } = useAuth()
   const [formData, setFormData] = useState({
     email: user?.email || '',
-    password: '',
     display_name: user?.display_name || '',
     role: user?.role || 'operator',
     is_active: user?.is_active !== false,
@@ -268,9 +521,7 @@ function UserModal({ user, onClose, onSave }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     const data = { ...formData }
-    if (user && !data.password) {
-      delete data.password // Don't update password if not provided
-    }
+    // Password is not needed for invitation flow
     onSave(data)
   }
 
@@ -297,15 +548,10 @@ function UserModal({ user, onClose, onSave }) {
             />
           </div>
           {!user && (
-            <div>
-              <label className="block text-sm font-medium mb-1">Password</label>
-              <input
-                type="password"
-                required={!user}
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-input"
-              />
+            <div className="p-3 rounded-lg" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+              <p className="text-sm" style={{ color: '#3b82f6' }}>
+                ℹ️ An invitation email will be sent to the user. They can set their password via the invitation link.
+              </p>
             </div>
           )}
           <div>

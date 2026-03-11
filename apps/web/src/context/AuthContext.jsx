@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
-import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken } from '../services/auth'
+import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken, googleLogin as apiGoogleLogin } from '../services/auth'
 import { getRefreshToken, getValidAccessToken } from '../services/tokenStorage'
 
 const AuthContext = createContext()
@@ -28,6 +28,17 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async ({ email, password }) => {
     const res = await apiLogin({ email, password })
+    const parsed = parseTokenUser(res.access_token)
+    setUser(parsed)
+    setToken(res.access_token)
+    if (parsed?.tenantId) {
+      localStorage.setItem('tenant_id', parsed.tenantId)
+    }
+    return res
+  }, [])
+
+  const loginWithGoogle = useCallback(async (idToken) => {
+    const res = await apiGoogleLogin(idToken)
     const parsed = parseTokenUser(res.access_token)
     setUser(parsed)
     setToken(res.access_token)
@@ -94,8 +105,8 @@ export function AuthProvider({ children }) {
   }, [logout, token])
 
   const value = useMemo(() => ({
-    user, token, loading, login, logout, refresh, isAuthenticated: !!token
-  }), [user, token, loading, login, logout, refresh])
+    user, token, loading, login, loginWithGoogle, logout, refresh, isAuthenticated: !!token
+  }), [user, token, loading, login, loginWithGoogle, logout, refresh])
 
   return (
     <AuthContext.Provider value={value}>

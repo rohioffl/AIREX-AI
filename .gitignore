@@ -54,14 +54,13 @@ Thumbs.db
 commands.txt
 gcp-oauth.keys.json
 *.keys
-backend/config/credentials/*.json
-backend/config/credentials/*.pem
-backend/config/credentials/*.key
-!backend/config/credentials/.gitkeep
-!backend/config/credentials/README.md
+services/airex-core/config/credentials/*.json
+services/airex-core/config/credentials/*.pem
+services/airex-core/config/credentials/*.key
+!services/airex-core/config/credentials/.gitkeep
+!services/airex-core/config/credentials/README.md
 
 # Project Specific
-backend/alembic/versions/__pycache__/
 coverage/
 htmlcov/
 .pytest_cache/
@@ -76,8 +75,6 @@ playwright-report/
 test-results/
 e2e/playwright-report/
 e2e/test-results/
-frontend/playwright-report/
-frontend/test-results/
 
 # Screenshots (dev artifacts)
 *.png
@@ -90,9 +87,9 @@ frontend/test-results/
 mcp-cli-config.json
 
 # Virtualenv binaries (stale symlinks)
-backend/.venv/
-backend/.venv/bin/f2py
-backend/.venv/bin/numpy-config
+.venv/
+venv/
+env/
 
 # Terraform / deployment artifacts
 **/.terraform/
@@ -109,6 +106,8 @@ deployment/ecs/**/.rendered-task-definitions/
 **/*.tfvars
 **/*.tfvars.json
 backend.hcl
+deployment/ecs/.manual-deploy.env
+deployment/ecs/.manual-deploy-venv/
 
 # Local scaffolds / imported templates
 source-code/
@@ -117,12 +116,12 @@ source-code/
 # Local/editor artifacts
 Untitled
 route
-land_final.jpg
 .opencode/
 .opencodeignore
 .sisyphus/
 .opencode-state.json
 .opencode-session.json
+.local/testing-credentials.txt
 
 # Home dir artifacts
 ~/
@@ -133,3 +132,7 @@ TECH_STACK.docx
 
 # Claude Code local state (settings, plans, tasks, cache)
 .claude/
+services/airex-core/dist/
+services/airex-core/build/
+services/airex-core/*.egg-info/
+services/airex-core/.eggs/

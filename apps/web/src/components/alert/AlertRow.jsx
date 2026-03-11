@@ -23,6 +23,8 @@ export default function AlertRow({
   manualReview = false,
   manualReason,
   manualAt,
+  selected = false,
+  onSelect = null,
 }) {
   const isUrgent = alert.severity === 'CRITICAL' || alert.state === 'AWAITING_APPROVAL'
   const needsAction = alert.state === 'AWAITING_APPROVAL' || alert.state === 'RECOMMENDATION_READY'
@@ -50,7 +52,7 @@ export default function AlertRow({
   
   return (
     <div
-      className="group glass glass-hover rounded-lg relative overflow-hidden"
+      className="group glass glass-hover rounded-lg relative overflow-hidden flex items-start gap-3"
       style={{
         borderLeft: `3px solid ${borderColor}`,
         width: '100%',
@@ -96,9 +98,24 @@ export default function AlertRow({
         }
       }}
     >
+      {onSelect && (
+        <div className="flex-shrink-0 pt-4 pl-4">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => {
+              e.stopPropagation()
+              onSelect(alert.id)
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 rounded cursor-pointer"
+            style={{ accentColor: '#6366f1' }}
+          />
+        </div>
+      )}
       <Link
         to={`/incidents/${alert.id}`}
-        className="flex items-center gap-3 px-4 py-3"
+        className="flex items-center gap-3 px-4 py-3 flex-1"
         style={{ textDecoration: 'none', color: 'inherit', display: 'flex', width: '100%', boxSizing: 'border-box' }}
       >
         {/* Severity Icon - More compact */}

@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect } from 'react'
-import { useLocation, Link } from 'react-router-dom'
+import { useMemo, useState, useEffect, useRef } from 'react'
+import { useLocation, Link, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle, Bell,
   ShieldAlert, AlertOctagon, Radio, Zap, Server,
@@ -9,6 +9,9 @@ import {
 import useIncidents from '../hooks/useIncidents'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import AlertRow from '../components/alert/AlertRow'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
+import { useAuth } from '../context/AuthContext'
 
 const ACTION_STATES = ['RECOMMENDATION_READY', 'AWAITING_APPROVAL']
 const INVESTIGATING_STATES = ['RECEIVED', 'INVESTIGATING']
@@ -51,6 +54,12 @@ export default function AlertsPage() {
   const [page, setPage] = useState(1)
   const [pageSize] = useState(25)
   const [refreshing, setRefreshing] = useState(false)
+  const [selectedIncidents, setSelectedIncidents] = useState(new Set())
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false)
+  const searchInputRef = useRef(null)
+  const navigate = useNavigate()
+  const { user } = useAuth()
 
   // Update filters when URL search or host changes
   useEffect(() => {
@@ -67,28 +76,30 @@ export default function AlertsPage() {
     setTimeout(() => setRefreshing(false), 500)
   }
 
-  const handleExport = () => {
-    const csv = [
-      ['ID', 'Title', 'Severity', 'State', 'Alert Type', 'Host', 'Created At', 'Updated At'].join(','),
-      ...visibleAlerts.map(a => [
-        a.id,
-        `"${(a.title || '').replace(/"/g, '""')}"`,
-        a.severity,
-        a.state,
-        a.alert_type || '',
-        a.host_key || '',
-        a.created_at,
-        a.updated_at || a.created_at,
-      ].join(','))
-    ].join('\n')
-    
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `alerts-${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  const handleExport = async () => {
+    try {
+      const filters = {}
+      if (advancedFilters.alertType) filters.alert_type = advancedFilters.alertType
+      if (advancedFilters.severity) filters.severity = advancedFilters.severity
+      if (advancedFilters.dateFrom) filters.date_from = advancedFilters.dateFrom
+      if (advancedFilters.dateTo) filters.date_to = advancedFilters.dateTo
+      if (alertFilter !== 'all') {
+        if (alertFilter === 'critical') filters.severity = 'CRITICAL'
+        else if (alertFilter === 'action') filters.state = 'AWAITING_APPROVAL'
+        else if (alertFilter === 'investigating') filters.state = 'INVESTIGATING'
+      }
+
+      const blob = await exportIncidents('csv', filters)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `incidents-${new Date().toISOString().split('T')[0]}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Export failed:', err)
+      alert('Failed to export incidents: ' + (err.message || 'Unknown error'))
+    }
   }
 
   // eslint-disable-next-line react-hooks/preserve-manual-memoization -- complex filter/sort/paginate logic, React Compiler cannot preserve
@@ -298,6 +309,38 @@ export default function AlertsPage() {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="glass rounded-xl p-3">
+        <div className="relative flex items-center">
+          <div className="absolute left-3" style={{ color: 'var(--text-muted)' }}>
+            <Search size={16} />
+          </div>
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search incidents... (Press / to focus)"
+            value={urlSearch}
+            onChange={(e) => {
+              const newSearch = e.target.value
+              const newParams = new URLSearchParams(location.search)
+              if (newSearch) {
+                newParams.set('search', newSearch)
+              } else {
+                newParams.delete('search')
+              }
+              navigate(`/alerts?${newParams.toString()}`, { replace: true })
+            }}
+            className="w-full pl-10 pr-3 py-2 rounded-lg outline-none transition-all"
+            style={{
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+              fontSize: 13,
+            }}
+          />
+        </div>
+      </div>
+
       {/* Filter Tabs and Controls */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -492,6 +535,59 @@ export default function AlertsPage() {
         </div>
       )}
 
+      {/* Bulk Actions Bar */}
+      {selectedIncidents.size > 0 && (
+        <div className="glass rounded-xl p-4 flex items-center justify-between" style={{ border: '2px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.05)' }}>
+          <div className="flex items-center gap-3">
+            <span className="font-semibold" style={{ color: 'var(--text-heading)' }}>
+              {selectedIncidents.size} incident(s) selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkApprove}
+              disabled={bulkActionLoading}
+              className="px-4 py-2 rounded-lg transition-all disabled:opacity-50"
+              style={{ 
+                background: 'linear-gradient(135deg, #10b981, #34d399)', 
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 600
+              }}
+            >
+              Approve Selected
+            </button>
+            <button
+              onClick={handleBulkReject}
+              disabled={bulkActionLoading}
+              className="px-4 py-2 rounded-lg transition-all disabled:opacity-50"
+              style={{ 
+                background: 'rgba(244,63,94,0.1)', 
+                border: '1px solid rgba(244,63,94,0.3)',
+                color: '#f43f5e',
+                fontSize: 13,
+                fontWeight: 600
+              }}
+            >
+              Reject Selected
+            </button>
+            <button
+              onClick={() => setSelectedIncidents(new Set())}
+              className="px-3 py-2 rounded-lg transition-all"
+              style={{ 
+                background: 'var(--bg-input)', 
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)',
+                fontSize: 13,
+                fontWeight: 600
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Alert List */}
       {!loading && !error && (
         visibleAlerts.length === 0 ? (
@@ -504,6 +600,19 @@ export default function AlertsPage() {
           </div>
         ) : (
           <>
+            {/* Select All Checkbox */}
+            <div className="flex items-center gap-2 px-4 py-2 glass rounded-lg mb-2">
+              <input
+                type="checkbox"
+                checked={selectedIncidents.size === visibleAlerts.length && visibleAlerts.length > 0}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded cursor-pointer"
+                style={{ accentColor: '#6366f1' }}
+              />
+              <span className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>
+                Select All ({selectedIncidents.size} selected)
+              </span>
+            </div>
             <div className="space-y-1.5" style={{ width: '100%', maxWidth: '100%' }}>
               {visibleAlerts.map(alert => {
                 const manualReason = alert.meta?._manual_review_reason
@@ -515,6 +624,8 @@ export default function AlertsPage() {
                     manualReview={manualReview}
                     manualReason={manualReason}
                     manualAt={alert.meta?._manual_review_at}
+                    selected={selectedIncidents.has(alert.id)}
+                    onSelect={toggleSelect}
                   />
                 )
               })}

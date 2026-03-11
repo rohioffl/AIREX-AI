@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
 import {
   ArrowLeft,
   Radio,
@@ -26,7 +28,12 @@ import SeverityBadge from '../components/common/SeverityBadge'
 import Terminal from '../components/common/Terminal'
 import StatePipeline from '../components/incident/StatePipeline'
 import Timeline from '../components/incident/Timeline'
+import TimelineChart from '../components/incident/TimelineChart'
 import EvidencePanel from '../components/incident/EvidencePanel'
+import Site24x7MetricsPanel from '../components/incident/Site24x7MetricsPanel'
+import CommentsPanel from '../components/incident/CommentsPanel'
+import AssignmentPanel from '../components/incident/AssignmentPanel'
+import RelatedIncidentsPanel from '../components/incident/RelatedIncidentsPanel'
 import AIAnalysisPanel from '../components/incident/AIAnalysisPanel'
 import AIRecommendationApproval from '../components/incident/AIRecommendationApproval'
 import ExecutionLogs from '../components/incident/ExecutionLogs'
@@ -65,6 +72,38 @@ export default function IncidentDetail() {
   const [ackRejectModalOpen, setAckRejectModalOpen] = useState(false)
   const [rejectLoading, setRejectLoading] = useState(false)
   const [rejectError, setRejectError] = useState(null)
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false)
+  const [approveLoading, setApproveLoading] = useState(false)
+  const approveRef = useRef(null)
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onApprove: async () => {
+      if (incident?.state === 'AWAITING_APPROVAL' && incident?.meta?.recommendation?.proposed_action) {
+        try {
+          setApproveLoading(true)
+          const { approveIncident } = await import('../services/api')
+          const idempotencyKey = `${incident.id}:${incident.meta.recommendation.proposed_action}`
+          await approveIncident(incident.id, incident.meta.recommendation.proposed_action, idempotencyKey)
+        } catch (err) {
+          console.error('Failed to approve:', err)
+        } finally {
+          setApproveLoading(false)
+        }
+      }
+    },
+    onReject: () => {
+      if (incident?.state === 'AWAITING_APPROVAL') {
+        setAckRejectModalOpen(true)
+      }
+    },
+    onShowHelp: () => setShowShortcutsModal(true),
+    onClose: () => {
+      setShowShortcutsModal(false)
+      setAckRejectModalOpen(false)
+    },
+    enabled: true,
+  })
 
   const handleReject = async (note) => {
     setRejectLoading(true)
@@ -493,6 +532,11 @@ export default function IncidentDetail() {
         {/* 2. Evidence */}
         <EvidencePanel evidence={incident.evidence} incident={incident} />
 
+        {/* 2.5. Site24x7 Metrics (if available) */}
+        {incident?.meta?._source === 'site24x7' && (
+          <Site24x7MetricsPanel incident={incident} />
+        )}
+
         {/* 3. AI Recommendation & Approval */}
         <div style={{ width: '100%', maxWidth: '100%' }}>
           <div className="flex items-center gap-2 mb-3">
@@ -517,6 +561,15 @@ export default function IncidentDetail() {
         {/* 4.7 Auto-Generated Runbook (Phase 5 ARE) */}
         <AutoRunbook incident={incident} />
 
+        {/* 5. Assignment */}
+        <AssignmentPanel incident={incident} />
+
+        {/* 6. Related Incidents (Manual Links) */}
+        <RelatedIncidentsPanel incident={incident} />
+
+        {/* 7. Comments & Collaboration */}
+        <CommentsPanel incident={incident} />
+
         {/* Additional Info Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
           <VerificationResult state={incident.state} incident={incident} />
@@ -534,9 +587,18 @@ export default function IncidentDetail() {
       </div>
 
       {/* Timeline */}
-      <div className="glass rounded-xl p-6" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
-        <span className="block mb-6 neon-text-cyan" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timeline</span>
-        <Timeline transitions={incident.state_transitions} />
+      <div className="space-y-6">
+        <div className="glass rounded-xl p-6" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+          <span className="block mb-6 neon-text-cyan" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timeline</span>
+          <Timeline transitions={incident.state_transitions} />
+        </div>
+        {incident.state_transitions && incident.state_transitions.length > 0 && (
+          <TimelineChart
+            transitions={incident.state_transitions}
+            incidentCreatedAt={incident.created_at}
+            incidentResolvedAt={incident.state === 'RESOLVED' ? incident.updated_at : null}
+          />
+        )}
       </div>
 
       {/* Acknowledge/Reject Modal */}
@@ -551,6 +613,11 @@ export default function IncidentDetail() {
         }}
         loading={rejectLoading}
       />
+
+      {/* Keyboard Shortcuts Modal */}
+      {showShortcutsModal && (
+        <KeyboardShortcutsModal onClose={() => setShowShortcutsModal(false)} />
+      )}
     </div>
   )
 }

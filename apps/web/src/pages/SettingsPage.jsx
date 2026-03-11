@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Settings, Server, Brain, Shield, Clock, Database,
   CheckCircle, AlertTriangle, RefreshCw, Save
@@ -236,6 +237,34 @@ export default function SettingsPage() {
           <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             Note: Most settings are environment variables and require service restart to take effect.
           </p>
+
+          <div
+            className="mt-4 p-4 rounded-lg"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>
+                  Users & Roles
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Add users, assign roles, and manage account status.
+                </p>
+              </div>
+              <Link
+                to="/admin/users"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'linear-gradient(135deg, #0ea5e9, #2563eb)',
+                }}
+              >
+                Open User Management
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 

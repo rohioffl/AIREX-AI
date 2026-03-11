@@ -50,6 +50,18 @@ export default function DashboardPage() {
   }, [incidents])
 
   const summary = useMemo(() => {
+    // Use real metrics if available, otherwise fallback to calculated
+    if (metrics) {
+      return {
+        active: metrics.active_incidents || 0,
+        critical: metrics.critical_incidents || 0,
+        resolvedToday: metrics.total_resolved_24h || 0,
+        mttr: metrics.mttr_seconds ? formatDuration(metrics.mttr_seconds) : null,
+        aiConfidence: metrics.ai_confidence_avg ? `${(metrics.ai_confidence_avg * 100).toFixed(1)}%` : null,
+      }
+    }
+    
+    // Fallback calculation
     let active = 0
     let critical = 0
     let resolvedToday = 0
@@ -63,8 +75,8 @@ export default function DashboardPage() {
       }
     })
 
-    return { active, critical, resolvedToday }
-  }, [incidents])
+    return { active, critical, resolvedToday, mttr: null, aiConfidence: null }
+  }, [incidents, metrics])
 
   const lastUpdated = latestFive[0]?.updated_at ? formatTimestamp(latestFive[0].updated_at) : '—'
 

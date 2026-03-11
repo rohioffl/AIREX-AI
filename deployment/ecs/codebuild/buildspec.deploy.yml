@@ -3,6 +3,7 @@ version: 0.2
 env:
   variables:
     AWS_REGION: ap-south-1
+    SKIP_LITELLM: "true"
     ECS_CLUSTER: airex-prod-cluster
     ECS_SERVICE_API: airex-prod-api
     ECS_SERVICE_WORKER: airex-prod-worker
@@ -14,7 +15,7 @@ phases:
     commands:
       - chmod +x deployment/ecs/scripts/*.sh
       - python3 -m pip install --upgrade pip
-      - python3 -m pip install -r backend/requirements.txt
+      - python3 -m pip install -r services/airex-api/requirements.txt
   build:
     commands:
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -27,8 +28,6 @@ phases:
       - ECR_REGISTRY=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
       - export API_IMAGE=$ECR_REGISTRY/$ECR_API_REPO:$IMAGE_TAG
       - export WORKER_IMAGE=$ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG
-      - export LITELLM_IMAGE=$ECR_REGISTRY/$ECR_LITELLM_REPO:$IMAGE_TAG
-      - export PYTHONPATH="$CODEBUILD_SRC_DIR/backend"
       - echo "Rendering and registering task definitions"
       - ./deployment/ecs/scripts/render-task-defs.sh
       - ./deployment/ecs/scripts/register-task-defs.sh

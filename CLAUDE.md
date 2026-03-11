@@ -12,26 +12,27 @@ Full canonical rules: `docs/backend_skill.md`, `docs/frontend_skill.md`, `docs/d
 
 ## Commands
 
-### Backend (run from `backend/`)
+### API (run from `services/airex-api/`)
 ```bash
 # Setup
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 
 # Run
 uvicorn app.main:app --reload
+```
+
+### Worker (run from `services/airex-worker/`)
+```bash
+python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 arq app.core.worker.WorkerSettings
 
 # Migrations (Alembic lives in database/, not backend/)
 cd ../database && alembic upgrade head && alembic history
 
-# Lint + type-check
-ruff check app/
-mypy app/ --ignore-missing-imports
-
 # Tests
-pytest
-pytest tests/test_state_machine.py::test_valid_transition   # single test
-pytest tests/ -k "recommendation and not slow"              # filter
+cd ../../tests && pytest
+pytest test_state_machine.py::test_valid_transition   # single test
+pytest -k "recommendation and not slow"              # filter
 ```
 
 ### Frontend (run from `apps/web/`)
@@ -58,8 +59,9 @@ docker-compose run migrate                   # run migrations in container
 
 ### Pre-PR Validation
 ```bash
-cd backend && ruff check app/ && mypy app/ --ignore-missing-imports && pytest
-cd apps/web && npm run lint && npm run test && npm run build
+cd services/airex-core && python3 -m compileall airex_core
+cd ../../tests && pytest
+cd ../apps/web && npm run lint && npm run test && npm run build
 ```
 
 ---
@@ -68,22 +70,14 @@ cd apps/web && npm run lint && npm run test && npm run build
 
 ### Monorepo Layout
 ```
-backend/app/          # FastAPI application (Python 3.12)
-  core/               # state_machine, policy, worker, security, events, rate_limit
-  api/routes/         # webhooks, incidents, auth, sse, tenants
-  investigations/     # read-only probe plugins per alert type
-  actions/            # write plugins: restart_service, clear_logs, scale_instances
-  services/           # business logic layer
-  llm/                # LiteLLM wrapper + prompt builder
-  cloud/              # AWS (SSM, EC2 IC, CloudWatch) + GCP (OS Login, Logging)
-  models/             # SQLAlchemy ORM models
-  schemas/            # Pydantic request/response schemas
-  rag/                # vector embeddings + runbook retrieval
-  monitoring/         # health check scheduler (ARE Phase 6)
-apps/web/src/         # React 19 + Vite 7 frontend
+services/airex-core/  # shared package (models/services/core/schemas/cloud/llm/actions/...)
+services/airex-api/   # FastAPI runtime package + Dockerfile
+services/airex-worker/# ARQ worker runtime package + Dockerfile
+apps/web/             # React 19 + Vite 7 frontend + Dockerfile
+config/               # Configuration files (tenants, credentials)
+scripts/               # Utility scripts
+tests/                 # Test suite
 database/alembic/     # Alembic migrations (isolated pipeline)
-services/backend/     # Dockerfile with 'api' and 'worker' build targets (shared backend/ codebase)
-services/airex-frontend/  # Dockerfile for frontend (copies apps/web/)
 services/litellm/     # LiteLLM proxy Dockerfile + config
 deployment/ecs/terraform/
   environments/prod/  # ACTIVE production Terraform root (run all tf commands here)
@@ -96,7 +90,7 @@ e2e/                  # Playwright end-to-end tests
 
 ### The State Machine Is Law
 
-All incident lifecycle changes MUST go through `app/core/state_machine.py`. **Direct mutation of `incident.state` is prohibited.** Always use `transition_state(incident, new_state, reason)`.
+All incident lifecycle changes MUST go through `airex_core/core/state_machine.py`. **Direct mutation of `incident.state` is prohibited.** Always use `transition_state(incident, new_state, reason)`.
 
 ```
 RECEIVED → INVESTIGATING → RECOMMENDATION_READY → AWAITING_APPROVAL → EXECUTING → VERIFYING → RESOLVED
@@ -113,7 +107,7 @@ RECEIVED → INVESTIGATING → RECOMMENDATION_READY → AWAITING_APPROVAL → EX
 2. Creates `Incident` in `RECEIVED` state → enqueues ARQ task
 3. Worker: `investigate()` → runs plugin from `investigations/<alert_type>.py` → produces `Evidence`
 4. Worker: `generate_recommendation()` → LiteLLM (Gemini primary / Flash Lite fallback, circuit-breaker backed) → RAG context injected → produces `Recommendation`
-5. Policy check (`app/core/policy.py`): if `auto_approve=True` and risk ≤ `max_allowed_risk` → skip to execution; else → `AWAITING_APPROVAL`
+5. Policy check (`airex_core/core/policy.py`): if `auto_approve=True` and risk ≤ `max_allowed_risk` → skip to execution; else → `AWAITING_APPROVAL`
 6. `POST /incidents/{id}/approve` → distributed Redis lock → ARQ executes action plugin
 7. Verification phase → if fails, retry execution is **not** repeated, only verification is
 8. SSE events broadcast all state changes to connected frontend clients in real time
@@ -131,7 +125,7 @@ If LLM proposes an action not in `ACTION_REGISTRY` → reject it.
 ### Cloud Execution
 - **AWS**: SSM `RunShellScript` (preferred) → EC2 Instance Connect ephemeral SSH → simulation fallback
 - **GCP**: OS Login + asyncssh → simulation fallback
-- Discovery: `app/cloud/discovery.py` looks up instance by IP via GCP/AWS APIs, Redis-cached
+- Discovery: `airex_core/cloud/discovery.py` looks up instance by IP via GCP/AWS APIs, Redis-cached
 
 ### Frontend Architecture
 The UI is **purely state-driven** — it never infers or simulates state transitions locally. Every UI section renders based on an **explicit** `state === 'EXACT_VALUE'` check. It always waits for an SSE `state_changed` event before updating. No optimistic UI.

@@ -7,8 +7,8 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.core.config import settings
-from app.models import Base
+from airex_core.core.config import settings
+from airex_core.models import Base
 
 config = context.config
 

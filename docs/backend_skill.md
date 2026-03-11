@@ -257,26 +257,22 @@ class Incident(Base):
 
 ## 7. Folder Structure
 ```
+services/
+  airex-core/
+    airex_core/
+      core/             # state_machine.py, policy.py, security, events
+      investigations/   # Read-only plugins
+      actions/          # Write-critical plugins
+      llm/              # LiteLLM wrapper
+      models/           # DB models
+      services/         # Business logic
+  airex-api/
+    app/api/routes/     # webhooks.py, incidents.py, auth.py, sse.py
+  airex-worker/
+    app/core/worker.py  # ARQ worker entrypoint
 backend/
-  app/
-    core/
-      state_machine.py  # The Law
-      policy.py         # The Rules
-      worker.py         # The Workers
-    investigations/     # Read-Only Plugins
-      cpu_high.py
-      disk_full.py
-    actions/            # Write-Critical Plugins
-      restart_service.py
-      clear_logs.py
-    llm/
-      client.py         # LiteLLM wrapper
-    api/
-      routes/
-        webhooks.py
-        incidents.py
-    models/             # DB Models
-    services/           # Business Logic
+  tests/                # backend test suite (migration transition)
+  scripts/              # operational scripts (migration transition)
 ```
 
 ## 8. Acceptance Criteria

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Activity, Settings, Radar,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
-  X, ChevronRight, Clock, Zap, Ban, Users, HeartPulse
+  X, ChevronRight, Clock, Zap, Ban, Users, HeartPulse, TrendingUp, BookOpen
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
@@ -19,6 +19,8 @@ const ACTIVE_STATES = [
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Alerts', path: '/alerts', icon: AlertTriangle, showBadge: true, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Analytics', path: '/analytics', icon: TrendingUp, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Knowledge Base', path: '/knowledge-base', icon: BookOpen, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Proactive', path: '/proactive', icon: Radar, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Live Feed', path: '/live', icon: Activity, roles: ['admin', 'operator', 'viewer'] },

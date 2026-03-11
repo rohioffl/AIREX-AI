@@ -138,7 +138,7 @@ Single-tenant runtime note:
 
 ## 4) Testing Expectations
 - Add/adjust tests for every meaningful behavior change.
-- Backend tests: `backend/tests/` with `pytest` + `pytest-asyncio`.
+- Backend tests: `tests/` with `pytest` + `pytest-asyncio`.
 - Frontend tests: Vitest + React Testing Library.
 - E2E tests: Playwright in `e2e/tests/`.
 - During iteration, run targeted tests first, then broader suites.

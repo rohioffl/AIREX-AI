@@ -18,32 +18,31 @@ phases:
     commands:
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - |
-          if [[ -z "${FRONTEND_BUCKET:-}" ]]; then
+          if [ -z "${FRONTEND_BUCKET:-}" ]; then
             FRONTEND_BUCKET="airex-prod-frontend-${ACCOUNT_ID}"
           fi
       - |
-          RAW_CLIENT_ID_SECRET=$(aws secretsmanager get-secret-value \
+          if [ ! -f apps/web/src/assets/land_final.jpg ]; then
+            mkdir -p apps/web/src/assets
+            aws s3 cp "s3://${FRONTEND_BUCKET}/assets/land_final.jpg" "apps/web/src/assets/land_final.jpg"
+          fi
+      - |
+          export RAW_CLIENT_ID_SECRET=$(aws secretsmanager get-secret-value \
             --region "$AWS_REGION" \
             --secret-id "$FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID" \
             --query SecretString \
             --output text)
-
-          export VITE_GOOGLE_CLIENT_ID=$(python3 - <<'PY'
-import json, os
-s = os.environ['RAW_CLIENT_ID_SECRET']
-if s.strip().startswith('{'):
-    data = json.loads(s)
-    # google "web" credentials json
-    if isinstance(data, dict) and isinstance(data.get('web'), dict) and data['web'].get('client_id'):
-        print(data['web']['client_id'])
-    elif isinstance(data, dict) and data.get('client_id'):
-        print(data['client_id'])
-    else:
-        raise SystemExit('Could not extract client_id from JSON secret')
-else:
-    print(s)
-PY
-)
+          export VITE_GOOGLE_CLIENT_ID=$(printf '%s' "$RAW_CLIENT_ID_SECRET" | node - <<'EOF'
+          const fs = require("fs");
+          const raw = fs.readFileSync(0, "utf8").trim();
+          try {
+            const parsed = JSON.parse(raw);
+            process.stdout.write(parsed?.web?.client_id || parsed?.client_id || raw);
+          } catch {
+            process.stdout.write(raw);
+          }
+          EOF
+          )
       - npm ci --prefix apps/web
       - npm run build --prefix apps/web
   post_build:

@@ -45,6 +45,15 @@ export function logout() {
   clearTokens()
 }
 
+export async function googleLogin(idToken) {
+  const res = await api.post('/auth/google', { id_token: idToken })
+  const { access_token, refresh_token, expires_in } = res.data
+
+  setTokens({ accessToken: access_token, refreshToken: refresh_token, expiresIn: expires_in })
+
+  return res.data
+}
+
 export function isAuthenticated() {
   return hasValidAccessToken()
 }

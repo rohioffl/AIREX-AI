@@ -177,8 +177,8 @@
 - `infra/prometheus/alerting_rules.yml` — 10 alert rules (DLQ, circuit breaker, AI failures, execution failures, HTTP errors)
 - `infra/grafana/airex-dashboard.json` — 14-panel dashboard
 - `infra/loadtest/k6_incident_flow.js` — 4 test groups, staged load, thresholds
-- `backend/config/tenants.yaml` — 4 tenants, 5 auth methods, extensive comments
-- `backend/config/credentials/README.md` — 139 lines covering all IAM methods
+- `services/airex-core/config/tenants.yaml` — 4 tenants, 5 auth methods, extensive comments
+- `services/airex-core/config/credentials/README.md` — 139 lines covering all IAM methods
 - `docs/*` — 8 doc files + 3 runbooks, thorough and consistent
 - `AGENTS.md` + `CLAUDE.md` — Consistent project guidelines
 
@@ -190,7 +190,7 @@
 | E2E Tests | 1 Playwright file, 13 tests, smoke-level. **Not in CI pipeline** |
 | Backend Dockerfile | No non-root user, no .dockerignore, no multi-stage build, no health check |
 | Frontend Dockerfile | No non-root user, no .dockerignore |
-| .env setup | `backend/.env` appears committed with real GCP project + IP. SECRET_KEY is placeholder |
+| .env setup | `.env` files should not be committed. SECRET_KEY must be set via environment variables |
 
 ### Missing
 
@@ -213,17 +213,17 @@
 |---|-------|----------|
 | 1 | Auth bypass button in production code | `apps/web/src/pages/LoginPage.jsx:288` |
 | 2 | No route guards — all pages accessible without login | `apps/web/src/App.jsx` |
-| 3 | `backend/.env` appears committed with real GCP project/IP | `backend/.env` |
-| 4 | SECRET_KEY is placeholder: `CHANGE_THIS_IN_PRODUCTION...` | `backend/.env` |
-| 5 | Some deploy images historically ran as root | `services/backend/Dockerfile` |
+| 3 | `.env` files should not be committed | `.env` files |
+| 4 | SECRET_KEY must be set via environment variables in production | Environment configuration |
+| 5 | Some deploy images historically ran as root | `services/airex-api/Dockerfile`, `services/airex-worker/Dockerfile` |
 
 ### P1 — Data Integrity
 
 | # | Issue | Location |
 |---|-------|----------|
 | 6 | CI uses SQLite not PostgreSQL — PG features untested | `.github/workflows/ci.yml` |
-| 7 | FAILED_ANALYSIS in both TERMINAL and RETRYABLE states | `backend/app/core/state_machine.py` |
-| 8 | validate_migration.py references wrong head revision | `backend/scripts/validate_migration.py` |
+| 7 | FAILED_ANALYSIS in both TERMINAL and RETRYABLE states | `services/airex-core/airex_core/core/state_machine.py` |
+| 8 | validate_migration.py references wrong head revision | `scripts/validate_migration.py` |
 
 ### P2 — Functionality Gaps
 
@@ -233,15 +233,15 @@
 | 10 | Search bar is decorative (no input, no logic) | `apps/web/src/components/layout/Layout.jsx:226` |
 | 11 | SystemGraph uses Math.random() — fake data | `apps/web/src/components/common/SystemGraph.jsx:8` |
 | 12 | Settings page remains mostly static and limited in configuration scope | `apps/web/src/pages/SettingsPage.jsx` |
-| 13 | GCP MIG scaling not implemented | `backend/app/actions/scale_instances.py` |
-| 14 | TenantLimit never enforced | `backend/app/models/tenant_limit.py` (model only) |
+| 13 | GCP MIG scaling not implemented | `services/airex-core/airex_core/actions/scale_instances.py` |
+| 14 | TenantLimit never enforced | `services/airex-core/airex_core/models/tenant_limit.py` (model only) |
 | 15 | Missing API endpoints: DLQ replay, user CRUD, soft-delete, manual-review tooling | Backend routes |
 
 ### P3 — Cleanup
 
 | # | Issue | Location |
 |---|-------|----------|
-| 16 | Orphaned empty `backend/backend/` directory | `backend/backend/` |
+| 16 | ~~Orphaned empty `backend/backend/` directory~~ | ~~RESOLVED: backend/ removed~~ |
 | 17 | Dead `App.css` (default Vite template) | `apps/web/src/App.css` |
 | 18 | Unused Three.js dependencies (~2MB bundle waste) | `apps/web/package.json` |
 | 19 | index.html title is "frontend", default favicon | `apps/web/index.html` |

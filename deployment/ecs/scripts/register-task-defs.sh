@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/.rendered-task-definitions"
 ENV_FILE="$ROOT_DIR/.registered-task-definitions.env"
+SKIP_LITELLM="${SKIP_LITELLM:-false}"
 
 if [[ ! -d "$OUT_DIR" ]]; then
   echo "Rendered task definitions not found. Run render-task-defs.sh first." >&2
@@ -24,7 +25,9 @@ register() {
 
 register "$OUT_DIR/airex-api.json" "API_TASKDEF_ARN"
 register "$OUT_DIR/airex-worker.json" "WORKER_TASKDEF_ARN"
-register "$OUT_DIR/airex-litellm.json" "LITELLM_TASKDEF_ARN"
+if [[ "$SKIP_LITELLM" != "true" ]]; then
+  register "$OUT_DIR/airex-litellm.json" "LITELLM_TASKDEF_ARN"
+fi
 register "$OUT_DIR/airex-langfuse.json" "LANGFUSE_TASKDEF_ARN"
 
 echo "Wrote task definition ARNs to: $ENV_FILE"

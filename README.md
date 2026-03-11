@@ -1,20 +1,5 @@
 # AIREX
 
-[![Live Demo](https://img.shields.io/badge/Live-airex.rohitpt.online-0f766e?style=for-the-badge)](https://airex.rohitpt.online)
-[![Portfolio](https://img.shields.io/badge/Portfolio-rohitpt.online-111827?style=for-the-badge)](https://rohitpt.online)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-rohitpt-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/rohitpt)
-[![GitHub](https://img.shields.io/badge/GitHub-rohioffl-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/rohioffl)
-[![GitHub Stars](https://img.shields.io/github/stars/rohioffl/AIREX-AI?style=for-the-badge)](https://github.com/rohioffl/AIREX-AI/stargazers)
-[![GitHub Issues](https://img.shields.io/github/issues/rohioffl/AIREX-AI?style=for-the-badge)](https://github.com/rohioffl/AIREX-AI/issues)
-[![License](https://img.shields.io/badge/License-Proprietary-b91c1c?style=for-the-badge)](LICENSE)
-
-Created by **Rohit** - a production-focused platform engineer building practical AI systems for incident automation, cloud operations, and reliable developer tooling.
-
-Live project: `airex.rohitpt.online`  
-Portfolio: `rohitpt.online`  
-LinkedIn: `linkedin.com/in/rohitpt`  
-GitHub: `github.com/rohioffl`
-
 
 
 
@@ -39,11 +24,14 @@ AIREX is designed to reduce mean time to resolution for operational incidents wi
 ## Current Monorepo Layout
 
 ```text
-backend/                 FastAPI app, worker code, services, models, tests
-apps/web/                React + Vite frontend
+apps/web/                React + Vite frontend + Dockerfile
+config/                  Configuration files (tenants, credentials)
+scripts/                 Utility scripts (admin user creation, etc.)
+tests/                   Test suite
 database/                Alembic migrations and standalone migration image
-services/backend/        Shared backend image targets for API and worker
-services/airex-frontend/ Frontend Dockerfile
+services/airex-core/     Shared Python package (models/services/core/schemas/integrations)
+services/airex-api/      FastAPI service package + Dockerfile
+services/airex-worker/   ARQ worker service package + Dockerfile
 services/litellm/        LiteLLM container config
 services/langfuse/       Langfuse deployment notes
 deployment/              ECS and CodeBuild assets
@@ -55,10 +43,10 @@ e2e/                     Playwright end-to-end tests
 ## Architecture Overview
 
 ### Core Services
-- `backend/`: shared Python codebase for the API and worker runtimes, including domain services, state machine, policies, schemas, and integrations.
-- `backend` (Compose) / `airex-api` (image): FastAPI runtime packaged from the shared `backend/` codebase.
-- `worker` (Compose) / `airex-worker` (image): ARQ runtime packaged from the shared `backend/` codebase.
-- `apps/web`: operational UI for incident review, approvals, evidence, runbooks, and health dashboards.
+- `services/airex-core`: shared Python package used by API and worker runtimes.
+- `services/airex-api`: FastAPI runtime package and container entrypoint.
+- `services/airex-worker`: ARQ runtime package and worker entrypoint.
+- `apps/web`: operational UI for incident review, approvals, evidence, runbooks, and health dashboards (includes Dockerfile).
 - `database`: isolated migration pipeline with Alembic under `database/alembic/`.
 
 ### Runtime Dependencies
@@ -85,7 +73,7 @@ Failure states remain explicit: `FAILED_ANALYSIS`, `FAILED_EXECUTION`, `FAILED_V
 ### Backend
 
 ```bash
-cd backend
+cd services/airex-api
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -95,7 +83,10 @@ uvicorn app.main:app --reload
 ### Worker
 
 ```bash
-cd backend
+cd services/airex-worker
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 arq app.core.worker.WorkerSettings
 ```
 
@@ -130,9 +121,11 @@ docker-compose run migrate
 ### Backend
 
 ```bash
-cd backend
-ruff check app/
-mypy app/ --ignore-missing-imports
+cd services/airex-core
+python3 -m compileall airex_core
+
+# transitional test suite location
+cd ../../backend
 pytest
 ```
 
@@ -155,7 +148,8 @@ npm run test
 
 ## Deployment Notes
 
-- `services/backend/Dockerfile` builds the shared backend image targets for the API and worker runtimes.
+- `services/airex-api/Dockerfile` builds the API runtime image.
+- `services/airex-worker/Dockerfile` builds the worker runtime image.
 - `services/airex-frontend/Dockerfile` builds the frontend image from `apps/web/`.
 - `database/Dockerfile` builds a standalone migration image.
 - `deployment/ecs/codebuild/buildspec.frontend.yml` publishes the frontend from `apps/web/dist` to S3 + CloudFront.

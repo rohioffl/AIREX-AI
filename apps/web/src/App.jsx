@@ -16,6 +16,10 @@ import LiveFeed from './pages/LiveFeed'
 import SettingsPage from './pages/SettingsPage'
 import UserManagementPage from './pages/UserManagementPage'
 import HealthChecksPage from './pages/HealthChecksPage'
+import SetPasswordPage from './pages/SetPasswordPage'
+import NotFoundPage from './pages/NotFoundPage'
+import AnalyticsPage from './pages/AnalyticsPage'
+import KnowledgeBasePage from './pages/KnowledgeBasePage'
 
 export default function App() {
   return (
@@ -26,6 +30,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/set-password" element={<SetPasswordPage />} />
               <Route path="/*" element={
                 <PrivateRoute>
                   <Layout>
@@ -38,19 +43,15 @@ export default function App() {
                       <Route path="/rejected" element={<RejectedPage />} />
                       <Route path="/live" element={<LiveFeed />} />
                       <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/analytics" element={<AnalyticsPage />} />
+                      <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
                       <Route path="/health-checks" element={<HealthChecksPage />} />
                       <Route path="/admin/users" element={
                         <RequireRole roles="admin">
                           <UserManagementPage />
                         </RequireRole>
                       } />
-                      <Route path="*" element={
-                        <div className="p-6 text-center">
-                          <h1 className="text-2xl font-bold mb-2">404 - Page Not Found</h1>
-                          <p className="text-muted mb-4">The page you're looking for doesn't exist.</p>
-                          <Navigate to="/dashboard" replace />
-                        </div>
-                      } />
+                      <Route path="*" element={<NotFoundPage />} />
                     </Routes>
                   </Layout>
                 </PrivateRoute>

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/.registered-task-definitions.env"
+SKIP_LITELLM="${SKIP_LITELLM:-false}"
 
 if [[ -z "${ECS_CLUSTER:-}" ]]; then
   echo "Missing ECS_CLUSTER" >&2
@@ -30,5 +31,7 @@ update_service() {
 
 update_service "${ECS_SERVICE_API:-airex-prod-api}" "$API_TASKDEF_ARN"
 update_service "${ECS_SERVICE_WORKER:-airex-prod-worker}" "$WORKER_TASKDEF_ARN"
-update_service "${ECS_SERVICE_LITELLM:-airex-prod-litellm}" "$LITELLM_TASKDEF_ARN"
+if [[ "$SKIP_LITELLM" != "true" ]]; then
+  update_service "${ECS_SERVICE_LITELLM:-airex-prod-litellm}" "$LITELLM_TASKDEF_ARN"
+fi
 update_service "${ECS_SERVICE_LANGFUSE:-airex-prod-langfuse}" "$LANGFUSE_TASKDEF_ARN"

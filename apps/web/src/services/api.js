@@ -121,6 +121,11 @@ export async function deleteUser(id) {
   await api.delete(`/users/${id}/`)
 }
 
+export async function resendInvitation(userId) {
+  const res = await api.post(`/users/${userId}/resend-invitation`)
+  return res.data
+}
+
 // Metrics
 export async function fetchMetrics() {
   const res = await api.get('/metrics/')
@@ -194,6 +199,56 @@ export async function fetchAutoRunbook(incidentId) {
   return res.data
 }
 
+// Comments
+export async function fetchComments(incidentId) {
+  const res = await api.get(`/incidents/${incidentId}/comments`)
+  return res.data
+}
+
+export async function createComment(incidentId, content) {
+  const res = await api.post(`/incidents/${incidentId}/comments`, { content })
+  return res.data
+}
+
+// Assignment
+export async function assignIncident(incidentId, userId) {
+  const res = await api.post(`/incidents/${incidentId}/assign`, { assigned_to: userId })
+  return res.data
+}
+
+export async function unassignIncident(incidentId) {
+  const res = await api.post(`/incidents/${incidentId}/assign`, { assigned_to: null })
+  return res.data
+}
+
+// Bulk operations
+export async function bulkApprove(incidentIds, reason) {
+  const res = await api.post('/incidents/bulk-approve', { incident_ids: incidentIds, reason })
+  return res.data
+}
+
+export async function bulkReject(incidentIds, reason) {
+  const res = await api.post('/incidents/bulk-reject', { incident_ids: incidentIds, reason })
+  return res.data
+}
+
+// Export
+export async function exportIncidents(format = 'json', filters = {}) {
+  const params = { format, ...filters }
+  const res = await api.get('/incidents/export', { params, responseType: 'blob' })
+  return res.data
+}
+
+// Soft delete
+export async function deleteIncident(incidentId) {
+  await api.delete(`/incidents/${incidentId}`)
+}
+
+export async function restoreIncident(incidentId) {
+  const res = await api.post(`/incidents/${incidentId}/restore`)
+  return res.data
+}
+
 // Health checks (Phase 6 ARE — Proactive Monitoring)
 export async function fetchHealthCheckDashboard() {
   const res = await api.get('/health-checks/dashboard')
@@ -219,6 +274,81 @@ export async function fetchMonitorInventory({ refresh = false } = {}) {
 export async function fetchAlertHistory({ days = 7 } = {}) {
   const res = await api.get('/metrics/alert-history', { params: { days } })
   return res.data
+}
+
+// Analytics trends
+export async function fetchAnalyticsTrends(days = 30) {
+  const res = await api.get('/analytics/trends', { params: { days } })
+  return res.data
+}
+
+// Related incidents
+export async function fetchRelatedIncidents(incidentId) {
+  const res = await api.get(`/incidents/${incidentId}/related`)
+  return res.data
+}
+
+export async function linkIncident(incidentId, relatedIncidentId, relationshipType = 'related', note = null) {
+  const res = await api.post(`/incidents/${incidentId}/related`, {
+    related_incident_id: relatedIncidentId,
+    relationship_type: relationshipType,
+    note,
+  })
+  return res.data
+}
+
+export async function unlinkIncident(incidentId, relatedIncidentId) {
+  await api.delete(`/incidents/${incidentId}/related/${relatedIncidentId}`)
+}
+
+// Incident templates
+export async function fetchTemplates(activeOnly = false) {
+  const res = await api.get('/templates', { params: { active_only: activeOnly } })
+  return res.data
+}
+
+export async function getTemplate(templateId) {
+  const res = await api.get(`/templates/${templateId}`)
+  return res.data
+}
+
+export async function createTemplate(data) {
+  const res = await api.post('/templates', data)
+  return res.data
+}
+
+export async function updateTemplate(templateId, data) {
+  const res = await api.put(`/templates/${templateId}`, data)
+  return res.data
+}
+
+export async function deleteTemplate(templateId) {
+  await api.delete(`/templates/${templateId}`)
+}
+
+// Knowledge base
+export async function fetchKnowledgeBase(params = {}) {
+  const res = await api.get('/knowledge-base', { params })
+  return res.data
+}
+
+export async function getKnowledgeBaseEntry(entryId) {
+  const res = await api.get(`/knowledge-base/${entryId}`)
+  return res.data
+}
+
+export async function createKnowledgeBaseEntry(data) {
+  const res = await api.post('/knowledge-base', data)
+  return res.data
+}
+
+export async function updateKnowledgeBaseEntry(entryId, data) {
+  const res = await api.put(`/knowledge-base/${entryId}`, data)
+  return res.data
+}
+
+export async function deleteKnowledgeBaseEntry(entryId) {
+  await api.delete(`/knowledge-base/${entryId}`)
 }
 
 export default api

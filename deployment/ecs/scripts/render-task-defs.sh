@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE_DIR="$ROOT_DIR/task-definitions"
 OUT_DIR="$ROOT_DIR/.rendered-task-definitions"
+SKIP_LITELLM="${SKIP_LITELLM:-false}"
+
+: "${LITELLM_IMAGE:=litellm/unused:skip}"
+: "${TASKDEF_FAMILY_LITELLM:=unused-litellm-family}"
+: "${LOG_GROUP_LITELLM:=/ecs/unused-litellm}"
+: "${SECRET_LITELLM_MASTER_KEY_ARN:=unused-litellm-secret-arn}"
+: "${SECRET_GEMINI_API_KEY_ARN:=unused-gemini-secret-arn}"
 
 mkdir -p "$OUT_DIR"
 
@@ -11,22 +18,18 @@ required_env=(
   AWS_REGION
   API_IMAGE
   WORKER_IMAGE
-  LITELLM_IMAGE
   LANGFUSE_IMAGE
   EXECUTION_ROLE_ARN
   TASK_ROLE_ARN
   TASKDEF_FAMILY_API
   TASKDEF_FAMILY_WORKER
-  TASKDEF_FAMILY_LITELLM
   TASKDEF_FAMILY_LANGFUSE
   LOG_GROUP_API
   LOG_GROUP_WORKER
-  LOG_GROUP_LITELLM
   LOG_GROUP_LANGFUSE
   SECRET_DATABASE_URL_ARN
   SECRET_REDIS_URL_ARN
   SECRET_APP_SECRET_KEY_ARN
-  SECRET_LITELLM_MASTER_KEY_ARN
   SECRET_LANGFUSE_PUBLIC_KEY_ARN
   SECRET_LANGFUSE_SECRET_KEY_ARN
   SECRET_LANGFUSE_DATABASE_URL_ARN
@@ -72,6 +75,7 @@ render_file() {
     -e "s|__SECRET_REDIS_URL_ARN__|$SECRET_REDIS_URL_ARN|g" \
     -e "s|__SECRET_APP_SECRET_KEY_ARN__|$SECRET_APP_SECRET_KEY_ARN|g" \
     -e "s|__SECRET_LITELLM_MASTER_KEY_ARN__|$SECRET_LITELLM_MASTER_KEY_ARN|g" \
+    -e "s|__SECRET_GEMINI_API_KEY_ARN__|$SECRET_GEMINI_API_KEY_ARN|g" \
     -e "s|__SECRET_LANGFUSE_PUBLIC_KEY_ARN__|$SECRET_LANGFUSE_PUBLIC_KEY_ARN|g" \
     -e "s|__SECRET_LANGFUSE_SECRET_KEY_ARN__|$SECRET_LANGFUSE_SECRET_KEY_ARN|g" \
     -e "s|__SECRET_LANGFUSE_DATABASE_URL_ARN__|$SECRET_LANGFUSE_DATABASE_URL_ARN|g" \
@@ -89,7 +93,15 @@ render_file() {
 
 render_file "$TEMPLATE_DIR/airex-api.json" "$OUT_DIR/airex-api.json"
 render_file "$TEMPLATE_DIR/airex-worker.json" "$OUT_DIR/airex-worker.json"
-render_file "$TEMPLATE_DIR/airex-litellm.json" "$OUT_DIR/airex-litellm.json"
+if [[ "$SKIP_LITELLM" != "true" ]]; then
+  for name in LITELLM_IMAGE TASKDEF_FAMILY_LITELLM LOG_GROUP_LITELLM SECRET_LITELLM_MASTER_KEY_ARN SECRET_GEMINI_API_KEY_ARN; do
+    if [[ -z "${!name:-}" ]]; then
+      echo "Missing required env: $name" >&2
+      exit 1
+    fi
+  done
+  render_file "$TEMPLATE_DIR/airex-litellm.json" "$OUT_DIR/airex-litellm.json"
+fi
 render_file "$TEMPLATE_DIR/airex-langfuse.json" "$OUT_DIR/airex-langfuse.json"
 
 echo "Rendered task definitions in: $OUT_DIR"
