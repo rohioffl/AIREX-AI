@@ -132,7 +132,12 @@ TECH_STACK.docx
 
 # Claude Code local state (settings, plans, tasks, cache)
 .claude/
+
+# Kiro local state (settings, skills, hooks)
+.kiro/
+
 services/airex-core/dist/
 services/airex-core/build/
 services/airex-core/*.egg-info/
 services/airex-core/.eggs/
+mcp.json
