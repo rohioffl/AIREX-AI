@@ -156,7 +156,7 @@ def main():
     print("\nRunning Alembic migration...")
     try:
         result = subprocess.run(
-            ["alembic", "upgrade", "head"],
+            ["alembic", "upgrade", "heads"],
             cwd="database",
             env=env,
             check=True

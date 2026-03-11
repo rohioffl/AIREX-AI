@@ -11,24 +11,30 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 
 from app.api.routes import (
+    analytics,
+    anomalies,
     auth,
     chat,
     dlq,
+    grafana_dashboards,
     health_checks,
     incidents,
+    knowledge_base,
     metrics as metrics_router,
+    notification_preferences,
+    patterns,
+    predictions,
+    reports,
+    root_causes,
+    runbooks,
+    settings as settings_router,
     site24x7,
     sse,
-    settings as settings_router,
+    templates,
     tenants,
     users,
     webhooks,
-    analytics,
-    knowledge_base,
-    notification_preferences,
-    templates,
-
-        reports,)
+)
 from airex_core.core.config import settings
 from airex_core.core.events import set_redis
 from airex_core.core.logging import setup_logging
@@ -199,12 +205,41 @@ app.include_router(
 )
 app.include_router(
     knowledge_base.router,
-app.include_router(
-        reports.router,
-        prefix=f"{settings.API_V1_STR}/reports",
-        tags=["reports"],
-    )
-
     prefix=f"{settings.API_V1_STR}/knowledge-base",
     tags=["knowledge-base"],
+)
+app.include_router(
+    reports.router,
+    prefix=f"{settings.API_V1_STR}/reports",
+    tags=["reports"],
+)
+app.include_router(
+    patterns.router,
+    prefix=f"{settings.API_V1_STR}/patterns",
+    tags=["patterns"],
+)
+app.include_router(
+    predictions.router,
+    prefix=f"{settings.API_V1_STR}/predictions",
+    tags=["predictions"],
+)
+app.include_router(
+    anomalies.router,
+    prefix=f"{settings.API_V1_STR}/anomalies",
+    tags=["anomalies"],
+)
+app.include_router(
+    runbooks.router,
+    prefix=f"{settings.API_V1_STR}/runbooks",
+    tags=["runbooks"],
+)
+app.include_router(
+    root_causes.router,
+    prefix=f"{settings.API_V1_STR}/root-causes",
+    tags=["root-causes"],
+)
+app.include_router(
+    grafana_dashboards.router,
+    prefix=f"{settings.API_V1_STR}/grafana-dashboards",
+    tags=["grafana-dashboards"],
 )

@@ -25,6 +25,9 @@ const NAV_ITEMS = [
   { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Live Feed', path: '/live', icon: Activity, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Health', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Runbooks', path: '/runbooks', icon: Terminal, roles: ['admin', 'operator'] },
+  { label: 'AI Intelligence', path: '/patterns', icon: Layers, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin', 'operator'] },
   { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
   { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },
 ]

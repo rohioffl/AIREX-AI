@@ -21,6 +21,8 @@ import NotFoundPage from './pages/NotFoundPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import KnowledgeBasePage from './pages/KnowledgeBasePage'
 import ReportsPage from './pages/ReportsPage'
+import RunbooksPage from './pages/RunbooksPage'
+import PatternsPage from './pages/PatternsPage'
 
 export default function App() {
   return (
@@ -45,9 +47,10 @@ export default function App() {
                       <Route path="/live" element={<LiveFeed />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/analytics" element={<AnalyticsPage />} />
-                      <Route path="/knowledge-base" element={<KnowledgeBasePage />
-        <Route path="/reports" element={<PrivateRoute><ReportsPage /></PrivateRoute>} />
-} />
+                      <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+                      <Route path="/reports" element={<ReportsPage />} />
+                      <Route path="/runbooks" element={<RunbooksPage />} />
+                      <Route path="/patterns" element={<PatternsPage />} />
                       <Route path="/health-checks" element={<HealthChecksPage />} />
                       <Route path="/admin/users" element={
                         <RequireRole roles="admin">

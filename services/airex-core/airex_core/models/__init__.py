@@ -12,6 +12,8 @@ from airex_core.models.feedback_learning import FeedbackLearning
 from airex_core.models.incident_template import IncidentTemplate
 from airex_core.models.knowledge_base import KnowledgeBase
 from airex_core.models.related_incident import RelatedIncident
+from airex_core.models.report_template import ReportTemplate
+from airex_core.models.runbook import Runbook
 from airex_core.models.runbook_chunk import RunbookChunk
 from airex_core.models.state_transition import StateTransition
 from airex_core.models.tenant_limit import TenantLimit
@@ -33,11 +35,12 @@ __all__ = [
     "KnowledgeBase",
     "NotificationPreference",
     "RelatedIncident",
-    "RunbookChunk",
+    "ReportTemplate",
     "RiskLevel",
+    "Runbook",
+    "RunbookChunk",
     "SeverityLevel",
     "StateTransition",
     "TenantLimit",
     "User",
-    "ReportTemplate",
 ]

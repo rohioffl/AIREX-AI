@@ -245,11 +245,7 @@ export async function exportIncidents(format = 'json', filters = {}) {
   return res.data
 }
 
-// Soft delete
-export async function deleteIncident(incidentId) {
-  await api.delete(`/incidents/${incidentId}`)
-}
-
+// Restore
 export async function restoreIncident(incidentId) {
   const res = await api.post(`/incidents/${incidentId}/restore`)
   return res.data
@@ -357,8 +353,6 @@ export async function deleteKnowledgeBaseEntry(entryId) {
   await api.delete(`/knowledge-base/${entryId}`)
 }
 
-export default api
-
 // Report templates
 export async function fetchReports(activeOnly = false) {
   const res = await api.get('/reports', { params: { active_only: activeOnly } })
@@ -389,3 +383,96 @@ export async function generateReport(templateId) {
   return res.data
 }
 
+// Patterns
+export async function fetchPatterns(windowDays = 30) {
+  const res = await api.get('/patterns', { params: { window_days: windowDays } })
+  return res.data
+}
+
+export async function getPattern(patternId) {
+  const res = await api.get(`/patterns/${patternId}`)
+  return res.data
+}
+
+// Predictions
+export async function predictRootCause(alertType, severity = null, hostKey = null) {
+  const params = { alert_type: alertType }
+  if (severity) params.severity = severity
+  if (hostKey) params.host_key = hostKey
+  const res = await api.get('/predictions/root-cause', { params })
+  return res.data
+}
+
+export async function getPredictionAccuracy(days = 30) {
+  const res = await api.get('/predictions/accuracy', { params: { days } })
+  return res.data
+}
+
+// Anomalies
+export async function fetchAnomalies(baselineDays = 30, windowHours = 24) {
+  const res = await api.get('/anomalies', { params: { baseline_days: baselineDays, detection_window_hours: windowHours } })
+  return res.data
+}
+
+// Runbooks
+export async function fetchRunbooks(activeOnly = false, alertType = null) {
+  const params = {}
+  if (activeOnly) params.active_only = true
+  if (alertType) params.alert_type = alertType
+  const res = await api.get('/runbooks', { params })
+  return res.data
+}
+
+export async function getRunbook(runbookId) {
+  const res = await api.get(`/runbooks/${runbookId}`)
+  return res.data
+}
+
+export async function createRunbook(data) {
+  const res = await api.post('/runbooks', data)
+  return res.data
+}
+
+export async function updateRunbook(runbookId, data) {
+  const res = await api.put(`/runbooks/${runbookId}`, data)
+  return res.data
+}
+
+export async function deleteRunbook(runbookId) {
+  await api.delete(`/runbooks/${runbookId}`)
+}
+
+export async function duplicateRunbook(runbookId) {
+  const res = await api.post(`/runbooks/${runbookId}/duplicate`)
+  return res.data
+}
+
+// Grafana Dashboards
+export async function fetchGrafanaTemplates(category = null) {
+  const params = category ? { category } : {}
+  const res = await api.get('/grafana-dashboards/templates', { params })
+  return res.data
+}
+
+export async function exportGrafanaDashboard(templateId, datasource = 'Prometheus') {
+  const res = await api.post(`/grafana-dashboards/templates/${templateId}/export`, null, { params: { datasource } })
+  return res.data
+}
+
+export async function exportAllGrafanaDashboards(datasource = 'Prometheus') {
+  const res = await api.post('/grafana-dashboards/export-all', null, { params: { datasource } })
+  return res.data
+}
+
+// Notification preferences
+export async function fetchNotificationPreferences() {
+  const res = await api.get('/notification-preferences/me')
+  return res.data
+}
+
+export async function updateNotificationPreferences(data) {
+  const res = await api.put('/notification-preferences/me', data)
+  return res.data
+}
+
+export default api

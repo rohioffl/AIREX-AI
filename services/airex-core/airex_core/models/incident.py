@@ -126,6 +126,9 @@ class Incident(Base, TenantMixin):
     # SHA256[:16] of (tenant_id + alert_type + time_bucket)
     correlation_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # Pattern detection group (clustering)
+    pattern_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     # ── Resolution tracking (Phase 2 ARE) ────────────────────────
     resolution_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     resolution_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
