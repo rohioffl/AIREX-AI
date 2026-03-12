@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Mail, Ban, X } from 'lucide-react'
 import { buildAcknowledgeMailto } from '../../utils/formatters'
+import { acknowledgeIncident } from '../../services/api'
 
 export default function AcknowledgeRejectModal({
   open,
@@ -13,6 +14,7 @@ export default function AcknowledgeRejectModal({
 }) {
   const [rejectNote, setRejectNote] = useState('')
   const [action, setAction] = useState(initialAction) // 'acknowledge' or 'reject'
+  const [acking, setAcking] = useState(false)
 
   // Reset action when modal closes
   useEffect(() => {
@@ -32,15 +34,19 @@ export default function AcknowledgeRejectModal({
   // fall back to a generic manual reason if empty.
   const canReject = trimmedNote.length <= 500
 
-  const handleAcknowledge = () => {
-    if (incident) {
-      // Avoid noopener/noreferrer — Gmail needs to follow auth redirects
-      // which fail when the opener relationship is severed.
-      window.open(buildAcknowledgeMailto(incident), '_blank')
+  const handleAcknowledge = async () => {
+    if (!incident) return
+    setAcking(true)
+    try {
+      await acknowledgeIncident(incident.id)
+    } catch {
+      // non-blocking — still proceed with email + callback
+    } finally {
+      setAcking(false)
     }
-    if (onAcknowledge) {
-      onAcknowledge()
-    }
+    // Open Gmail draft for on-call notification
+    window.open(buildAcknowledgeMailto(incident), '_blank')
+    if (onAcknowledge) onAcknowledge()
     onCancel()
   }
 
@@ -127,15 +133,15 @@ export default function AcknowledgeRejectModal({
               </button>
               <button
                 onClick={handleAcknowledge}
-                disabled={loading}
+                disabled={loading || acking}
                  className="flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-60"
-                style={{ 
-                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', 
-                  boxShadow: '0 4px 12px rgba(99,102,241,0.2)' 
+                style={{
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  boxShadow: '0 4px 12px rgba(99,102,241,0.2)'
                 }}
               >
                  <Mail size={14} />
-                 Confirm Acknowledge
+                 {acking ? 'Acknowledging…' : 'Confirm Acknowledge'}
               </button>
             </div>
           </div>

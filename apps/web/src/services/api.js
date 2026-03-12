@@ -132,9 +132,21 @@ export async function resendInvitation(userId) {
   return res.data
 }
 
+// Acknowledge incident
+export async function acknowledgeIncident(id) {
+  const res = await api.post(`/incidents/${id}/acknowledge`)
+  return res.data
+}
+
 // Metrics
 export async function fetchMetrics() {
   const res = await api.get('/metrics/')
+  return res.data
+}
+
+// Tenants
+export async function fetchTenants() {
+  const res = await api.get('/tenants/')
   return res.data
 }
 

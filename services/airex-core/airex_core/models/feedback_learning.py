@@ -16,7 +16,7 @@ class FeedbackLearning(Base, TenantMixin):
     __tablename__ = "feedback_learning"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=False, primary_key=True
+        PG_UUID(as_uuid=True), nullable=False, primary_key=True, default=uuid.uuid4
     )
     incident_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), nullable=False

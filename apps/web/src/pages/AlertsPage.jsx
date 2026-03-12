@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { useLocation, Link, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle, Bell,
-  ShieldAlert, AlertOctagon, Radio, Zap, Server,
+  ShieldAlert, AlertOctagon, Radio, Zap, Server, Plus,
   RefreshCw, Download, Filter, ArrowUpDown, ChevronLeft, ChevronRight,
   X, Calendar, Search
 } from 'lucide-react'
@@ -13,6 +13,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
 import { useAuth } from '../context/AuthContext'
 import CreateIncidentModal from '../components/incident/CreateIncidentModal'
+import { exportIncidents, bulkApprove, bulkReject } from '../services/api'
 
 const ACTION_STATES = ['RECOMMENDATION_READY', 'AWAITING_APPROVAL']
 const INVESTIGATING_STATES = ['RECEIVED', 'INVESTIGATING']
@@ -72,6 +73,22 @@ export default function AlertsPage() {
     }))
   }, [urlSearch, hostFilter, setFilters])
 
+  const toggleSelect = (id) => {
+    setSelectedIncidents(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    setSelectedIncidents(prev =>
+      prev.size === visibleAlerts.length && visibleAlerts.length > 0
+        ? new Set()
+        : new Set(visibleAlerts.map(a => a.id))
+    )
+  }
+
   const handleRefresh = async () => {
     setRefreshing(true)
     await reload()
@@ -101,6 +118,32 @@ export default function AlertsPage() {
     } catch (err) {
       console.error('Export failed:', err)
       alert('Failed to export incidents: ' + (err.message || 'Unknown error'))
+    }
+  }
+
+  const handleBulkApprove = async () => {
+    setBulkActionLoading(true)
+    try {
+      await bulkApprove(Array.from(selectedIncidents))
+      setSelectedIncidents(new Set())
+      await reload()
+    } catch (err) {
+      alert('Bulk approve failed: ' + (err.response?.data?.detail || err.message || 'Unknown error'))
+    } finally {
+      setBulkActionLoading(false)
+    }
+  }
+
+  const handleBulkReject = async () => {
+    setBulkActionLoading(true)
+    try {
+      await bulkReject(Array.from(selectedIncidents))
+      setSelectedIncidents(new Set())
+      await reload()
+    } catch (err) {
+      alert('Bulk reject failed: ' + (err.response?.data?.detail || err.message || 'Unknown error'))
+    } finally {
+      setBulkActionLoading(false)
     }
   }
 

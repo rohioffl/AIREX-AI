@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, AlertTriangle, Activity, Settings, Radar,
+  LayoutDashboard, AlertTriangle, Settings,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
-  X, ChevronRight, Clock, Zap, Ban, Users, HeartPulse, TrendingUp, BookOpen,
-  Terminal, Layers, BarChart3
+  X, ChevronRight, Clock, Zap, Ban, HeartPulse, TrendingUp, BookOpen,
+  Terminal, Layers, BarChart3, ShieldCheck
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
@@ -22,16 +22,30 @@ const NAV_ITEMS = [
   { label: 'Alerts', path: '/alerts', icon: AlertTriangle, showBadge: true, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Analytics', path: '/analytics', icon: TrendingUp, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Knowledge Base', path: '/knowledge-base', icon: BookOpen, roles: ['admin', 'operator', 'viewer'] },
-  { label: 'Proactive', path: '/proactive', icon: Radar, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
-  { label: 'Live Feed', path: '/live', icon: Activity, roles: ['admin', 'operator', 'viewer'] },
-  { label: 'Site24x7', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Live Monitoring', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Runbooks', path: '/runbooks', icon: Terminal, roles: ['admin', 'operator'] },
   { label: 'AI Intelligence', path: '/patterns', icon: Layers, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin', 'operator'] },
   { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
-  { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },
+  { label: 'Admin', path: '/admin', icon: ShieldCheck, roles: ['admin'] },
 ]
+
+const ROUTE_TITLES = {
+  '/dashboard':              { label: 'Dashboard',        parent: null },
+  '/alerts':                 { label: 'Active Alerts',    parent: null },
+  '/analytics':              { label: 'Analytics',        parent: null },
+  '/knowledge-base':         { label: 'Knowledge Base',   parent: null },
+  '/rejected':               { label: 'Rejected',         parent: null },
+  '/live':                   { label: 'Live Feed',        parent: null },
+  '/health-checks':          { label: 'Live Monitoring',  parent: null },
+  '/health-checks/site24x7': { label: 'Site24x7',         parent: 'Live Monitoring' },
+  '/runbooks':               { label: 'Runbooks',         parent: null },
+  '/patterns':               { label: 'AI Intelligence',  parent: null },
+  '/reports':                { label: 'Reports',          parent: null },
+  '/settings':               { label: 'Settings',         parent: null },
+  '/admin':                  { label: 'Super Admin',      parent: null },
+}
 
 export default function Layout({ children }) {
   const location = useLocation()
@@ -64,6 +78,15 @@ export default function Layout({ children }) {
     navigate('/login', { replace: true })
   }
 
+  // Persist read notification IDs across page refreshes
+  const STORAGE_KEY = 'airex-read-notification-ids'
+  function getReadIds() {
+    try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')) } catch { return new Set() }
+  }
+  function saveReadIds(ids) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids])) } catch { /* ignore */ }
+  }
+
   // Load initial alert counts
   useEffect(() => {
     let cancelled = false
@@ -71,6 +94,7 @@ export default function Layout({ children }) {
       try {
         const data = await fetchIncidents({ limit: 200 })
         if (cancelled) return
+        const readIds = getReadIds()
         const items = data.items || []
         const active = items.filter(i => ACTIVE_STATES.includes(i.state))
         const nonHealthCheck = active.filter(i => i.alert_type !== 'healthcheck')
@@ -83,7 +107,7 @@ export default function Layout({ children }) {
           state: i.state || 'RECEIVED',
           alert_type: i.alert_type || 'unknown',
           created_at: i.created_at || '',
-          read: false,
+          read: readIds.has(i.id),
         })))
       } catch (err) {
         console.warn('Failed to load alert counts:', err)
@@ -158,7 +182,13 @@ export default function Layout({ children }) {
   }, [])
 
   const unreadCount = notifications.filter(n => !n.read && ACTIVE_STATES.includes(n.state)).length
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  const markAllRead = () => {
+    setNotifications(prev => {
+      const updated = prev.map(n => ({ ...n, read: true }))
+      saveReadIds(new Set(updated.map(n => n.id)))
+      return updated
+    })
+  }
 
   const initials = user?.displayName
     ? user.displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
@@ -167,7 +197,7 @@ export default function Layout({ children }) {
       : 'OP'
 
   return (
-    <div className="min-h-screen flex" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
+    <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
       {/* Sidebar */}
       <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'open' : ''}`}>
         {/* Brand */}
@@ -242,7 +272,7 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Main Area */}
-      <div className="flex-1 flex flex-col min-h-screen transition-[margin] duration-300" style={{ marginLeft: collapsed ? 64 : 240 }}>
+      <div className="flex flex-col min-h-screen transition-[padding] duration-300" style={{ paddingLeft: collapsed ? 64 : 260 }}>
         {/* Top Bar */}
         <header className="topbar">
           <div className="topbar-left">
@@ -262,6 +292,27 @@ export default function Layout({ children }) {
             >
               <PanelLeft size={16} />
             </button>
+
+            {/* Breadcrumb */}
+            {(() => {
+              const exact = ROUTE_TITLES[location.pathname]
+              const dynamic = !exact && location.pathname.startsWith('/incidents/')
+                ? { label: 'Incident Detail', parent: 'Alerts' }
+                : null
+              const route = exact || dynamic
+              return route ? (
+                <div className="hidden md:flex items-center gap-1.5 px-2" style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  <ChevronRight size={14} style={{ opacity: 0.4 }} />
+                  {route.parent && (
+                    <>
+                      <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{route.parent}</span>
+                      <ChevronRight size={12} style={{ opacity: 0.4 }} />
+                    </>
+                  )}
+                  <span style={{ color: 'var(--text-heading)', fontWeight: 700 }}>{route.label}</span>
+                </div>
+              ) : null
+            })()}
 
             {/* Search */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500/20 transition-shadow" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', minWidth: 300 }}>
@@ -351,7 +402,11 @@ export default function Layout({ children }) {
                   onClose={() => setShowNotifications(false)}
                   onClickItem={(id) => {
                     setShowNotifications(false)
-                    setNotifications(prev => prev.map(x => x.id === id ? { ...x, read: true } : x))
+                    setNotifications(prev => {
+                      const updated = prev.map(x => x.id === id ? { ...x, read: true } : x)
+                      saveReadIds(new Set(updated.filter(x => x.read).map(x => x.id)))
+                      return updated
+                    })
                   }}
                 />
               )}
@@ -361,7 +416,7 @@ export default function Layout({ children }) {
 
         {/* Content */}
         <main className="flex-1 p-6 overflow-auto">
-          <div className="max-w-[1400px] mx-auto">
+          <div className="w-full">
             {children}
           </div>
         </main>
@@ -369,7 +424,7 @@ export default function Layout({ children }) {
         {/* Footer */}
         <footer className="py-4 px-6 relative">
           <div className="absolute top-0 left-0 right-0 divider-glow"></div>
-          <div className="max-w-[1400px] mx-auto flex justify-between items-center" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+          <div className="flex justify-between items-center" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
             <span>AIREX AUTONOMOUS SRE v0.9</span>
             <span className="flex items-center gap-2">
               <span className="status-dot status-dot-green inline-block"></span>
@@ -398,11 +453,15 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full mt-2 rounded-xl overflow-hidden z-50 glass backdrop-blur-xl"
+      className="rounded-xl overflow-hidden z-50 glass backdrop-blur-xl"
       style={{
+        position: 'absolute',
+        right: 0,
+        top: 'calc(100% + 22px)',
         width: 380,
-        border: '1px solid rgba(255,255,255,0.1)',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
       }}
     >
       {/* Header */}

@@ -42,6 +42,32 @@ output "hostinger_dns_records" {
   }
 }
 
+output "rds_airex_endpoint" {
+  description = "AIREX Postgres RDS endpoint (host:port)"
+  value       = module.platform.rds_airex_endpoint
+}
+
+output "rds_langfuse_endpoint" {
+  description = "Langfuse Postgres RDS endpoint (host:port)"
+  value       = module.platform.rds_langfuse_endpoint
+}
+
+output "redis_endpoint" {
+  description = "ElastiCache Redis primary endpoint"
+  value       = module.platform.redis_endpoint
+}
+
+output "redis_port" {
+  description = "ElastiCache Redis port"
+  value       = module.platform.redis_port
+}
+
+output "data_security_group_id" {
+  description = "Security group for RDS and Redis"
+  value       = module.platform.data_security_group_id
+}
+
 output "secrets_created" {
   value = module.platform.secrets_created
 }
+

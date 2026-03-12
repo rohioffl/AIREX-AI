@@ -30,6 +30,8 @@ class MetricsResponse(BaseModel):
     total_resolved_24h: int
     active_incidents: int
     critical_incidents: int
+    acknowledged_count: int
+    pending_ack_count: int
 
 
 @router.get("/", response_model=MetricsResponse)
@@ -178,6 +180,28 @@ async def get_metrics(
 
     ai_confidence_avg = sum(confidences) / len(confidences) if confidences else None
 
+    # Acknowledged active incidents (meta has acknowledged_by key)
+    active_states = [
+        IncidentState.RECEIVED,
+        IncidentState.INVESTIGATING,
+        IncidentState.RECOMMENDATION_READY,
+        IncidentState.AWAITING_APPROVAL,
+        IncidentState.EXECUTING,
+        IncidentState.VERIFYING,
+    ]
+    ack_result = await session.execute(
+        select(func.count())
+        .select_from(Incident)
+        .where(
+            Incident.tenant_id == tenant_id,
+            Incident.deleted_at.is_(None),
+            Incident.state.in_(active_states),
+            Incident.meta.has_key("acknowledged_by"),
+        )
+    )
+    acknowledged_count = ack_result.scalar_one() or 0
+    pending_ack_count = max(0, active_incidents - acknowledged_count)
+
     return MetricsResponse(
         mttr_seconds=float(mttr_seconds) if mttr_seconds else None,
         avg_investigation_seconds=avg_investigation_seconds,
@@ -186,6 +210,8 @@ async def get_metrics(
         total_resolved_24h=total_resolved_24h,
         active_incidents=active_incidents,
         critical_incidents=critical_incidents,
+        acknowledged_count=acknowledged_count,
+        pending_ack_count=pending_ack_count,
     )
 
 

@@ -218,7 +218,6 @@ class LLMClient:
             call_kwargs: dict[str, Any] = {
                 "model": effective_model,
                 "messages": messages,
-                "response_format": {"type": "json_object"},
                 "temperature": 0.1,
             }
 
@@ -245,6 +244,14 @@ class LLMClient:
             choice = response["choices"][0]
             message = choice["message"]
             content = cast(str, message["content"])
+            # Strip markdown code fences if the model wraps JSON in them
+            stripped = content.strip()
+            if stripped.startswith("```"):
+                stripped = stripped.split("```", 2)[1]
+                if stripped.startswith("json"):
+                    stripped = stripped[4:]
+                stripped = stripped.rsplit("```", 1)[0].strip()
+                content = stripped
             data = json.loads(content)
 
             recommendation = _parse_recommendation(data)

@@ -121,6 +121,17 @@ docker-compose run migrate
 
 `docker-compose up -d` brings up the full local stack, including `frontend` on `http://localhost:5173`, backend on `http://localhost:8000`, Redis, PostgreSQL, LiteLLM, and observability services. The frontend now waits for a healthy backend before it starts.
 
+## MCP Server Configuration
+
+The repository includes an `mcp.json` configuration file to easily bootstrap context and capabilities for AI development assistants supporting the Model Context Protocol (MCP). The configuration includes access to:
+- **Local environment:** Filesystem and Shell execution
+- **Automation:** Playwright and Puppeteer for headless browser tasks
+- **Infrastructure:** Docker and Terraform
+- **External tools:** Exa Websearch, grep.app search, and Google Drive integrations
+- **Context:** Persistent memory and advanced code navigation (using jcodemunch)
+
+You can load or merge this file into your AI assistant's MCP settings to drastically enhance its ability to operate, test, and manage the AIREX project.
+
 ## Verification Commands
 
 ### Backend
@@ -156,6 +167,12 @@ npm run test
 
 ## Deployment Notes
 
+### Live Environments
+- **Frontend / API:** [https://airex.ankercloud.com/](https://airex.ankercloud.com/)
+- **Langfuse:** [https://airex-langfuse.ankercloud.com/](https://airex-langfuse.ankercloud.com/)
+- **LiteLLM:** [https://airex-litellm.ankercloud.com/](https://airex-litellm.ankercloud.com/)
+
+### Project Infrastructure
 - `services/airex-api/Dockerfile` builds the API runtime image.
 - `services/airex-worker/Dockerfile` builds the worker runtime image.
 - `services/airex-frontend/Dockerfile` builds the frontend image from `apps/web/`.

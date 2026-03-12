@@ -144,7 +144,7 @@ export default function ProactiveAlertsPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            to="/health-checks"
+            to="/health-checks/site24x7"
             className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
             style={{
               background: 'rgba(34,211,238,0.08)',
@@ -155,7 +155,7 @@ export default function ProactiveAlertsPage() {
             }}
           >
             <Activity size={14} />
-            Health Dashboard
+            Monitor Status
           </Link>
           <button
             onClick={handleRefresh}

@@ -126,6 +126,7 @@ body {
   font-feature-settings: "cv11", "ss01", "ss03";
   letter-spacing: -0.01em;
   transition: background-color 0.3s, color 0.3s;
+  overflow-x: hidden;
 }
 
 ::selection {
@@ -1002,6 +1003,30 @@ body.light-mode .glass-hover:hover {
   border-radius: inherit;
   animation: pulseRing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
   background: inherit;
+}
+
+/* ══════════════════════════════════════════════════
+   SELECT / OPTION — Dark mode native dropdown fix
+   Browser-native <option> elements ignore most CSS,
+   but background-color + color ARE applied on Win/Linux.
+   ══════════════════════════════════════════════════ */
+
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #1a1c25;
+  color: #e8eaf0;
+}
+
+body.light-mode select {
+  color-scheme: light;
+}
+
+body.light-mode select option {
+  background-color: #ffffff;
+  color: #1a1d2b;
 }
 
 /* ══════════════════════════════════════════════════

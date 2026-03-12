@@ -585,7 +585,7 @@ async def approve_incident(
     Enqueues execution task via ARQ.
     Idempotent via idempotency_key (Redis).
     """
-    actor_email = current_user.email if current_user else "system"
+    actor_email = current_user.sub if current_user else "system"
     actor_user_id = str(current_user.user_id) if current_user else "system"
 
     logger.info(
@@ -716,7 +716,7 @@ async def reject_incident(
 
     Transitions to REJECTED state and stores rejection reason in meta.
     """
-    actor_email = current_user.email if current_user else "system"
+    actor_email = current_user.sub if current_user else "system"
     actor_user_id = str(current_user.user_id) if current_user else "system"
 
     logger.info(
@@ -773,6 +773,46 @@ async def reject_incident(
     await session.commit()
 
     return IncidentCreatedResponse(incident_id=incident.id)
+
+
+# ── Acknowledge ───────────────────────────────────────────────────
+
+
+@router.post("/{incident_id}/acknowledge", status_code=status.HTTP_200_OK)
+async def acknowledge_incident(
+    incident_id: uuid.UUID,
+    tenant_id: TenantId,
+    session: TenantSession,
+    current_user: CurrentUser,
+    _: RequireOperator,
+) -> dict:
+    """
+    Mark an incident as acknowledged (seen) by the current user.
+
+    Stores acknowledged_by and acknowledged_at in incident.meta.
+    Idempotent — re-acknowledging overwrites the previous entry.
+    """
+    result = await session.execute(
+        select(Incident).where(
+            Incident.tenant_id == tenant_id,
+            Incident.id == incident_id,
+            Incident.deleted_at.is_(None),
+        )
+    )
+    incident = result.scalar_one_or_none()
+    if incident is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+
+    actor = current_user.sub if current_user else "system"
+    meta = dict(incident.meta or {})
+    meta["acknowledged_by"] = actor
+    meta["acknowledged_at"] = datetime.now(timezone.utc).isoformat()
+    incident.meta = meta
+    flag_modified(incident, "meta")
+    await session.commit()
+
+    logger.info("incident_acknowledged", incident_id=str(incident_id), by=actor)
+    return {"status": "acknowledged", "acknowledged_by": actor}
 
 
 # ── Feedback ───────────────────────────────────────────────────────
@@ -1014,13 +1054,13 @@ async def bulk_approve(
                 continue
 
             # Transition to EXECUTING
-            reason = body.reason or f"Bulk approved by {current_user.email}"
+            reason = body.reason or f"Bulk approved by {current_user.sub}"
             await transition_state(
                 session,
                 incident,
                 IncidentState.EXECUTING,
                 reason=reason,
-                actor=current_user.email,
+                actor=current_user.sub,
             )
 
             # Enqueue execution
@@ -1123,7 +1163,7 @@ async def bulk_reject(
                 incident,
                 IncidentState.REJECTED,
                 reason=body.reason,
-                actor=current_user.email,
+                actor=current_user.sub,
             )
 
             rejected_count += 1

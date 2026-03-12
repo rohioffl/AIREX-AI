@@ -321,26 +321,26 @@ function IncidentListRow({ incident }) {
             <ArrowUpRight size={16} />
           </div>
           <div className="flex flex-wrap gap-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-            <span className="rounded-md px-2 py-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+            <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
               <Repeat size={10} /> {alertCount}x
             </span>
             {durationSec && (
-              <span className="rounded-md px-2 py-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
                 <Clock size={10} /> {formatDuration(durationSec)}
               </span>
             )}
             {unstable && (
-              <span className="rounded-md px-2 py-0.5" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', color: '#fbbf24' }}>
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', color: '#fbbf24' }}>
                 <AlertTriangle size={10} /> flapping
               </span>
             )}
             {meta.recommendation?.confidence && (
-              <span className="rounded-md px-2 py-0.5" style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', color: '#38bdf8' }}>
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', color: '#38bdf8' }}>
                 <GaugeCircle size={10} /> {Math.round(meta.recommendation.confidence * 100)}% AI
               </span>
             )}
             {meta.recommendation?.proposed_action && (
-              <span className="rounded-md px-2 py-0.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#fb7185' }}>
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#fb7185' }}>
                 <Activity size={10} /> {meta.recommendation.proposed_action}
               </span>
             )}

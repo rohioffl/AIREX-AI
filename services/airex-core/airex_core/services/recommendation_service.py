@@ -4,6 +4,7 @@ AI recommendation orchestrator.
 Generates structured recommendations via LLM with circuit breaker fallback.
 """
 
+import re
 import uuid
 from typing import Any
 
@@ -51,14 +52,13 @@ async def generate_recommendation(
     # Extract Site24x7 outage history from evidence if available
     site24x7_outage_context = None
     for ev in incident.evidence:
-        if ev.tool_name == "site24x7_outage_probe" and ev.metrics:
-            outage_data = ev.metrics.get("outage_history_30d", {})
-            if outage_data:
-                total = outage_data.get("total_outages", 0)
+        if ev.tool_name == "site24x7_outage_probe" and ev.raw_output:
+            total_match = re.search(r"total_outages['\"]?\s*[=:]\s*(\d+)", ev.raw_output)
+            if total_match:
+                total = int(total_match.group(1))
                 if total > 0:
                     site24x7_outage_context = (
                         f"Site24x7 Outage Pattern: This monitor has had {total} outages in the last 30 days. "
-                        f"Total downtime: {outage_data.get('total_downtime', 'N/A')}. "
                         f"This suggests a recurring issue that may require a systemic fix rather than a one-time remediation."
                     )
                     break

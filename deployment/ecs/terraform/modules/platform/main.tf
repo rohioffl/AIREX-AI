@@ -258,6 +258,28 @@ resource "aws_iam_role" "task_role" {
   tags               = local.tags
 }
 
+# ── ECS Exec support (required for `aws ecs execute-command`) ──────────────
+# This policy lets the ECS agent inside each task open SSM sessions.
+# Without it, execute-command will hang or return "Unable to start session".
+data "aws_iam_policy_document" "task_role_ecs_exec" {
+  statement {
+    sid = "ECSExecSSM"
+    actions = [
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_role_ecs_exec" {
+  name   = "${local.name_prefix}-ecs-exec"
+  role   = aws_iam_role.task_role.id
+  policy = data.aws_iam_policy_document.task_role_ecs_exec.json
+}
+
 resource "aws_ecs_cluster" "main" {
   name = "${local.name_prefix}-cluster"
 
@@ -384,6 +406,57 @@ resource "aws_ecs_task_definition" "langfuse" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.langfuse.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+
+  tags = local.tags
+}
+
+resource "aws_ecs_task_definition" "worker" {
+  family                   = "${local.name_prefix}-worker"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "1024"
+  memory                   = "2048"
+  network_mode             = "awsvpc"
+  execution_role_arn       = aws_iam_role.execution_role.arn
+  task_role_arn            = aws_iam_role.task_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "worker"
+      image     = var.worker_image
+      command   = ["arq", "app.core.worker.WorkerSettings"]
+      essential = true
+      environment = [
+        { name = "PYTHONPATH", value = "/app" },
+        { name = "LLM_BASE_URL", value = aws_ssm_parameter.litellm_host.value },
+        { name = "LLM_PRIMARY_MODEL", value = aws_ssm_parameter.llm_primary_model.value },
+        { name = "LLM_FALLBACK_MODEL", value = aws_ssm_parameter.llm_fallback_model.value },
+        { name = "LLM_EMBEDDING_MODEL", value = aws_ssm_parameter.llm_embedding_model.value },
+        { name = "FRONTEND_URL", value = aws_ssm_parameter.frontend_url.value }
+      ]
+      secrets = [
+        { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.backend_database_url.arn },
+        { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.backend_redis_url.arn },
+        { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.backend_secret_key.arn },
+        { name = "LLM_API_KEY", valueFrom = aws_secretsmanager_secret.litellm_master_key.arn },
+        { name = "EMAIL_SMTP_HOST", valueFrom = aws_secretsmanager_secret.email_smtp_host.arn },
+        { name = "EMAIL_SMTP_PORT", valueFrom = aws_secretsmanager_secret.email_smtp_port.arn },
+        { name = "EMAIL_SMTP_USER", valueFrom = aws_secretsmanager_secret.email_smtp_user.arn },
+        { name = "EMAIL_SMTP_PASSWORD", valueFrom = aws_secretsmanager_secret.email_smtp_password.arn },
+        { name = "EMAIL_FROM", valueFrom = aws_secretsmanager_secret.email_from.arn },
+        { name = "SITE24X7_CLIENT_ID", valueFrom = aws_secretsmanager_secret.site24x7_client_id.arn },
+        { name = "SITE24X7_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.site24x7_client_secret.arn },
+        { name = "SITE24X7_REFRESH_TOKEN", valueFrom = aws_secretsmanager_secret.site24x7_refresh_token.arn }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.worker.name
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "ecs"
         }
@@ -817,11 +890,12 @@ resource "aws_lb_listener_rule" "api_host_path" {
 }
 
 resource "aws_ecs_service" "api" {
-  name            = "${local.name_prefix}-api"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = var.api_desired_count
-  launch_type     = "FARGATE"
+  name                   = "${local.name_prefix}-api"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.api.arn
+  desired_count          = var.api_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     assign_public_ip = false
@@ -840,11 +914,12 @@ resource "aws_ecs_service" "api" {
 }
 
 resource "aws_ecs_service" "worker" {
-  name            = "${local.name_prefix}-worker"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.worker.arn
-  desired_count   = var.worker_desired_count
-  launch_type     = "FARGATE"
+  name                   = "${local.name_prefix}-worker"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.worker.arn
+  desired_count          = var.worker_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     assign_public_ip = false
@@ -856,11 +931,12 @@ resource "aws_ecs_service" "worker" {
 }
 
 resource "aws_ecs_service" "litellm" {
-  name            = "${local.name_prefix}-litellm"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.litellm.arn
-  desired_count   = var.litellm_desired_count
-  launch_type     = "FARGATE"
+  name                   = "${local.name_prefix}-litellm"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.litellm.arn
+  desired_count          = var.litellm_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     assign_public_ip = false
@@ -879,11 +955,12 @@ resource "aws_ecs_service" "litellm" {
 }
 
 resource "aws_ecs_service" "langfuse" {
-  name            = "${local.name_prefix}-langfuse"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.langfuse.arn
-  desired_count   = var.langfuse_desired_count
-  launch_type     = "FARGATE"
+  name                   = "${local.name_prefix}-langfuse"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.langfuse.arn
+  desired_count          = var.langfuse_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     assign_public_ip = false

@@ -9,13 +9,13 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import IncidentDetail from './pages/IncidentDetail'
 import AlertsPage from './pages/AlertsPage'
-import ProactiveAlertsPage from './pages/ProactiveAlertsPage'
 import RejectedPage from './pages/RejectedPage'
 import DashboardPage from './pages/DashboardPage'
 import LiveFeed from './pages/LiveFeed'
 import SettingsPage from './pages/SettingsPage'
-import UserManagementPage from './pages/UserManagementPage'
+import SuperAdminPage from './pages/SuperAdminPage'
 import HealthChecksPage from './pages/HealthChecksPage'
+import LiveMonitoringPage from './pages/LiveMonitoringPage'
 import SetPasswordPage from './pages/SetPasswordPage'
 import NotFoundPage from './pages/NotFoundPage'
 import AnalyticsPage from './pages/AnalyticsPage'
@@ -42,7 +42,7 @@ export default function App() {
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/incidents/:id" element={<IncidentDetail />} />
                       <Route path="/alerts" element={<AlertsPage />} />
-                      <Route path="/proactive" element={<ProactiveAlertsPage />} />
+                      <Route path="/proactive" element={<Navigate to="/health-checks/site24x7?tab=proactive" replace />} />
                       <Route path="/rejected" element={<RejectedPage />} />
                       <Route path="/live" element={<LiveFeed />} />
                       <Route path="/settings" element={<SettingsPage />} />
@@ -51,10 +51,12 @@ export default function App() {
                       <Route path="/reports" element={<ReportsPage />} />
                       <Route path="/runbooks" element={<RunbooksPage />} />
                       <Route path="/patterns" element={<PatternsPage />} />
-                      <Route path="/health-checks" element={<HealthChecksPage />} />
-                      <Route path="/admin/users" element={
+                      <Route path="/health-checks" element={<LiveMonitoringPage />} />
+                      <Route path="/health-checks/site24x7" element={<HealthChecksPage />} />
+                      <Route path="/admin/users" element={<Navigate to="/admin?tab=users" replace />} />
+                      <Route path="/admin" element={
                         <RequireRole roles="admin">
-                          <UserManagementPage />
+                          <SuperAdminPage />
                         </RequireRole>
                       } />
                       <Route path="*" element={<NotFoundPage />} />

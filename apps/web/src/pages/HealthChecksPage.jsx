@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   HeartPulse, RefreshCw, AlertTriangle, CheckCircle2,
   XCircle, HelpCircle, Clock, Activity, ChevronDown,
-  ChevronRight, ExternalLink, Zap, Server
+  ChevronRight, ExternalLink, Zap, Server, Radar,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { fetchHealthCheckDashboard, triggerHealthCheck, fetchMonitorInventory } from '../services/api'
+import ProactiveAlertsPage from './ProactiveAlertsPage'
 
 const STATUS_CONFIG = {
   healthy:  { label: 'Healthy',  icon: CheckCircle2,  color: 'text-emerald-400', bg: 'bg-emerald-500/10', ring: 'ring-emerald-500/30', dot: 'bg-emerald-400' },
@@ -136,9 +137,17 @@ function RecentCheckRow({ check }) {
   )
 }
 
+const TABS = [
+  { key: 'monitor', label: 'Monitor Status', icon: HeartPulse },
+  { key: 'proactive', label: 'Proactive Alerts', icon: Radar },
+]
+
 export default function HealthChecksPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') === 'proactive' ? 'proactive' : 'monitor'
+
   const [dashboard, setDashboard] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -206,15 +215,6 @@ export default function HealthChecksPage() {
   })
   const visibleLiveTargets = filteredLiveTargets.slice(0, 300)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin text-[var(--neon-cyan)]" />
-        <span className="ml-3 text-[var(--text-secondary)]">Loading health checks...</span>
-      </div>
-    )
-  }
-
   const summary = dashboard?.summary || {}
   const site24x7Summary = monitors?.status_summary || null
 
@@ -236,7 +236,7 @@ export default function HealthChecksPage() {
             </p>
           </div>
         </div>
-        {user?.role === 'admin' && (
+        {user?.role === 'admin' && activeTab === 'monitor' && (
           <button
             onClick={handleRunNow}
             disabled={running}
@@ -252,6 +252,42 @@ export default function HealthChecksPage() {
           </button>
         )}
       </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', width: 'fit-content' }}>
+        {TABS.map(tab => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setSearchParams(tab.key === 'monitor' ? {} : { tab: tab.key })}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: isActive ? 'rgba(99,102,241,0.15)' : 'transparent',
+                color: isActive ? '#818cf8' : 'var(--text-muted)',
+                border: isActive ? '1px solid rgba(99,102,241,0.25)' : '1px solid transparent',
+              }}
+            >
+              <Icon size={14} />
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Proactive Alerts tab */}
+      {activeTab === 'proactive' && <ProactiveAlertsPage />}
+
+      {/* Monitor Status tab */}
+      {activeTab === 'monitor' && loading && (
+        <div className="flex items-center justify-center h-64">
+          <RefreshCw size={24} className="animate-spin text-[var(--neon-cyan)]" />
+          <span className="ml-3 text-[var(--text-secondary)]">Loading health checks...</span>
+        </div>
+      )}
+
+      {activeTab === 'monitor' && !loading && (<>
 
       {error && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
@@ -479,6 +515,7 @@ export default function HealthChecksPage() {
           )}
         </div>
       )}
+      </>)}
     </div>
   )
 }

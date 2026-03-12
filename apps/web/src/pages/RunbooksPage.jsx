@@ -234,7 +234,8 @@ function RunbookEditor({ runbook, onSave, onCancel }) {
           Cancel
         </button>
         <button onClick={() => onSave(form)} type="button"
-          className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors font-medium">
+          className="px-4 py-2 rounded-lg font-medium transition-colors"
+          style={{ background: 'rgba(99,102,241,0.9)', color: '#fff', border: 'none' }}>
           Save Runbook
         </button>
       </div>
@@ -334,7 +335,8 @@ export default function RunbooksPage() {
             Active only
           </label>
           <button onClick={() => setEditing('new')}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors">
+            className="flex items-center gap-2 px-4 py-2 font-semibold rounded-lg transition-colors"
+            style={{ background: 'rgba(99,102,241,0.9)', color: '#fff', border: 'none' }}>
             <Plus className="w-4 h-4" /> New Runbook
           </button>
         </div>

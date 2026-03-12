@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { AlertTriangle, RefreshCcw, TrendingUp, Bell, Activity, Clock, CheckCircle } from 'lucide-react'
+import { AlertTriangle, RefreshCcw, TrendingUp, Bell, Activity, CheckCircle } from 'lucide-react'
 import useIncidents from '../hooks/useIncidents'
 import { fetchMetrics } from '../services/api'
 import ConnectionBanner from '../components/common/ConnectionBanner'
@@ -50,32 +50,32 @@ export default function DashboardPage() {
   }, [incidents])
 
   const summary = useMemo(() => {
-    // Use real metrics if available, otherwise fallback to calculated
-    if (metrics) {
-      return {
-        active: metrics.active_incidents || 0,
-        critical: metrics.critical_incidents || 0,
-        resolvedToday: metrics.total_resolved_24h || 0,
-        mttr: metrics.mttr_seconds ? formatDuration(metrics.mttr_seconds) : null,
-        aiConfidence: metrics.ai_confidence_avg ? `${(metrics.ai_confidence_avg * 100).toFixed(1)}%` : null,
-      }
-    }
-    
-    // Fallback calculation
-    let active = 0
-    let critical = 0
-    let resolvedToday = 0
     const today = new Date().toDateString()
+    let total = 0, pending = 0, actioned = 0, alertActions = 0
 
     incidents.forEach((i) => {
-      if (ACTIVE_STATES.includes(i.state)) active += 1
-      if (i.severity === 'CRITICAL') critical += 1
-      if (TERMINAL_STATES.includes(i.state)) {
-        if (new Date(i.updated_at).toDateString() === today) resolvedToday += 1
-      }
+      if (ACTIVE_STATES.includes(i.state)) total += 1
+      if (['AWAITING_APPROVAL', 'RECOMMENDATION_READY'].includes(i.state)) pending += 1
+      if (['EXECUTING', 'VERIFYING'].includes(i.state)) actioned += 1
+      if (TERMINAL_STATES.includes(i.state) && new Date(i.updated_at).toDateString() === today) alertActions += 1
     })
 
-    return { active, critical, resolvedToday, mttr: null, aiConfidence: null }
+    // Prefer API metrics for totals
+    if (metrics) {
+      total = metrics.active_incidents || total
+      alertActions = metrics.total_resolved_24h ?? alertActions
+      actioned = metrics.acknowledged_count ?? actioned
+      pending = metrics.pending_ack_count ?? pending
+    }
+
+    return {
+      total,
+      pending,
+      actioned,
+      alertActions,
+      mttr: metrics?.mttr_seconds ? formatDuration(metrics.mttr_seconds) : null,
+      aiConfidence: metrics?.ai_confidence_avg ? `${(metrics.ai_confidence_avg * 100).toFixed(1)}%` : null,
+    }
   }, [incidents, metrics])
 
   const lastUpdated = latestFive[0]?.updated_at ? formatTimestamp(latestFive[0].updated_at) : '—'
@@ -108,10 +108,10 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { title: 'Active', value: String(summary.active), trend: 'Awaiting resolution', trendType: 'neutral', icon: Bell },
-          { title: 'Critical', value: String(summary.critical), trend: summary.critical ? 'Needs attention' : 'Stable', trendType: summary.critical ? 'negative' : 'positive', icon: AlertTriangle, isCritical: summary.critical > 0 },
-          { title: 'Resolved (24h)', value: String(summary.resolvedToday), trend: 'Closed in last day', trendType: 'positive', icon: CheckCircle },
-          { title: 'Live Sessions', value: connected ? 'Connected' : reconnecting ? 'Reconnecting' : 'Disconnected', trend: connected ? 'SSE connected' : reconnecting ? 'Attempting reconnect' : 'SSE disconnected', trendType: connected ? 'positive' : reconnecting ? 'neutral' : 'negative', icon: Activity }
+          { title: 'Total Alerts', value: String(summary.total), trend: 'Active incidents', trendType: 'neutral', icon: Bell },
+          { title: 'Actioned', value: String(summary.actioned), trend: 'Executing or verifying', trendType: summary.actioned > 0 ? 'positive' : 'neutral', icon: Activity },
+          { title: 'Pending', value: String(summary.pending), trend: 'Awaiting approval', trendType: summary.pending > 0 ? 'negative' : 'positive', icon: AlertTriangle, isCritical: summary.pending > 0 },
+          { title: 'Alert Actions', value: String(summary.alertActions), trend: 'Resolved in last 24h', trendType: 'positive', icon: CheckCircle },
         ].map((props, i) => (
           <div key={i} className="animate-fade-in" style={{ animationDelay: `${i * 100}ms`, animationFillMode: 'both' }}>
             <MetricCard {...props} />
@@ -151,7 +151,7 @@ export default function DashboardPage() {
               },
               {
                 label: 'Auto-resolved',
-                value: metrics ? String(metrics.auto_resolved_count) : String(summary.resolvedToday),
+                value: metrics ? String(metrics.auto_resolved_count) : String(summary.alertActions),
                 color: '#22d3ee'
               },
             ].map((s) => (

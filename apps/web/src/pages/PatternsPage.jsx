@@ -1,21 +1,35 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Layers, TrendingUp, TrendingDown, Minus, AlertTriangle, Activity, Eye, Shield, Cpu, BarChart3 } from 'lucide-react'
+import { Layers, TrendingUp, TrendingDown, Minus, AlertTriangle, Shield, Cpu } from 'lucide-react'
 import { fetchPatterns, fetchAnomalies, predictRootCause, getPredictionAccuracy } from '../services/api'
 import { useToasts } from '../context/ToastContext'
 import { useNavigate } from 'react-router-dom'
 
-const SEVERITY_COLORS = {
-  CRITICAL: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  HIGH: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  MEDIUM: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  LOW: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+const SEVERITY_STYLES = {
+  CRITICAL: { background: 'rgba(244,63,94,0.12)', color: '#fb7185' },
+  HIGH:     { background: 'rgba(251,146,60,0.12)', color: '#fb923c' },
+  MEDIUM:   { background: 'rgba(245,158,11,0.12)', color: '#fbbf24' },
+  LOW:      { background: 'rgba(16,185,129,0.12)', color: '#34d399' },
 }
 
 const TREND_ICONS = {
-  increasing: { icon: TrendingUp, color: 'text-red-500', label: 'Increasing' },
-  decreasing: { icon: TrendingDown, color: 'text-green-500', label: 'Decreasing' },
-  stable: { icon: Minus, color: 'text-gray-500', label: 'Stable' },
-  insufficient_data: { icon: Minus, color: 'text-gray-400', label: 'N/A' },
+  increasing:        { icon: TrendingUp,   color: '#f43f5e', label: 'Increasing' },
+  decreasing:        { icon: TrendingDown, color: '#10b981', label: 'Decreasing' },
+  stable:            { icon: Minus,        color: 'var(--text-muted)', label: 'Stable' },
+  insufficient_data: { icon: Minus,        color: 'var(--text-muted)', label: 'N/A' },
+}
+
+const ANOMALY_BORDER = { high: '#f43f5e', medium: '#f59e0b', low: '#3b82f6' }
+const ANOMALY_BADGE = {
+  high:   { background: 'rgba(244,63,94,0.12)',  color: '#fb7185' },
+  medium: { background: 'rgba(245,158,11,0.12)', color: '#fbbf24' },
+  low:    { background: 'rgba(59,130,246,0.12)',  color: '#60a5fa' },
+}
+
+const card = {
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+  padding: 16,
 }
 
 function PatternCard({ pattern }) {
@@ -25,26 +39,25 @@ function PatternCard({ pattern }) {
   const TrendIcon = trend.icon
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+    <div style={card}>
       <div className="flex items-start justify-between cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <Layers className="w-4 h-4 text-blue-500" />
-            <h3 className="font-semibold dark:text-white text-sm">{pattern.alert_type}</h3>
-            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full text-xs">
+            <Layers size={16} style={{ color: '#818cf8' }} />
+            <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-heading)' }}>{pattern.alert_type}</span>
+            <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'rgba(99,102,241,0.12)', color: '#818cf8' }}>
               {pattern.incident_count} incidents
             </span>
-            <div className={`flex items-center gap-1 ${trend.color}`}>
-              <TrendIcon className="w-3.5 h-3.5" />
-              <span className="text-xs">{trend.label}</span>
-            </div>
+            <span className="flex items-center gap-1" style={{ fontSize: 12, color: trend.color }}>
+              <TrendIcon size={12} /> {trend.label}
+            </span>
           </div>
           {pattern.root_cause && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Root cause: <span className="font-medium">{pattern.root_cause}</span>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+              Root cause: <span style={{ fontWeight: 600 }}>{pattern.root_cause}</span>
             </p>
           )}
-          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center gap-4 mt-2" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             <span>{pattern.frequency_per_day}/day</span>
             {pattern.avg_resolution_seconds && (
               <span>Avg resolution: {Math.round(pattern.avg_resolution_seconds / 60)}m</span>
@@ -54,20 +67,20 @@ function PatternCard({ pattern }) {
         </div>
         <div className="flex gap-1">
           {Object.entries(pattern.severity_distribution || {}).map(([sev, count]) => (
-            <span key={sev} className={`px-1.5 py-0.5 rounded text-xs ${SEVERITY_COLORS[sev] || ''}`}>
+            <span key={sev} style={{ padding: '2px 6px', borderRadius: 4, fontSize: 11, ...(SEVERITY_STYLES[sev] || {}) }}>
               {sev}: {count}
             </span>
           ))}
         </div>
       </div>
       {expanded && (
-        <div className="mt-3 pt-3 border-t dark:border-gray-700 space-y-3">
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }} className="space-y-3">
           {pattern.common_actions && Object.keys(pattern.common_actions).length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Common Actions</h4>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Common Actions</p>
               <div className="flex flex-wrap gap-1">
                 {Object.entries(pattern.common_actions).map(([action, count]) => (
-                  <span key={action} className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs dark:text-gray-300">
+                  <span key={action} style={{ padding: '3px 8px', borderRadius: 6, fontSize: 12, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
                     {action} ({count})
                   </span>
                 ))}
@@ -76,22 +89,22 @@ function PatternCard({ pattern }) {
           )}
           {pattern.incident_ids && pattern.incident_ids.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Sample Incidents</h4>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Sample Incidents</p>
               <div className="flex flex-wrap gap-1">
                 {pattern.incident_ids.slice(0, 5).map(id => (
                   <button key={id} onClick={() => navigate(`/incidents/${id}`)}
-                    className="px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded text-xs hover:bg-blue-100 dark:hover:bg-blue-900/40 font-mono">
-                    {id.slice(0, 8)}...
+                    style={{ padding: '3px 8px', borderRadius: 6, fontSize: 12, fontFamily: 'var(--font-mono)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', cursor: 'pointer' }}>
+                    {id.slice(0, 8)}…
                   </button>
                 ))}
               </div>
             </div>
           )}
-          <div className="text-xs text-gray-400">
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             First seen: {pattern.first_seen ? new Date(pattern.first_seen).toLocaleString() : 'N/A'}
             {' • '}
             Last seen: {pattern.last_seen ? new Date(pattern.last_seen).toLocaleString() : 'N/A'}
-          </div>
+          </p>
         </div>
       )}
     </div>
@@ -99,20 +112,30 @@ function PatternCard({ pattern }) {
 }
 
 function AnomalyCard({ anomaly }) {
-  const severityColor = anomaly.severity === 'high' ? 'border-red-500 bg-red-50 dark:bg-red-900/10' :
-    anomaly.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10' :
-    'border-blue-500 bg-blue-50 dark:bg-blue-900/10'
+  const borderColor = ANOMALY_BORDER[anomaly.severity] || ANOMALY_BORDER.low
+  const badge = ANOMALY_BADGE[anomaly.severity] || ANOMALY_BADGE.low
 
   return (
-    <div className={`rounded-lg border-l-4 p-4 ${severityColor}`}>
+    <div style={{ ...card, borderLeft: `4px solid ${borderColor}`, paddingLeft: 14 }}>
       <div className="flex items-center gap-2 mb-1">
-        <AlertTriangle className={`w-4 h-4 ${anomaly.severity === 'high' ? 'text-red-500' : anomaly.severity === 'medium' ? 'text-yellow-500' : 'text-blue-500'}`} />
-        <span className="font-medium text-sm dark:text-white capitalize">{anomaly.type.replace(/_/g, ' ')}</span>
-        <span className={`px-2 py-0.5 rounded-full text-xs ${anomaly.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : anomaly.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+        <AlertTriangle size={15} style={{ color: borderColor }} />
+        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-heading)', textTransform: 'capitalize' }}>
+          {anomaly.type.replace(/_/g, ' ')}
+        </span>
+        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...badge }}>
           {anomaly.severity}
         </span>
       </div>
-      <p className="text-sm text-gray-600 dark:text-gray-400">{anomaly.description}</p>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{anomaly.description}</p>
+    </div>
+  )
+}
+
+function StatCard({ value, label }) {
+  return (
+    <div style={{ ...card, textAlign: 'center' }}>
+      <p style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-heading)', fontFamily: 'var(--font-mono)' }}>{value}</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{label}</p>
     </div>
   )
 }
@@ -133,30 +156,30 @@ export default function PatternsPage() {
       setLoading(true)
       const data = await fetchPatterns(windowDays)
       setPatterns(data.patterns || [])
-    } catch (err) {
+    } catch {
       addToast('Failed to load patterns', 'error')
     } finally {
       setLoading(false)
     }
-  }, [windowDays])
+  }, [windowDays, addToast])
 
   const loadAnomalies = useCallback(async () => {
     try {
       setLoading(true)
       const data = await fetchAnomalies()
       setAnomalies(data)
-    } catch (err) {
+    } catch {
       addToast('Failed to load anomalies', 'error')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [addToast])
 
   const loadAccuracy = useCallback(async () => {
     try {
       const data = await getPredictionAccuracy()
       setAccuracy(data)
-    } catch {}
+    } catch { /* silent */ }
   }, [])
 
   const handlePredict = async () => {
@@ -165,7 +188,7 @@ export default function PatternsPage() {
       setLoading(true)
       const data = await predictRootCause(predAlertType)
       setPredictions(data)
-    } catch (err) {
+    } catch {
       addToast('Prediction failed', 'error')
     } finally {
       setLoading(false)
@@ -179,54 +202,74 @@ export default function PatternsPage() {
   }, [tab, loadPatterns, loadAnomalies, loadAccuracy])
 
   const tabs = [
-    { id: 'patterns', label: 'Patterns', icon: Layers },
-    { id: 'anomalies', label: 'Anomalies', icon: AlertTriangle },
+    { id: 'patterns',    label: 'Patterns',    icon: Layers },
+    { id: 'anomalies',   label: 'Anomalies',   icon: AlertTriangle },
     { id: 'predictions', label: 'Predictions', icon: Cpu },
   ]
 
+  const inputStyle = {
+    background: 'var(--bg-input)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    color: 'var(--text-primary)',
+    padding: '8px 12px',
+    fontSize: 13,
+    outline: 'none',
+    width: '100%',
+  }
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold dark:text-white">AI Intelligence</h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>AI Intelligence</h1>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
           Pattern detection, anomaly monitoring, and predictive analytics
         </p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+      <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 justify-center
-              ${tab === t.id ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}>
-            <t.icon className="w-4 h-4" /> {t.label}
+            className="flex items-center gap-2 flex-1 justify-center rounded-lg transition-all"
+            style={{
+              padding: '8px 16px',
+              fontSize: 13,
+              fontWeight: 600,
+              background: tab === t.id ? 'var(--bg-card)' : 'transparent',
+              color: tab === t.id ? 'var(--text-heading)' : 'var(--text-muted)',
+              border: tab === t.id ? '1px solid var(--border)' : '1px solid transparent',
+              boxShadow: tab === t.id ? 'var(--glass-shadow)' : 'none',
+              cursor: 'pointer',
+            }}>
+            <t.icon size={14} /> {t.label}
           </button>
         ))}
       </div>
 
       {loading && (
         <div className="flex justify-center py-12">
-          <div className="w-8 h-8 border-4 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--border)', borderTopColor: '#818cf8' }} />
         </div>
       )}
 
       {/* Patterns Tab */}
       {!loading && tab === 'patterns' && (
-        <div>
-          <div className="flex items-center gap-4 mb-4">
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
             <select value={windowDays} onChange={(e) => setWindowDays(parseInt(e.target.value))}
-              className="px-3 py-2 rounded border dark:bg-gray-800 dark:border-gray-600 dark:text-white text-sm">
+              style={{ ...inputStyle, width: 'auto', paddingRight: 32 }}>
               <option value={7}>Last 7 days</option>
               <option value={14}>Last 14 days</option>
               <option value={30}>Last 30 days</option>
               <option value={90}>Last 90 days</option>
             </select>
-            <span className="text-sm text-gray-500 dark:text-gray-400">{patterns.length} patterns detected</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{patterns.length} patterns detected</span>
           </div>
           {patterns.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">
-              <Layers className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No patterns detected in the selected time window</p>
+            <div className="rounded-xl py-16 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+              <Layers size={40} style={{ color: 'var(--text-muted)', margin: '0 auto 12px', opacity: 0.5 }} />
+              <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>No patterns detected in the selected time window</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -238,26 +281,17 @@ export default function PatternsPage() {
 
       {/* Anomalies Tab */}
       {!loading && tab === 'anomalies' && anomalies && (
-        <div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 text-center">
-              <p className="text-2xl font-bold dark:text-white">{anomalies.anomaly_count}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Anomalies Detected</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 text-center">
-              <p className="text-2xl font-bold dark:text-white">{anomalies.recent_incident_count}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Recent Incidents ({anomalies.detection_window_hours}h)</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 text-center">
-              <p className="text-2xl font-bold dark:text-white">{anomalies.baseline_incident_count}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Baseline ({anomalies.baseline_period_days}d)</p>
-            </div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatCard value={anomalies.anomaly_count} label="Anomalies Detected" />
+            <StatCard value={anomalies.recent_incident_count} label={`Recent Incidents (${anomalies.detection_window_hours}h)`} />
+            <StatCard value={anomalies.baseline_incident_count} label={`Baseline (${anomalies.baseline_period_days}d)`} />
           </div>
           {anomalies.anomalies.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">All Clear</p>
-              <p className="text-sm mt-1">No anomalies detected in the current window</p>
+            <div className="rounded-xl py-12 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+              <Shield size={40} style={{ color: '#10b981', margin: '0 auto 12px', opacity: 0.6 }} />
+              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>All Clear</p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>No anomalies detected in the current window</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -272,30 +306,21 @@ export default function PatternsPage() {
         <div className="space-y-6">
           {accuracy && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 text-center">
-                <p className="text-2xl font-bold dark:text-white">{(accuracy.accuracy * 100).toFixed(1)}%</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Prediction Accuracy</p>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 text-center">
-                <p className="text-2xl font-bold dark:text-white">{accuracy.correct_predictions}/{accuracy.total_predictions}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Correct/Total</p>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 text-center">
-                <p className="text-2xl font-bold dark:text-white">{accuracy.sample_size}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Sample Size ({accuracy.period_days}d)</p>
-              </div>
+              <StatCard value={`${(accuracy.accuracy * 100).toFixed(1)}%`} label="Prediction Accuracy" />
+              <StatCard value={`${accuracy.correct_predictions}/${accuracy.total_predictions}`} label="Correct / Total" />
+              <StatCard value={accuracy.sample_size} label={`Sample Size (${accuracy.period_days}d)`} />
             </div>
           )}
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6">
-            <h3 className="font-semibold dark:text-white mb-4">Predict Root Cause</h3>
+          <div style={card}>
+            <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-heading)', marginBottom: 16 }}>Predict Root Cause</h3>
             <div className="flex gap-3">
-              <input type="text" value={predAlertType} onChange={(e) => setPredAlertType(e.target.value)}
-                placeholder="Enter alert type (e.g., cpu_high, disk_full)" 
-                className="flex-1 px-3 py-2 rounded border dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              <input type="text" value={predAlertType}
+                onChange={(e) => setPredAlertType(e.target.value)}
+                placeholder="Enter alert type (e.g., cpu_high, disk_full)"
+                style={inputStyle}
                 onKeyDown={(e) => e.key === 'Enter' && handlePredict()} />
               <button onClick={handlePredict} disabled={!predAlertType.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                style={{ padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: 'rgba(99,102,241,0.9)', color: '#fff', border: 'none', cursor: predAlertType.trim() ? 'pointer' : 'not-allowed', opacity: predAlertType.trim() ? 1 : 0.5, whiteSpace: 'nowrap' }}>
                 Predict
               </button>
             </div>
@@ -303,37 +328,43 @@ export default function PatternsPage() {
             {predictions && (
               <div className="mt-6 space-y-4">
                 {!predictions.prediction_available ? (
-                  <p className="text-gray-500 dark:text-gray-400">{predictions.message}</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{predictions.message}</p>
                 ) : (
                   <>
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div style={{ padding: 16, borderRadius: 10, background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)' }}>
                       <div className="flex items-center gap-2 mb-2">
-                        <Cpu className="w-5 h-5 text-blue-600" />
-                        <h4 className="font-semibold dark:text-white">Top Prediction</h4>
-                        <span className="ml-auto text-sm font-bold text-blue-600">{(predictions.confidence * 100).toFixed(0)}% confidence</span>
+                        <Cpu size={16} style={{ color: '#818cf8' }} />
+                        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-heading)' }}>Top Prediction</span>
+                        <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: '#818cf8' }}>
+                          {(predictions.confidence * 100).toFixed(0)}% confidence
+                        </span>
                       </div>
-                      <p className="dark:text-gray-300"><strong>Root Cause:</strong> {predictions.top_prediction.root_cause}</p>
-                      <p className="dark:text-gray-300"><strong>Action:</strong> {predictions.top_prediction.recommended_action}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        <strong style={{ color: 'var(--text-heading)' }}>Root Cause:</strong> {predictions.top_prediction.root_cause}
+                      </p>
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        <strong style={{ color: 'var(--text-heading)' }}>Action:</strong> {predictions.top_prediction.recommended_action}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
                         Based on {predictions.historical_incident_count} historical incidents
                         {predictions.estimated_resolution_seconds && ` • Estimated resolution: ${Math.round(predictions.estimated_resolution_seconds / 60)} min`}
                       </p>
                     </div>
                     {predictions.all_predictions && predictions.all_predictions.length > 1 && (
                       <div>
-                        <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">All Predictions</h4>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>All Predictions</p>
                         <div className="space-y-2">
                           {predictions.all_predictions.map((p, idx) => (
-                            <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded">
-                              <div className="w-12 text-center">
-                                <span className="text-sm font-bold dark:text-white">{(p.probability * 100).toFixed(0)}%</span>
-                              </div>
+                            <div key={idx} className="flex items-center gap-3 rounded-lg" style={{ padding: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                              <span style={{ width: 40, fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#818cf8', textAlign: 'center' }}>
+                                {(p.probability * 100).toFixed(0)}%
+                              </span>
                               <div className="flex-1">
-                                <p className="text-sm font-medium dark:text-white">{p.root_cause}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{p.recommended_action} • {p.historical_count} occurrences</p>
+                                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{p.root_cause}</p>
+                                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.recommended_action} • {p.historical_count} occurrences</p>
                               </div>
-                              <div className="w-24 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                                <div className="bg-blue-500 rounded-full h-2" style={{ width: `${p.probability * 100}%` }} />
+                              <div style={{ width: 80, height: 6, borderRadius: 999, background: 'var(--bg-input)', overflow: 'hidden' }}>
+                                <div style={{ width: `${p.probability * 100}%`, height: '100%', borderRadius: 999, background: '#818cf8' }} />
                               </div>
                             </div>
                           ))}

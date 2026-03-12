@@ -4,7 +4,7 @@ profitgrid/
 
 # Local development commands (personal reference)
 commands.txt
-
+powers/
 site24x7-token-exchange.sh
 # Python
 __pycache__/

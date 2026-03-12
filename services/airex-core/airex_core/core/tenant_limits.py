@@ -51,6 +51,7 @@ async def check_concurrent_incidents(
             .where(
                 Incident.tenant_id == tenant_id,
                 Incident.deleted_at.is_(None),
+                Incident.alert_type != "healthcheck",
                 Incident.state.in_(
                     [
                         IncidentState.RECEIVED,
