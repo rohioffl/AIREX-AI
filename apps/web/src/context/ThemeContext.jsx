@@ -9,6 +9,7 @@ export function ThemeProvider({ children }) {
   })
 
   useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark)
     document.body.classList.toggle('light-mode', !isDark)
     localStorage.setItem('airex-theme', isDark ? 'dark' : 'light')
   }, [isDark])

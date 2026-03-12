@@ -7,13 +7,17 @@ from sqlalchemy import ForeignKeyConstraint, String, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from airex_core.models.base import Base, TenantMixin
+from airex_core.models.base import Base
 
 
-class RelatedIncident(Base, TenantMixin):
+class RelatedIncident(Base):
     """Many-to-many relationship between incidents for explicit linking."""
 
     __tablename__ = "related_incidents"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=False, primary_key=True
+    )
 
     # Primary incident (the one we're viewing)
     incident_id: Mapped[uuid.UUID] = mapped_column(

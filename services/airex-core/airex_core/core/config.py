@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     # ── Proactive Health Checks (Phase 6 ARE) ───────────────────
     HEALTH_CHECK_ENABLED: bool = True
     HEALTH_CHECK_INTERVAL_MINUTES: int = 5
-    HEALTH_CHECK_MAX_MONITORS: int = 200  # max Site24x7 monitors per run
+    HEALTH_CHECK_MAX_MONITORS: int = 6000  # max Site24x7 monitors per run
     HEALTH_CHECK_INCIDENT_COOLDOWN_MINUTES: int = (
         30  # min gap between auto-incidents per target
     )
@@ -134,7 +134,7 @@ class Settings(BaseSettings):
     EMAIL_SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = ""
 
-    model_config = {"env_file": ".env", "case_sensitive": True}
+    model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
 
 
 settings = Settings()

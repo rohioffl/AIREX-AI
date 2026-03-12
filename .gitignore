@@ -1,6 +1,11 @@
 .tmp/
 tmp/
 profitgrid/
+
+# Local development commands (personal reference)
+commands.txt
+
+site24x7-token-exchange.sh
 # Python
 __pycache__/
 *.py[cod]

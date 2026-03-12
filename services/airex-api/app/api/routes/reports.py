@@ -12,6 +12,8 @@ from sqlalchemy import select
 
 from app.api.dependencies import (
     CurrentUser,
+    RequireAdmin,
+    RequireOperator,
     TenantId,
     TenantSession,
     require_permission,
@@ -148,7 +150,8 @@ async def create_report_template(
     body: ReportTemplateCreateRequest,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.ADMIN)),
+    current_user: CurrentUser,
+    _role: RequireAdmin = None,
 ) -> ReportTemplateResponse:
     """Create a new report template."""
     template = ReportTemplate(
@@ -198,7 +201,8 @@ async def update_report_template(
     body: ReportTemplateUpdateRequest,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.ADMIN)),
+    current_user: CurrentUser,
+    _role: RequireAdmin = None,
 ) -> ReportTemplateResponse:
     """Update a report template."""
     result = await session.execute(
@@ -265,7 +269,8 @@ async def delete_report_template(
     template_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.ADMIN)),
+    current_user: CurrentUser,
+    _role: RequireAdmin = None,
 ) -> None:
     """Delete a report template."""
     result = await session.execute(
@@ -299,7 +304,8 @@ async def generate_report(
     template_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.OPERATOR)),
+    current_user: CurrentUser,
+    _role: RequireOperator = None,
 ):
     """
     Manually generate a report from a template.

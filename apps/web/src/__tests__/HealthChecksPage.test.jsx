@@ -83,11 +83,60 @@ const mockDashboard = {
 
 let mockFetchDashboard
 let mockTriggerCheck
+let mockFetchMonitorInventory
 
 vi.mock('../services/api', () => ({
   fetchHealthCheckDashboard: (...args) => mockFetchDashboard(...args),
   triggerHealthCheck: (...args) => mockTriggerCheck(...args),
+  fetchMonitorInventory: (...args) => mockFetchMonitorInventory(...args),
 }))
+
+const mockMonitorInventory = {
+  site24x7_enabled: true,
+  total: 3,
+  last_synced_at: '2026-03-03T10:00:00Z',
+  status_summary: {
+    total_monitors: 3,
+    down: 1,
+    critical: 1,
+    trouble: 0,
+    up: 1,
+    confirmed_anomalies: 0,
+    maintenance: 0,
+    discovery_in_progress: 0,
+    configuration_error: 0,
+    suspended: 0,
+  },
+  monitors: [
+    {
+      monitor_id: 'mon-001',
+      monitor_name: 'Web Server US',
+      monitor_type: 'URL',
+      current_status: 'healthy',
+      site24x7_status_label: 'up',
+      last_checked_at: '2026-03-03T10:00:00Z',
+      last_incident_id: null,
+    },
+    {
+      monitor_id: 'mon-002',
+      monitor_name: 'API Gateway',
+      monitor_type: 'API',
+      current_status: 'degraded',
+      site24x7_status_label: 'critical',
+      last_checked_at: '2026-03-03T10:00:00Z',
+      last_incident_id: null,
+    },
+    {
+      monitor_id: 'mon-003',
+      monitor_name: 'Database Primary',
+      monitor_type: 'SERVER',
+      current_status: 'down',
+      site24x7_status_label: 'down',
+      last_checked_at: '2026-03-03T10:00:00Z',
+      last_incident_id: 'inc-linked-001',
+    },
+  ],
+}
 
 function renderPage() {
   return render(
@@ -102,6 +151,7 @@ describe('HealthChecksPage', () => {
     vi.clearAllMocks()
     mockFetchDashboard = vi.fn().mockResolvedValue(mockDashboard)
     mockTriggerCheck = vi.fn().mockResolvedValue({ status: 'completed' })
+    mockFetchMonitorInventory = vi.fn().mockResolvedValue(mockMonitorInventory)
   })
 
   it('renders loading state initially', () => {
@@ -114,54 +164,58 @@ describe('HealthChecksPage', () => {
   it('renders dashboard after loading', async () => {
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('Proactive Health Checks')).toBeInTheDocument()
+      expect(screen.getByText('Site24x7 Health Checks')).toBeInTheDocument()
     })
     expect(mockFetchDashboard).toHaveBeenCalledTimes(1)
+    expect(mockFetchMonitorInventory).toHaveBeenCalledTimes(1)
   })
 
   it('displays summary cards with correct counts', async () => {
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('Proactive Health Checks')).toBeInTheDocument()
+      expect(screen.getByText('AIREX Proactive Snapshot (Last Run)')).toBeInTheDocument()
     })
-    // Summary values
-    expect(screen.getByText('5')).toBeInTheDocument()  // total
-    expect(screen.getByText('3')).toBeInTheDocument()  // healthy
+    expect(screen.getByText('Evaluated')).toBeInTheDocument()
+    expect(screen.getByText('Incidents (24h)')).toBeInTheDocument()
+    expect(screen.getAllByText('5').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('3').length).toBeGreaterThan(0)
   })
 
   it('displays target list with status badges', async () => {
     renderPage()
     await waitFor(() => {
-      expect(screen.getAllByText('Web Server US').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('Site24x7 Live Targets (1)')).toBeInTheDocument()
     })
-    expect(screen.getByText('API Gateway')).toBeInTheDocument()
-    expect(screen.getByText('Database Primary')).toBeInTheDocument()
+    expect(screen.getAllByText('Database Primary').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Down').length).toBeGreaterThan(0)
   })
 
-  it('shows degraded target with anomaly count', async () => {
+  it('shows critical targets when critical filter is selected', async () => {
     renderPage()
+    const user = userEvent.setup()
     await waitFor(() => {
-      expect(screen.getByText('API Gateway')).toBeInTheDocument()
+      expect(screen.getByText('Critical (1)')).toBeInTheDocument()
     })
-    expect(screen.getByText('1 anomaly')).toBeInTheDocument()
+    await user.click(screen.getByText('Critical (1)'))
+    expect(screen.getAllByText('API Gateway').length).toBeGreaterThan(0)
   })
 
-  it('shows down target with anomaly count (plural)', async () => {
+  it('shows down target in the default down filter', async () => {
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('Database Primary')).toBeInTheDocument()
+      expect(screen.getAllByText('Database Primary').length).toBeGreaterThan(0)
     })
-    expect(screen.getByText('2 anomalies')).toBeInTheDocument()
+    expect(screen.getByText('Site24x7 Live Targets (1)')).toBeInTheDocument()
   })
 
   it('expands target row to show details on click', async () => {
     const user = userEvent.setup()
     renderPage()
     await waitFor(() => {
-      expect(screen.getAllByText('Web Server US').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('Database Primary').length).toBeGreaterThan(0)
     })
-    await user.click(screen.getAllByText('Web Server US')[0])
-    expect(screen.getByText(/mon-001/)).toBeInTheDocument()
+    await user.click(screen.getAllByText('Database Primary')[0])
+    expect(screen.getByText(/mon-003/)).toBeInTheDocument()
   })
 
   it('shows Run Now button for admin users', async () => {
@@ -197,9 +251,15 @@ describe('HealthChecksPage', () => {
       targets: [],
       recent_checks: [],
     })
+    mockFetchMonitorInventory = vi.fn().mockResolvedValue({
+      ...mockMonitorInventory,
+      total: 0,
+      status_summary: { ...mockMonitorInventory.status_summary, total_monitors: 0, down: 0, critical: 0, up: 0 },
+      monitors: [],
+    })
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText(/No health checks have run yet/)).toBeInTheDocument()
+      expect(screen.getByText('No targets match the selected live status filter.')).toBeInTheDocument()
     })
   })
 
@@ -207,14 +267,11 @@ describe('HealthChecksPage', () => {
     const user = userEvent.setup()
     renderPage()
     await waitFor(() => {
-      expect(screen.getAllByText('Web Server US').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('Up (1)')).toBeInTheDocument()
     })
-    // Click the "Down" filter
-    await user.click(screen.getByText(/Down \(/))
-    // Only the down target should be visible
-    expect(screen.getByText('Database Primary')).toBeInTheDocument()
-    // Web Server US still appears in recent checks section but not in targets
-    expect(screen.queryByText('API Gateway')).not.toBeInTheDocument()
+    await user.click(screen.getByText('Up (1)'))
+    expect(screen.getByText('Site24x7 Live Targets (1)')).toBeInTheDocument()
+    expect(screen.getAllByText('Web Server US').length).toBeGreaterThan(0)
   })
 
   it('renders recent checks section', async () => {
@@ -229,15 +286,17 @@ describe('HealthChecksPage', () => {
     await waitFor(() => {
       expect(screen.getByText('All (3)')).toBeInTheDocument()
     })
+    expect(screen.getByText('Down (1)')).toBeInTheDocument()
+    expect(screen.getByText('Critical (1)')).toBeInTheDocument()
   })
 
   it('shows View Incident link for target with incident', async () => {
     const user = userEvent.setup()
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('Database Primary')).toBeInTheDocument()
+      expect(screen.getAllByText('Database Primary').length).toBeGreaterThan(0)
     })
-    await user.click(screen.getByText('Database Primary'))
+    await user.click(screen.getAllByText('Database Primary')[0])
     expect(screen.getByText('View Incident')).toBeInTheDocument()
   })
 
@@ -245,9 +304,9 @@ describe('HealthChecksPage', () => {
     const user = userEvent.setup()
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('Database Primary')).toBeInTheDocument()
+      expect(screen.getAllByText('Database Primary').length).toBeGreaterThan(0)
     })
-    await user.click(screen.getByText('Database Primary'))
+    await user.click(screen.getAllByText('Database Primary')[0])
     await user.click(screen.getByText('View Incident'))
     expect(mockNavigate).toHaveBeenCalledWith('/incidents/inc-linked-001')
   })

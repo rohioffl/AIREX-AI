@@ -19,9 +19,10 @@ router = APIRouter()
 async def list_anomalies(
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: CurrentUser,
     baseline_days: int = Query(30, ge=7, le=365),
     detection_window_hours: int = Query(24, ge=1, le=168),
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Detect anomalies in incident patterns."""
     return await detect_anomalies(

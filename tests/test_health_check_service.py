@@ -177,7 +177,9 @@ class TestCheckSite24x7Monitors:
     @pytest.mark.asyncio
     async def test_returns_empty_when_disabled(self):
         session = AsyncMock()
-        with patch("airex_core.services.health_check_service.settings") as mock_settings:
+        with patch(
+            "airex_core.services.health_check_service.settings"
+        ) as mock_settings:
             mock_settings.SITE24X7_ENABLED = False
             mock_settings.SITE24X7_REFRESH_TOKEN = ""
             result = await check_site24x7_monitors(session, TENANT)
@@ -189,28 +191,21 @@ class TestCheckSite24x7Monitors:
         redis = AsyncMock()
 
         mock_client_instance = AsyncMock()
-        mock_client_instance._get.return_value = {
-            "data": {
-                "monitors": [
-                    {
-                        "monitors": [
-                            {
-                                "monitor_id": "111",
-                                "name": "Web Server",
-                                "status": 1,  # UP
-                                "attribute_value": "150 ms",
-                            },
-                            {
-                                "monitor_id": "222",
-                                "name": "API Server",
-                                "status": 0,  # DOWN
-                                "attribute_value": "",
-                            },
-                        ]
-                    }
-                ]
-            }
-        }
+        mock_client_instance.list_monitors.return_value = [
+            {
+                "monitor_id": "111",
+                "name": "Web Server",
+                "status": 1,  # UP
+                "attribute_value": "150 ms",
+            },
+            {
+                "monitor_id": "222",
+                "name": "API Server",
+                "status": 0,  # DOWN
+                "attribute_value": "",
+            },
+        ]
+        mock_client_instance.get_all_current_status.return_value = []
 
         with (
             patch("airex_core.services.health_check_service.settings") as mock_settings,
@@ -237,21 +232,14 @@ class TestCheckSite24x7Monitors:
         session = AsyncMock()
 
         mock_client_instance = AsyncMock()
-        mock_client_instance._get.return_value = {
-            "data": {
-                "monitors": [
-                    {
-                        "monitors": [
-                            {
-                                "monitor_id": "333",
-                                "name": "Broken Monitor",
-                                "status": "not_a_number",
-                            },
-                        ]
-                    }
-                ]
-            }
-        }
+        mock_client_instance.list_monitors.return_value = [
+            {
+                "monitor_id": "333",
+                "name": "Broken Monitor",
+                "status": "not_a_number",
+            },
+        ]
+        mock_client_instance.get_all_current_status.return_value = []
 
         with (
             patch("airex_core.services.health_check_service.settings") as mock_settings,
@@ -273,7 +261,7 @@ class TestCheckSite24x7Monitors:
         session = AsyncMock()
 
         mock_client_instance = AsyncMock()
-        mock_client_instance._get.side_effect = Exception("API down")
+        mock_client_instance.list_monitors.side_effect = Exception("API down")
 
         with (
             patch("airex_core.services.health_check_service.settings") as mock_settings,
@@ -386,7 +374,9 @@ class TestAutoCreateIncidents:
         cooldown_result.scalar_one.return_value = 1
         session.execute.side_effect = [dedup_result, cooldown_result]
 
-        with patch("airex_core.services.health_check_service.settings") as mock_settings:
+        with patch(
+            "airex_core.services.health_check_service.settings"
+        ) as mock_settings:
             mock_settings.HEALTH_CHECK_INCIDENT_COOLDOWN_MINUTES = 30
             count = await auto_create_incidents(session, TENANT, [hc])
 

@@ -21,6 +21,8 @@ from airex_core.core.config import settings
 logger = structlog.get_logger()
 
 REDIS_TOKEN_KEY = "airex:site24x7:access_token"
+
+
 class Site24x7Client:
     """Async Site24x7 REST API client with OAuth2 token caching."""
 
@@ -207,15 +209,39 @@ class Site24x7Client:
         """Get current status for all monitors in one call."""
         result = await self._get("/current_status", params={"apm_required": "true"})
         monitors_data = result.get("data", {})
-        monitor_groups = monitors_data.get("monitors", [])
-        if not monitor_groups and isinstance(monitors_data, list):
-            monitor_groups = monitors_data
-
         flat: list[dict[str, Any]] = []
-        if isinstance(monitor_groups, list):
-            for item in monitor_groups:
-                if isinstance(item, dict) and "monitors" in item:
-                    flat.extend(item["monitors"])
-                elif isinstance(item, dict) and "monitor_id" in item:
+
+        # Current-status monitors list (may be partial depending on account plan/access).
+        direct_monitors = monitors_data.get("monitors", [])
+        if isinstance(direct_monitors, list):
+            for item in direct_monitors:
+                if isinstance(item, dict):
                     flat.append(item)
-        return flat
+
+        # Monitor-group nested monitors often include the broader active status set.
+        grouped = monitors_data.get("monitor_groups", [])
+        if isinstance(grouped, list):
+            for group in grouped:
+                if not isinstance(group, dict):
+                    continue
+                monitors = group.get("monitors")
+                if isinstance(monitors, list):
+                    for item in monitors:
+                        if isinstance(item, dict):
+                            flat.append(item)
+
+        # Backward compatibility for payloads that are directly a list.
+        if not flat and isinstance(monitors_data, list):
+            for item in monitors_data:
+                if isinstance(item, dict):
+                    flat.append(item)
+
+        deduped: dict[str, dict[str, Any]] = {}
+        for item in flat:
+            monitor_id = str(item.get("monitor_id") or item.get("monitorid") or "")
+            if not monitor_id:
+                continue
+            if monitor_id not in deduped:
+                deduped[monitor_id] = item
+
+        return list(deduped.values())

@@ -156,38 +156,68 @@ async def check_site24x7_monitors(
     log = logger.bind(tenant_id=str(tenant_id), target_type=TargetType.SITE24X7)
 
     try:
-        # Fetch current status of all monitors in one call
-        all_status = await client._get(
-            "/current_status", params={"apm_required": "true"}
-        )
-        monitors_data = all_status.get("data", {})
+        # Fetch full monitor inventory and live status separately.
+        # `/monitors` provides full coverage while `/current_status` provides live buckets.
+        inventory_monitors = await client.list_monitors()
+        live_status_monitors = await client.get_all_current_status()
 
-        # Site24x7 returns monitors grouped by type
-        monitor_groups = monitors_data.get("monitors", [])
-        if not monitor_groups and isinstance(monitors_data, list):
-            monitor_groups = monitors_data
-
-        flat_monitors: list[dict] = []
-        if isinstance(monitor_groups, list):
-            for item in monitor_groups:
-                if isinstance(item, dict) and "monitors" in item:
-                    flat_monitors.extend(item["monitors"])
-                elif isinstance(item, dict) and "monitor_id" in item:
-                    flat_monitors.append(item)
-
-        log.info("health_check_site24x7_fetched", monitor_count=len(flat_monitors))
-
-        for monitor in flat_monitors[: settings.HEALTH_CHECK_MAX_MONITORS]:
-            start_ms = time.monotonic() * 1000
-            monitor_id = monitor.get("monitor_id", monitor.get("monitorid", ""))
-            monitor_name = monitor.get(
-                "name", monitor.get("display_name", f"monitor-{monitor_id}")
+        live_by_id: dict[str, dict[str, Any]] = {}
+        for monitor in live_status_monitors:
+            monitor_id = str(
+                monitor.get("monitor_id") or monitor.get("monitorid") or ""
             )
+            if monitor_id and monitor_id not in live_by_id:
+                live_by_id[monitor_id] = monitor
+
+        max_monitors = settings.HEALTH_CHECK_MAX_MONITORS
+        if max_monitors <= 0:
+            selected_inventory = inventory_monitors
+        else:
+            selected_inventory = inventory_monitors[:max_monitors]
+
+        log.info(
+            "health_check_site24x7_fetched",
+            inventory_count=len(inventory_monitors),
+            live_status_count=len(live_by_id),
+            selected_count=len(selected_inventory),
+            max_monitors=max_monitors,
+        )
+
+        for inventory_monitor in selected_inventory:
+            start_ms = time.monotonic() * 1000
+            monitor_id = str(
+                inventory_monitor.get("monitor_id")
+                or inventory_monitor.get("id")
+                or inventory_monitor.get("monitorid")
+                or ""
+            )
+            monitor_name = inventory_monitor.get(
+                "name", inventory_monitor.get("display_name", f"monitor-{monitor_id}")
+            )
+            live = live_by_id.get(monitor_id, {})
 
             try:
                 # Extract metrics from status data
-                raw_status = monitor.get("status", 10)  # default to Discovery/unknown
-                attribute_value = monitor.get("attribute_value", "")
+                raw_status = live.get("status")
+                if raw_status is None:
+                    raw_status = inventory_monitor.get("status")
+                if raw_status is None:
+                    state = inventory_monitor.get("state")
+                    try:
+                        state_int = int(state) if state is not None else None
+                    except (TypeError, ValueError):
+                        state_int = None
+                    if state_int == 0:
+                        raw_status = 1  # active -> up fallback
+                    elif state_int == 5:
+                        raw_status = 5  # suspended
+                    else:
+                        raw_status = 10
+
+                attribute_value = live.get(
+                    "attribute_value",
+                    inventory_monitor.get("attribute_value", ""),
+                )
 
                 metrics: dict[str, Any] = {
                     "site24x7_status_code": raw_status,
@@ -195,7 +225,7 @@ async def check_site24x7_monitors(
                 }
 
                 # Parse response time if present
-                if "attribute_value" in monitor:
+                if "attribute_value" in live or "attribute_value" in inventory_monitor:
                     try:
                         resp_time = float(
                             str(attribute_value).replace(" ms", "").strip()

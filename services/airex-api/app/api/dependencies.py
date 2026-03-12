@@ -127,3 +127,8 @@ CurrentUser: TypeAlias = Annotated[TokenData | None, Depends(get_current_user)]
 RequireAdmin: TypeAlias = Annotated[None, Depends(require_role("admin"))]
 RequireOperator: TypeAlias = Annotated[None, Depends(require_role("operator", "admin"))]
 RequireViewer: TypeAlias = Annotated[None, Depends(require_role("viewer", "operator", "admin"))]
+
+# Permission-based type aliases (for use in function signatures)
+def RequirePermission(*permissions: Permission):
+    """Create a type alias for permission-based access control."""
+    return Annotated[None, Depends(require_permission(*permissions))]

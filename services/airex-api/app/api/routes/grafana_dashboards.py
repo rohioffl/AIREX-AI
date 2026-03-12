@@ -226,7 +226,8 @@ def _build_grafana_dashboard_json(template: dict[str, Any], datasource: str = "P
 
 @router.get("/templates")
 async def list_dashboard_templates(
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
     category: str | None = Query(None, description="Filter by category"),
 ):
     """List available AIREX Grafana dashboard templates."""
@@ -239,7 +240,8 @@ async def list_dashboard_templates(
 @router.get("/templates/{template_id}")
 async def get_dashboard_template(
     template_id: str,
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Get a specific dashboard template."""
     template = next((t for t in AIREX_TEMPLATES if t["id"] == template_id), None)
@@ -251,8 +253,9 @@ async def get_dashboard_template(
 @router.post("/templates/{template_id}/export")
 async def export_dashboard(
     template_id: str,
+    current_user: CurrentUser,
     datasource: str = Query("Prometheus", description="Grafana datasource name"),
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Export an AIREX dashboard template as Grafana-compatible JSON."""
     template = next((t for t in AIREX_TEMPLATES if t["id"] == template_id), None)
@@ -273,8 +276,9 @@ async def export_dashboard(
 
 @router.post("/export-all")
 async def export_all_dashboards(
+    current_user: CurrentUser,
     datasource: str = Query("Prometheus", description="Grafana datasource name"),
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Export all AIREX dashboard templates as Grafana-compatible JSON."""
     dashboards = []

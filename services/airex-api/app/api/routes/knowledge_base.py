@@ -12,6 +12,7 @@ from sqlalchemy import select, or_, func
 
 from app.api.dependencies import (
     CurrentUser,
+    RequireAdmin,
     TenantId,
     TenantSession,
     require_permission,
@@ -277,7 +278,8 @@ async def delete_knowledge_base_entry(
     entry_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.ADMIN)),
+    current_user: CurrentUser,
+    _role: RequireAdmin = None,
 ) -> None:
     """Delete a knowledge base entry."""
     result = await session.execute(

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import structlog
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
@@ -45,8 +45,12 @@ async def register(
     session: TenantSession,
 ) -> UserResponse:
     """Register a new user account."""
-    # Check if email already exists
-    result = await session.execute(select(User).where(User.email == body.email))
+    normalized_email = body.email.strip().lower()
+
+    # Check if email already exists (case-insensitive)
+    result = await session.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    )
     existing = result.scalar_one_or_none()
     if existing:
         raise HTTPException(
@@ -58,7 +62,7 @@ async def register(
 
     user = User(
         tenant_id=tenant_id,
-        email=body.email,
+        email=normalized_email,
         hashed_password=hash_password(body.password),
         display_name=body.display_name,
         role="operator",
@@ -83,7 +87,10 @@ async def login(
     session: TenantSession,
 ) -> TokenResponse:
     """Authenticate and return access + refresh tokens."""
-    result = await session.execute(select(User).where(User.email == body.email))
+    normalized_email = body.email.strip().lower()
+    result = await session.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    )
     user = result.scalar_one_or_none()
 
     if user is None or not verify_password(body.password, user.hashed_password):
@@ -132,7 +139,10 @@ async def refresh(
         ) from exc
 
     # Verify user still exists and is active
-    result = await session.execute(select(User).where(User.email == data.sub))
+    normalized_email = data.sub.strip().lower()
+    result = await session.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    )
     user = result.scalar_one_or_none()
 
     if user is None or not user.is_active:
@@ -207,7 +217,10 @@ async def google_login(
             detail="Google email is not verified",
         )
 
-    result = await session.execute(select(User).where(User.email == email))
+    normalized_email = email.strip().lower()
+    result = await session.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    )
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -260,42 +273,44 @@ async def set_password(
 ) -> TokenResponse:
     """Set password using invitation token."""
     from airex_core.core.security import hash_password
-    
+
     # Find user by invitation token
     result = await session.execute(
         select(User).where(User.invitation_token == body.invitation_token)
     )
     user = result.scalar_one_or_none()
-    
+
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invalid invitation token",
         )
-    
+
     # Check if token expired
-    if user.invitation_expires_at and user.invitation_expires_at < datetime.now(timezone.utc):
+    if user.invitation_expires_at and user.invitation_expires_at < datetime.now(
+        timezone.utc
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invitation token has expired",
         )
-    
+
     # Check if password already set
     if user.hashed_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password already set. Use reset-password if you forgot it.",
         )
-    
+
     # Set password and clear invitation
     user.hashed_password = hash_password(body.password)
     user.invitation_token = None
     user.invitation_expires_at = None
     user.is_active = True  # Activate account
     await session.flush()
-    
+
     logger.info("password_set_via_invitation", email=user.email, user_id=str(user.id))
-    
+
     # Return tokens so user is logged in
     access_token = create_access_token(
         tenant_id=user.tenant_id,
@@ -307,7 +322,7 @@ async def set_password(
         tenant_id=user.tenant_id,
         subject=user.email,
     )
-    
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -323,28 +338,33 @@ async def reset_password(
     from airex_core.core.security import generate_invitation_token
     from airex_core.services.notification_service import send_password_reset_email
     from airex_core.core.config import settings
-    
+
     # Find user by email
-    result = await session.execute(select(User).where(User.email == body.email))
+    normalized_email = body.email.strip().lower()
+    result = await session.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    )
     user = result.scalar_one_or_none()
-    
+
     if user is None:
         # Don't reveal if email exists (security best practice)
         logger.warning("password_reset_requested_unknown_email", email=body.email)
         return {"message": "If the email exists, a reset link has been sent"}
-    
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is disabled",
         )
-    
+
     # Generate reset token (reuse invitation_token field for reset)
     reset_token = generate_invitation_token()
     user.invitation_token = reset_token
-    user.invitation_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)  # 24 hour expiry
+    user.invitation_expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=24
+    )  # 24 hour expiry
     await session.flush()
-    
+
     # Send reset email
     reset_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/set-password?token={reset_token}"
     await send_password_reset_email(
@@ -352,7 +372,7 @@ async def reset_password(
         display_name=user.display_name,
         reset_url=reset_url,
     )
-    
+
     logger.info("password_reset_email_sent", email=user.email, user_id=str(user.id))
-    
+
     return {"message": "If the email exists, a reset link has been sent"}

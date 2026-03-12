@@ -78,8 +78,25 @@ class MonitorItem(BaseModel):
     monitor_name: str
     monitor_type: str = ""
     current_status: str = "unknown"
+    site24x7_status_code: int | None = None
+    site24x7_status_label: str | None = None
     last_checked_at: datetime | None = None
     last_incident_id: uuid.UUID | None = None
+
+
+class Site24x7StatusSummary(BaseModel):
+    """Live status counters from Site24x7 current_status API."""
+
+    total_monitors: int = 0
+    down: int = 0
+    critical: int = 0
+    trouble: int = 0
+    up: int = 0
+    maintenance: int = 0
+    discovery_in_progress: int = 0
+    configuration_error: int = 0
+    suspended: int = 0
+    confirmed_anomalies: int = 0
 
 
 class MonitorInventoryResponse(BaseModel):
@@ -89,3 +106,4 @@ class MonitorInventoryResponse(BaseModel):
     total: int = 0
     last_synced_at: datetime | None = None
     site24x7_enabled: bool = False
+    status_summary: Site24x7StatusSummary | None = None

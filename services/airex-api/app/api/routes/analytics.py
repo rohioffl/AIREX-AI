@@ -46,10 +46,11 @@ class AnalyticsTrendsResponse(BaseModel):
     ai_confidence_trends: list[AIConfidenceTrendPoint]
 
 
-@router.get("/trends", response_model=AnalyticsTrendsResponse, dependencies=[RequireAdmin])
+@router.get("/trends", response_model=AnalyticsTrendsResponse)
 async def get_analytics_trends(
     tenant_id: TenantId,
     session: TenantSession,
+    _admin: RequireAdmin,
     days: int = Query(default=30, ge=1, le=90),
 ) -> AnalyticsTrendsResponse:
     """

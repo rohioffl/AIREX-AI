@@ -39,6 +39,29 @@ function SummaryCard({ label, value, icon: Icon, color }) {
   )
 }
 
+function Site24x7StatCard({ label, value, tone = 'muted' }) {
+  const toneClass = {
+    danger: 'text-red-400',
+    warning: 'text-amber-400',
+    good: 'text-emerald-400',
+    info: 'text-sky-400',
+    muted: 'text-zinc-300',
+  }[tone] || 'text-zinc-300'
+
+  return (
+    <div className="glass rounded-xl px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
+        <p className={`text-lg font-bold leading-none ${toneClass}`}>{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function formatCount(value) {
+  return Number(value || 0).toLocaleString()
+}
+
 function TargetRow({ target, navigate }) {
   const [expanded, setExpanded] = useState(false)
   const cfg = STATUS_CONFIG[target.status] || STATUS_CONFIG.unknown
@@ -120,10 +143,11 @@ export default function HealthChecksPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [running, setRunning] = useState(false)
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState('down')
   const [monitors, setMonitors] = useState(null)
   const [monitorsLoading, setMonitorsLoading] = useState(false)
   const [monitorsRefreshing, setMonitorsRefreshing] = useState(false)
+  const [runResult, setRunResult] = useState(null)
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -162,9 +186,11 @@ export default function HealthChecksPage() {
 
   const handleRunNow = async () => {
     setRunning(true)
+    setError(null)
     try {
-      await triggerHealthCheck()
-      await loadDashboard()
+      const result = await triggerHealthCheck()
+      setRunResult(result)
+      await Promise.all([loadDashboard(), loadMonitors(true)])
     } catch (err) {
       setError(err.message || 'Failed to trigger health check')
     } finally {
@@ -172,10 +198,13 @@ export default function HealthChecksPage() {
     }
   }
 
-  const filteredTargets = dashboard?.targets?.filter(t => {
+  const liveMonitors = monitors?.monitors || []
+  const filteredLiveTargets = liveMonitors.filter((m) => {
+    const s = m.site24x7_status_label || 'unknown'
     if (filter === 'all') return true
-    return t.status === filter
-  }) || []
+    return s === filter
+  })
+  const visibleLiveTargets = filteredLiveTargets.slice(0, 300)
 
   if (loading) {
     return (
@@ -187,6 +216,7 @@ export default function HealthChecksPage() {
   }
 
   const summary = dashboard?.summary || {}
+  const site24x7Summary = monitors?.status_summary || null
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
@@ -197,9 +227,9 @@ export default function HealthChecksPage() {
             <HeartPulse size={24} className="text-[#818cf8]" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[var(--text-heading)]">Proactive Health Checks</h1>
+            <h1 className="text-xl font-bold text-[var(--text-heading)]">Site24x7 Health Checks</h1>
             <p className="text-sm text-[var(--text-secondary)]">
-              Continuous monitoring of infrastructure health
+              Site24x7 monitor health and proactive incident checks
               {summary.last_run_at && (
                 <span> &middot; Last run: {new Date(summary.last_run_at).toLocaleString()}</span>
               )}
@@ -229,19 +259,67 @@ export default function HealthChecksPage() {
         </div>
       )}
 
+      {runResult && (
+        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm">
+          Run completed: checked {runResult.checked ?? 0}, healthy {runResult.healthy ?? 0}, degraded {runResult.degraded ?? 0}, down {runResult.down ?? 0}, incidents {runResult.incidents_created ?? 0}.
+        </div>
+      )}
+
       {/* Summary Cards */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold text-[var(--text-primary)]">AIREX Proactive Snapshot (Last Run)</h2>
+        <p className="text-xs text-[var(--text-muted)]">
+          These counters show monitors evaluated by AIREX during the latest health-check run.
+        </p>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        <SummaryCard label="Total" value={summary.total_targets || 0} icon={Server} color="text-blue-400" />
-        <SummaryCard label="Healthy" value={summary.healthy || 0} icon={CheckCircle2} color="text-emerald-400" />
-        <SummaryCard label="Degraded" value={summary.degraded || 0} icon={AlertTriangle} color="text-amber-400" />
-        <SummaryCard label="Down" value={summary.down || 0} icon={XCircle} color="text-red-400" />
-        <SummaryCard label="Unknown" value={summary.unknown || 0} icon={HelpCircle} color="text-zinc-400" />
-        <SummaryCard label="Incidents (24h)" value={summary.incidents_created_24h || 0} icon={Zap} color="text-purple-400" />
+        <SummaryCard label="Evaluated" value={formatCount(summary.total_targets)} icon={Server} color="text-blue-400" />
+        <SummaryCard label="Healthy" value={formatCount(summary.healthy)} icon={CheckCircle2} color="text-emerald-400" />
+        <SummaryCard label="Degraded" value={formatCount(summary.degraded)} icon={AlertTriangle} color="text-amber-400" />
+        <SummaryCard label="Down" value={formatCount(summary.down)} icon={XCircle} color="text-red-400" />
+        <SummaryCard label="Unknown" value={formatCount(summary.unknown)} icon={HelpCircle} color="text-zinc-400" />
+        <SummaryCard label="Incidents (24h)" value={formatCount(summary.incidents_created_24h)} icon={Zap} color="text-purple-400" />
       </div>
 
-      {/* Filter Tabs */}
+      {site24x7Summary && (
+        <div className="glass rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--text-primary)]">Site24x7 Monitor Status (Live)</h2>
+              <p className="text-xs text-[var(--text-muted)]">
+                Last updated {monitors?.last_synced_at ? new Date(monitors.last_synced_at).toLocaleString() : 'just now'}
+              </p>
+            </div>
+            <p className="text-xs text-[var(--text-secondary)]">Total Monitors: {formatCount(site24x7Summary.total_monitors)}</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <Site24x7StatCard label="Down" value={formatCount(site24x7Summary.down)} tone="danger" />
+            <Site24x7StatCard label="Critical" value={formatCount(site24x7Summary.critical)} tone="danger" />
+            <Site24x7StatCard label="Trouble" value={formatCount(site24x7Summary.trouble)} tone="warning" />
+            <Site24x7StatCard label="Up" value={formatCount(site24x7Summary.up)} tone="good" />
+            <Site24x7StatCard label="Confirmed Anomalies" value={formatCount(site24x7Summary.confirmed_anomalies)} tone="warning" />
+            <Site24x7StatCard label="Maintenance" value={formatCount(site24x7Summary.maintenance)} tone="info" />
+            <Site24x7StatCard label="Discovery in Progress" value={formatCount(site24x7Summary.discovery_in_progress)} tone="info" />
+            <Site24x7StatCard label="Configuration Error(s)" value={formatCount(site24x7Summary.configuration_error)} tone="danger" />
+            <Site24x7StatCard label="Suspended Monitors" value={formatCount(site24x7Summary.suspended)} tone="muted" />
+          </div>
+        </div>
+      )}
+
+      {/* Live Filter Tabs */}
       <div className="flex items-center gap-1 flex-wrap">
-        {['all', 'healthy', 'degraded', 'down', 'unknown', 'error'].map(f => (
+        {[
+          ['all', liveMonitors.length],
+          ['down', site24x7Summary?.down],
+          ['critical', site24x7Summary?.critical],
+          ['trouble', site24x7Summary?.trouble],
+          ['up', site24x7Summary?.up],
+          ['maintenance', site24x7Summary?.maintenance],
+          ['suspended', site24x7Summary?.suspended],
+          ['configuration_error', site24x7Summary?.configuration_error],
+          ['discovery_in_progress', site24x7Summary?.discovery_in_progress],
+        ].map(([f, c]) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -251,30 +329,53 @@ export default function HealthChecksPage() {
                 : 'text-[var(--text-muted)] hover:bg-[var(--bg-input)] border border-transparent'
             }`}
           >
-            {f === 'all' ? `All (${dashboard?.targets?.length || 0})` : `${f.charAt(0).toUpperCase() + f.slice(1)} (${summary[f] || 0})`}
+            {f === 'all'
+              ? `All (${formatCount(c)})`
+              : `${String(f).replace(/_/g, ' ').replace(/\b\w/g, (x) => x.toUpperCase())} (${formatCount(c)})`}
           </button>
         ))}
       </div>
 
-      {/* Targets List */}
+      {/* Live Targets List */}
       <div className="glass rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-elevated)]">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">
             <Activity size={14} className="inline mr-2 text-[var(--neon-cyan)]" />
-            Monitored Targets ({filteredTargets.length})
+            Site24x7 Live Targets ({formatCount(filteredLiveTargets.length)})
           </h2>
         </div>
-        {filteredTargets.length === 0 ? (
+        {filteredLiveTargets.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-[var(--text-muted)]">
-            {dashboard?.targets?.length === 0
-              ? 'No health checks have run yet. Click "Run Now" to start.'
-              : 'No targets match the selected filter.'
-            }
+            No targets match the selected live status filter.
           </div>
         ) : (
-          filteredTargets.map(t => (
-            <TargetRow key={`${t.target_type}-${t.target_id}`} target={t} navigate={navigate} />
-          ))
+          <>
+            {visibleLiveTargets.map((m) => {
+              const liveStatus = m.site24x7_status_label || 'unknown'
+              const mappedStatus =
+                liveStatus === 'up'
+                  ? 'healthy'
+                  : liveStatus === 'trouble' || liveStatus === 'critical'
+                    ? 'degraded'
+                    : liveStatus === 'down' || liveStatus === 'configuration_error'
+                      ? 'down'
+                      : 'unknown'
+              const t = {
+                target_type: 'site24x7_monitor',
+                target_id: m.monitor_id,
+                target_name: m.monitor_name,
+                status: mappedStatus,
+                last_checked: m.last_checked_at,
+                incident_id: m.last_incident_id,
+              }
+              return <TargetRow key={`live-${m.monitor_id}`} target={t} navigate={navigate} />
+            })}
+            {filteredLiveTargets.length > visibleLiveTargets.length && (
+              <div className="px-4 py-3 text-xs text-[var(--text-muted)] border-t border-[var(--border)]">
+                Showing first {formatCount(visibleLiveTargets.length)} results. Use status filters to narrow large lists.
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -325,7 +426,7 @@ export default function HealthChecksPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-input)' }}>
-                    {['Name', 'Type', 'Status', 'Last Checked', 'Incident'].map(h => (
+                    {['Name', 'Type', 'AIREX Status', 'Site24x7 Status', 'Last Checked', 'Incident'].map(h => (
                       <th key={h} className="px-4 py-2 text-left font-medium text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
@@ -342,6 +443,11 @@ export default function HealthChecksPage() {
                             <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                             {cfg.label}
                           </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-[var(--text-secondary)]">
+                          {m.site24x7_status_label
+                            ? m.site24x7_status_label.replace(/_/g, ' ')
+                            : 'unknown'}
                         </td>
                         <td className="px-4 py-2.5 text-[var(--text-secondary)] font-mono">
                           {m.last_checked_at ? new Date(m.last_checked_at).toLocaleString() : '—'}

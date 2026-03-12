@@ -22,9 +22,10 @@ router = APIRouter()
 async def list_common_root_causes(
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: CurrentUser,
     days: int = Query(90, ge=7, le=365),
     min_occurrences: int = Query(2, ge=1, le=100),
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Find common root causes across incident types."""
     causes = await find_common_root_causes(
@@ -37,8 +38,9 @@ async def list_common_root_causes(
 async def get_root_cause_dependency_graph(
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: CurrentUser,
     days: int = Query(90, ge=7, le=365),
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Get root cause dependency graph for visualization."""
     return await get_root_cause_graph(session, tenant_id, days=days)

@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Activity, Settings, Radar,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
-  X, ChevronRight, Clock, Zap, Ban, Users, HeartPulse, TrendingUp, BookOpen
+  X, ChevronRight, Clock, Zap, Ban, Users, HeartPulse, TrendingUp, BookOpen,
+  Terminal, Layers, BarChart3
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
@@ -24,7 +25,7 @@ const NAV_ITEMS = [
   { label: 'Proactive', path: '/proactive', icon: Radar, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Live Feed', path: '/live', icon: Activity, roles: ['admin', 'operator', 'viewer'] },
-  { label: 'Health', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Site24x7', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Runbooks', path: '/runbooks', icon: Terminal, roles: ['admin', 'operator'] },
   { label: 'AI Intelligence', path: '/patterns', icon: Layers, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin', 'operator'] },

@@ -8,7 +8,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.api.dependencies import CurrentUser, RequireAdmin, TenantId
+from app.api.dependencies import CurrentUser, RequireAdmin, TenantId, require_role
 from airex_core.core.config import settings
 
 logger = structlog.get_logger()
@@ -58,7 +58,7 @@ class SettingsUpdate(BaseModel):
     email_from: str | None = None
 
 
-@router.get("/", response_model=SettingsResponse, dependencies=[Depends(RequireAdmin)])
+@router.get("/", response_model=SettingsResponse, dependencies=[Depends(require_role("admin"))])
 async def get_settings(
     tenant_id: TenantId,
     current_user: CurrentUser,
@@ -89,7 +89,7 @@ async def get_settings(
     )
 
 
-@router.patch("/", dependencies=[Depends(RequireAdmin)])
+@router.patch("/", dependencies=[Depends(require_role("admin"))])
 async def update_settings(
     tenant_id: TenantId,
     current_user: CurrentUser,

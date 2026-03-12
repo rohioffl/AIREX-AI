@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from app.api.dependencies import (
     CurrentUser,
     Redis,
+    RequireOperator,
     TenantId,
     TenantSession,
     require_permission,
@@ -65,8 +66,6 @@ class ManualIncidentCreateRequest(BaseModel):
     meta: dict | None = None
 
 
-
-
 # ── Bulk Operations Schemas ──────────────────────────────────────
 
 
@@ -104,8 +103,6 @@ class AssignRequest(BaseModel):
     assigned_to: uuid.UUID | None = None  # None = unassign
 
 
-
-
 # ── Manual Incident Creation ──────────────────────────────────────
 
 
@@ -116,11 +113,14 @@ class AssignRequest(BaseModel):
 )
 async def create_incident_manual(
     body: ManualIncidentCreateRequest,
-    template_id: Optional[uuid.UUID] = Query(None, description="Optional template ID to pre-fill fields"),
     tenant_id: TenantId,
     session: TenantSession,
     redis: Redis,
-    current_user: CurrentUser = Depends(require_permission(Permission.OPERATOR)),
+    current_user: CurrentUser,
+    template_id: Optional[uuid.UUID] = Query(
+        None, description="Optional template ID to pre-fill fields"
+    ),
+    _role: RequireOperator = None,
 ) -> IncidentCreatedResponse:
     """
     Manually create an incident (for operators/admins).
@@ -242,13 +242,16 @@ async def list_incidents(
         description="Filter by host_key to show incidents from the same server",
     ),
     search: str | None = Query(
-        default=None, description="Search in title, alert_type, meta, and evidence fields"
+        default=None,
+        description="Search in title, alert_type, meta, and evidence fields",
     ),
     date_from: datetime | None = Query(
-        default=None, description="Filter incidents created after this date (ISO format)"
+        default=None,
+        description="Filter incidents created after this date (ISO format)",
     ),
     date_to: datetime | None = Query(
-        default=None, description="Filter incidents created before this date (ISO format)"
+        default=None,
+        description="Filter incidents created before this date (ISO format)",
     ),
     limit: int = Query(default=50, le=200),
     cursor: str | None = Query(
@@ -284,14 +287,14 @@ async def list_incidents(
     # Search functionality: match against title, alert_type, meta JSON, and evidence
     if search and search.strip():
         search_term = f"%{search.strip().lower()}%"
-        
+
         # Search in incident fields
         incident_search = or_(
             Incident.title.ilike(search_term),
             Incident.alert_type.ilike(search_term),
             cast(Incident.meta, String).ilike(search_term),
         )
-        
+
         # Also search in evidence raw_output (subquery)
         evidence_subq = (
             select(Evidence.incident_id)
@@ -301,14 +304,14 @@ async def list_incidents(
             )
             .distinct()
         )
-        
+
         base_filters.append(
             or_(
                 incident_search,
                 Incident.id.in_(evidence_subq),
             )
         )
-    
+
     # Date range filters
     if date_from:
         base_filters.append(Incident.created_at >= date_from)
@@ -423,7 +426,7 @@ async def get_incident(
     # Related incidents: same host (host_key) + manually linked incidents
     related: list[RelatedIncidentItem] = []
     related_ids = set()
-    
+
     # 1. Same host incidents (automatic)
     if incident.host_key:
         related_result = await session.execute(
@@ -450,14 +453,16 @@ async def get_incident(
                     )
                 )
                 related_ids.add(other.id)
-    
+
     # 2. Manually linked incidents (explicit relationships)
     manual_links_result = await session.execute(
-        select(RelatedIncident, Incident).join(
+        select(RelatedIncident, Incident)
+        .join(
             Incident,
-            (RelatedIncident.tenant_id == Incident.tenant_id) &
-            (RelatedIncident.related_incident_id == Incident.id)
-        ).where(
+            (RelatedIncident.tenant_id == Incident.tenant_id)
+            & (RelatedIncident.related_incident_id == Incident.id),
+        )
+        .where(
             RelatedIncident.tenant_id == tenant_id,
             RelatedIncident.incident_id == incident_id,
         )
@@ -490,7 +495,10 @@ async def get_incident(
             from airex_core.services.correlation_service import get_correlated_incidents
 
             correlated_list = await get_correlated_incidents(
-                session, tenant_id, incident.correlation_group_id, exclude_id=incident_id
+                session,
+                tenant_id,
+                incident.correlation_group_id,
+                exclude_id=incident_id,
             )
             for other in correlated_list:
                 correlated.append(
@@ -531,6 +539,9 @@ async def get_incident(
         title=incident.title,
         created_at=incident.created_at,
         updated_at=incident.updated_at,
+        investigation_retry_count=incident.investigation_retry_count,
+        execution_retry_count=incident.execution_retry_count,
+        verification_retry_count=incident.verification_retry_count,
         host_key=incident.host_key,
         correlation_group_id=incident.correlation_group_id,
         resolution_type=incident.resolution_type,
@@ -574,12 +585,15 @@ async def approve_incident(
     Enqueues execution task via ARQ.
     Idempotent via idempotency_key (Redis).
     """
+    actor_email = current_user.email if current_user else "system"
+    actor_user_id = str(current_user.user_id) if current_user else "system"
+
     logger.info(
         "incident_approval_requested",
         tenant_id=str(tenant_id),
         incident_id=str(incident_id),
         action=body.action,
-        user_id=str(current_user.user_id),
+        user_id=actor_user_id,
     )
 
     result = await session.execute(
@@ -629,8 +643,8 @@ async def approve_incident(
             session,
             incident,
             IncidentState.EXECUTING,
-            reason=f"Approved by {current_user.email}: {body.action}",
-            actor=current_user.email,
+            reason=f"Approved by {actor_email}: {body.action}",
+            actor=actor_email,
         )
     except IllegalStateTransition as exc:
         raise HTTPException(
@@ -702,11 +716,14 @@ async def reject_incident(
 
     Transitions to REJECTED state and stores rejection reason in meta.
     """
+    actor_email = current_user.email if current_user else "system"
+    actor_user_id = str(current_user.user_id) if current_user else "system"
+
     logger.info(
         "incident_rejection_requested",
         tenant_id=str(tenant_id),
         incident_id=str(incident_id),
-        user_id=str(current_user.user_id),
+        user_id=actor_user_id,
     )
 
     result = await session.execute(
@@ -731,8 +748,9 @@ async def reject_incident(
         )
 
     # Update meta with rejection reason
+    rejection_reason = body.reason or "Manually rejected by operator"
     meta = dict(incident.meta or {})
-    meta["_manual_review_reason"] = body.reason
+    meta["_manual_review_reason"] = rejection_reason
     meta["_manual_review_required"] = True
     incident.meta = meta
     flag_modified(incident, "meta")
@@ -743,8 +761,8 @@ async def reject_incident(
             session,
             incident,
             IncidentState.REJECTED,
-            reason=body.reason or "Rejected by operator",
-            actor=current_user.email,
+            reason=rejection_reason,
+            actor=actor_email,
         )
     except IllegalStateTransition as exc:
         raise HTTPException(
@@ -925,7 +943,10 @@ async def restore_incident(
         incident_id=str(incident_id),
     )
 
-    return {"message": "Incident restored successfully", "incident_id": str(incident_id)}
+    return {
+        "message": "Incident restored successfully",
+        "incident_id": str(incident_id),
+    }
 
 
 # ── Bulk Operations ────────────────────────────────────────────────
@@ -1438,17 +1459,19 @@ async def list_related_incidents(
 ) -> list[RelatedIncidentResponse]:
     """List all incidents explicitly linked to this incident."""
     result = await session.execute(
-        select(RelatedIncident, Incident).join(
+        select(RelatedIncident, Incident)
+        .join(
             Incident,
-            (RelatedIncident.tenant_id == Incident.tenant_id) &
-            (RelatedIncident.related_incident_id == Incident.id)
-        ).where(
+            (RelatedIncident.tenant_id == Incident.tenant_id)
+            & (RelatedIncident.related_incident_id == Incident.id),
+        )
+        .where(
             RelatedIncident.tenant_id == tenant_id,
             RelatedIncident.incident_id == incident_id,
         )
     )
     rows = result.all()
-    
+
     return [
         RelatedIncidentResponse(
             incident_id=rel.incident_id,
@@ -1470,7 +1493,11 @@ async def list_related_incidents(
     ]
 
 
-@router.post("/{incident_id}/related", status_code=status.HTTP_201_CREATED, response_model=RelatedIncidentResponse)
+@router.post(
+    "/{incident_id}/related",
+    status_code=status.HTTP_201_CREATED,
+    response_model=RelatedIncidentResponse,
+)
 async def link_incident(
     incident_id: uuid.UUID,
     body: LinkIncidentRequest,
@@ -1484,7 +1511,7 @@ async def link_incident(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot link an incident to itself",
         )
-    
+
     # Verify both incidents exist
     result = await session.execute(
         select(Incident).where(
@@ -1494,7 +1521,7 @@ async def link_incident(
         )
     )
     incidents = {inc.id: inc for inc in result.scalars().all()}
-    
+
     if incident_id not in incidents:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1505,7 +1532,7 @@ async def link_incident(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Related incident not found",
         )
-    
+
     # Check if link already exists
     existing = await session.execute(
         select(RelatedIncident).where(
@@ -1519,7 +1546,7 @@ async def link_incident(
             status_code=status.HTTP_409_CONFLICT,
             detail="Incidents are already linked",
         )
-    
+
     # Create the link (bidirectional)
     rel1 = RelatedIncident(
         tenant_id=tenant_id,
@@ -1533,14 +1560,18 @@ async def link_incident(
         tenant_id=tenant_id,
         incident_id=body.related_incident_id,
         related_incident_id=incident_id,
-        relationship_type="parent" if body.relationship_type == "child" else ("child" if body.relationship_type == "parent" else body.relationship_type),
+        relationship_type="parent"
+        if body.relationship_type == "child"
+        else (
+            "child" if body.relationship_type == "parent" else body.relationship_type
+        ),
         note=body.note,
         created_by=current_user.user_id if current_user else None,
     )
     session.add(rel1)
     session.add(rel2)
     await session.commit()
-    
+
     related_inc = incidents[body.related_incident_id]
     return RelatedIncidentResponse(
         incident_id=rel1.incident_id,
@@ -1560,7 +1591,10 @@ async def link_incident(
     )
 
 
-@router.delete("/{incident_id}/related/{related_incident_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{incident_id}/related/{related_incident_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def unlink_incident(
     incident_id: uuid.UUID,
     related_incident_id: uuid.UUID,
@@ -1582,7 +1616,7 @@ async def unlink_incident(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Incidents are not linked",
         )
-    
+
     # Remove bidirectional link
     result2 = await session.execute(
         select(RelatedIncident).where(
@@ -1592,12 +1626,12 @@ async def unlink_incident(
         )
     )
     rel2 = result2.scalar_one_or_none()
-    
+
     await session.delete(rel1)
     if rel2:
         await session.delete(rel2)
     await session.commit()
-    
+
     logger.info(
         "incidents_unlinked",
         tenant_id=str(tenant_id),

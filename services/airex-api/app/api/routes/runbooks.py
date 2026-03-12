@@ -97,7 +97,8 @@ def _to_response(rb: Runbook) -> RunbookResponse:
 async def list_runbooks(
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
     active_only: bool = Query(False),
     alert_type: str | None = Query(None),
 ):
@@ -120,7 +121,8 @@ async def create_runbook(
     body: RunbookCreate,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_APPROVE)),
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_APPROVE)),
 ):
     """Create a new runbook."""
     runbook = Runbook(
@@ -148,7 +150,8 @@ async def get_runbook(
     runbook_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Get a single runbook."""
     result = await session.execute(
@@ -169,7 +172,8 @@ async def update_runbook(
     body: RunbookUpdate,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_APPROVE)),
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_APPROVE)),
 ):
     """Update an existing runbook."""
     result = await session.execute(
@@ -201,7 +205,8 @@ async def delete_runbook(
     runbook_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_DELETE)),
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_DELETE)),
 ):
     """Delete a runbook."""
     result = await session.execute(
@@ -223,7 +228,8 @@ async def duplicate_runbook(
     runbook_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_APPROVE)),
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_APPROVE)),
 ):
     """Duplicate an existing runbook."""
     result = await session.execute(

@@ -17,6 +17,7 @@ from app.api.dependencies import (
     RequireAdmin,
     TenantId,
     TenantSession,
+    require_role,
 )
 from airex_core.core.security import (
     UserResponse,
@@ -49,7 +50,9 @@ class UserListResponse(BaseModel):
     total: int
 
 
-@router.get("/", response_model=UserListResponse, dependencies=[Depends(RequireAdmin)])
+@router.get(
+    "/", response_model=UserListResponse, dependencies=[Depends(require_role("admin"))]
+)
 async def list_users(
     tenant_id: TenantId,
     session: TenantSession,
@@ -78,13 +81,15 @@ async def list_users(
         # Determine invitation status
         invitation_status = None
         if u.invitation_token:
-            if u.invitation_expires_at and u.invitation_expires_at < datetime.now(timezone.utc):
+            if u.invitation_expires_at and u.invitation_expires_at < datetime.now(
+                timezone.utc
+            ):
                 invitation_status = "expired"
             else:
                 invitation_status = "pending"
         elif u.hashed_password:
             invitation_status = "accepted"
-        
+
         items.append(
             UserResponse(
                 id=u.id,
@@ -105,7 +110,9 @@ async def list_users(
 
 
 @router.get(
-    "/{user_id}", response_model=UserResponse, dependencies=[Depends(RequireAdmin)]
+    "/{user_id}",
+    response_model=UserResponse,
+    dependencies=[Depends(require_role("admin"))],
 )
 async def get_user(
     user_id: uuid.UUID,
@@ -129,7 +136,9 @@ async def get_user(
     # Determine invitation status
     invitation_status = None
     if user.invitation_token:
-        if user.invitation_expires_at and user.invitation_expires_at < datetime.now(timezone.utc):
+        if user.invitation_expires_at and user.invitation_expires_at < datetime.now(
+            timezone.utc
+        ):
             invitation_status = "expired"
         else:
             invitation_status = "pending"
@@ -155,7 +164,7 @@ async def get_user(
     "/",
     status_code=status.HTTP_201_CREATED,
     response_model=UserResponse,
-    dependencies=[Depends(RequireAdmin)],
+    dependencies=[Depends(require_role("admin"))],
 )
 async def create_user(
     body: UserCreateRequest,
@@ -172,8 +181,12 @@ async def create_user(
             detail=f"Invalid role: {body.role}. Must be one of: {', '.join(r.value for r in UserRole)}",
         )
 
-    # Check if email already exists
-    result = await session.execute(select(User).where(User.email == body.email))
+    normalized_email = body.email.strip().lower()
+
+    # Check if email already exists (case-insensitive)
+    result = await session.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    )
     existing = result.scalar_one_or_none()
     if existing:
         raise HTTPException(
@@ -183,22 +196,24 @@ async def create_user(
 
     # Generate invitation token if password not provided
     from airex_core.core.security import generate_invitation_token
-    
+
     invitation_token = None
     invitation_expires_at = None
     hashed_password_value = None
-    
+
     if body.password:
         # Direct creation with password (backward compatibility)
         hashed_password_value = hash_password(body.password)
     else:
         # Invitation flow: generate token
         invitation_token = generate_invitation_token()
-        invitation_expires_at = datetime.now(timezone.utc) + timedelta(days=7)  # 7 day expiry
+        invitation_expires_at = datetime.now(timezone.utc) + timedelta(
+            days=7
+        )  # 7 day expiry
 
     user = User(
         tenant_id=tenant_id,
-        email=body.email,
+        email=normalized_email,
         hashed_password=hashed_password_value,
         display_name=body.display_name,
         role=body.role.lower(),
@@ -212,18 +227,24 @@ async def create_user(
     # Send invitation email if using invitation flow
     if invitation_token:
         try:
-            from airex_core.services.notification_service import send_user_invitation_email
+            from airex_core.services.notification_service import (
+                send_user_invitation_email,
+            )
             from airex_core.core.config import settings
-            
+
             invitation_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/set-password?token={invitation_token}"
             await send_user_invitation_email(
                 email=body.email,
                 display_name=body.display_name,
                 invitation_url=invitation_url,
             )
-            logger.info("user_invitation_email_sent", email=body.email, user_id=str(user.id))
+            logger.info(
+                "user_invitation_email_sent", email=body.email, user_id=str(user.id)
+            )
         except Exception as exc:
-            logger.warning("user_invitation_email_failed", email=body.email, error=str(exc))
+            logger.warning(
+                "user_invitation_email_failed", email=body.email, error=str(exc)
+            )
 
     logger.info(
         "user_created_by_admin",
@@ -239,7 +260,7 @@ async def create_user(
         invitation_status = "pending"
     elif user.hashed_password:
         invitation_status = "accepted"
-    
+
     return UserResponse(
         id=user.id,
         tenant_id=user.tenant_id,
@@ -258,7 +279,7 @@ async def create_user(
 @router.patch(
     "/{user_id}",
     response_model=UserResponse,
-    dependencies=[Depends(RequireAdmin)],
+    dependencies=[Depends(require_role("admin"))],
 )
 async def update_user(
     user_id: uuid.UUID,
@@ -322,7 +343,9 @@ async def update_user(
     # Determine invitation status
     invitation_status = None
     if user.invitation_token:
-        if user.invitation_expires_at and user.invitation_expires_at < datetime.now(timezone.utc):
+        if user.invitation_expires_at and user.invitation_expires_at < datetime.now(
+            timezone.utc
+        ):
             invitation_status = "expired"
         else:
             invitation_status = "pending"
@@ -347,7 +370,7 @@ async def update_user(
 @router.delete(
     "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(RequireAdmin)],
+    dependencies=[Depends(require_role("admin"))],
 )
 async def delete_user(
     user_id: uuid.UUID,
@@ -386,7 +409,7 @@ async def delete_user(
 @router.post(
     "/{user_id}/resend-invitation",
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(RequireAdmin)],
+    dependencies=[Depends(require_role("admin"))],
 )
 async def resend_invitation(
     user_id: uuid.UUID,
@@ -397,7 +420,7 @@ async def resend_invitation(
     from airex_core.core.security import generate_invitation_token
     from airex_core.services.notification_service import send_user_invitation_email
     from airex_core.core.config import settings
-    
+
     result = await session.execute(
         select(User).where(
             User.tenant_id == tenant_id,
@@ -410,13 +433,13 @@ async def resend_invitation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     # Generate new invitation token
     invitation_token = generate_invitation_token()
     user.invitation_token = invitation_token
     user.invitation_expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     await session.flush()
-    
+
     # Send invitation email
     invitation_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/set-password?token={invitation_token}"
     try:

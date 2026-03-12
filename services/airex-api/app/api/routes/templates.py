@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import (
     CurrentUser,
+    RequireAdmin,
     TenantId,
     TenantSession,
     require_permission,
@@ -144,7 +145,8 @@ async def create_template(
     body: TemplateCreateRequest,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.ADMIN)),
+    current_user: CurrentUser,
+    _role: RequireAdmin = None,
 ) -> TemplateResponse:
     """Create a new incident template."""
     template = IncidentTemplate(
@@ -192,7 +194,8 @@ async def update_template(
     body: TemplateUpdateRequest,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.ADMIN)),
+    current_user: CurrentUser,
+    _role: RequireAdmin = None,
 ) -> TemplateResponse:
     """Update an incident template."""
     result = await session.execute(
@@ -256,7 +259,8 @@ async def delete_template(
     template_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser = Depends(require_permission(Permission.ADMIN)),
+    current_user: CurrentUser,
+    _role: RequireAdmin = None,
 ) -> None:
     """Delete an incident template."""
     result = await session.execute(

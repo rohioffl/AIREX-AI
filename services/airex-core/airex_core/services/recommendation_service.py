@@ -4,6 +4,7 @@ AI recommendation orchestrator.
 Generates structured recommendations via LLM with circuit breaker fallback.
 """
 
+import uuid
 from typing import Any
 
 import structlog
@@ -46,7 +47,7 @@ async def generate_recommendation(
     )
 
     meta = dict(incident.meta or {})
-    
+
     # Extract Site24x7 outage history from evidence if available
     site24x7_outage_context = None
     for ev in incident.evidence:
@@ -72,13 +73,15 @@ async def generate_recommendation(
             context = structured_context["text"] or None
     except Exception as exc:  # pragma: no cover - defensive logging
         log.warning("rag_context_failed", error=str(exc))
-    
+
     # Append Site24x7 outage context if available
     if site24x7_outage_context:
         if context:
             context = f"{context}\n\n--- Site24x7 Outage Pattern Analysis ---\n{site24x7_outage_context}"
         else:
-            context = f"--- Site24x7 Outage Pattern Analysis ---\n{site24x7_outage_context}"
+            context = (
+                f"--- Site24x7 Outage Pattern Analysis ---\n{site24x7_outage_context}"
+            )
 
     if structured_context:
         # Store structured version for frontend (cards, not raw text)
@@ -107,11 +110,13 @@ async def generate_recommendation(
         context=context,
         redis=redis,
     )
-    
+
     # Apply confidence adjustment from feedback learning
     if recommendation and base_confidence_adjustment != 0:
         original_confidence = recommendation.confidence
-        recommendation.confidence = max(0.0, min(1.0, recommendation.confidence + base_confidence_adjustment))
+        recommendation.confidence = max(
+            0.0, min(1.0, recommendation.confidence + base_confidence_adjustment)
+        )
         logger.info(
             "confidence_adjusted",
             original=original_confidence,
@@ -309,7 +314,7 @@ async def _get_confidence_adjustment(
 
         # Get recent feedback for this alert type (last 30 days)
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-        
+
         result = await session.execute(
             select(
                 FeedbackLearning.action_taken,

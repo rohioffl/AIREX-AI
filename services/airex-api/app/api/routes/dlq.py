@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.api.dependencies import CurrentUser, RequireAdmin, Redis, TenantId
+from app.api.dependencies import CurrentUser, RequireAdmin, Redis, TenantId, require_role
 from airex_core.core.config import settings
 
 DLQ_KEY = "airex:dlq"
@@ -34,7 +34,7 @@ class DLQListResponse(BaseModel):
     total: int
 
 
-@router.get("/", response_model=DLQListResponse, dependencies=[Depends(RequireAdmin)])
+@router.get("/", response_model=DLQListResponse, dependencies=[Depends(require_role("admin"))])
 async def list_dlq(
     tenant_id: TenantId,
     redis: Redis,
@@ -74,7 +74,7 @@ async def list_dlq(
     return DLQListResponse(items=paginated_items, total=len(items))
 
 
-@router.post("/{entry_index}/replay", dependencies=[Depends(RequireAdmin)])
+@router.post("/{entry_index}/replay", dependencies=[Depends(require_role("admin"))])
 async def replay_dlq_entry(
     entry_index: int,
     tenant_id: TenantId,
@@ -156,7 +156,7 @@ async def replay_dlq_entry(
         ) from exc
 
 
-@router.delete("/", dependencies=[Depends(RequireAdmin)])
+@router.delete("/", dependencies=[Depends(require_role("admin"))])
 async def clear_dlq(
     tenant_id: TenantId,
     redis: Redis,

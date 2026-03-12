@@ -72,11 +72,15 @@ export default function SettingsPage() {
       color: '#a78bfa',
       glassClass: 'glass-purple',
       items: [
-        { label: 'Provider', value: 'Vertex AI (LiteLLM)' },
-        { label: 'Primary Model', value: 'gemini-2.0-flash' },
-        { label: 'Fallback Model', value: 'gemini-2.0-flash-lite' },
-        { label: 'Circuit Breaker', value: '3 failures / 5 min cooldown' },
-        { label: 'Temperature', value: '0.1' },
+        { label: 'Provider', value: settings?.llm_provider || '—' },
+        { label: 'Primary Model', value: settings?.llm_primary_model || '—' },
+        { label: 'Fallback Model', value: settings?.llm_fallback_model || '—' },
+        {
+          label: 'Circuit Breaker',
+          value: settings
+            ? `${settings.llm_circuit_breaker_threshold} failures / ${settings.llm_circuit_breaker_cooldown}s cooldown`
+            : '—',
+        },
       ],
     },
     {
@@ -85,22 +89,25 @@ export default function SettingsPage() {
       color: '#38bdf8',
       glassClass: 'glass-cyan',
       items: [
-        { label: 'Investigation Timeout', value: '60s' },
-        { label: 'Execution Timeout', value: '20s' },
-        { label: 'Verification Timeout', value: '30s' },
-        { label: 'Max Investigation Retries', value: '3' },
-        { label: 'Max Execution Retries', value: '3' },
+        { label: 'Investigation Timeout', value: settings ? `${settings.investigation_timeout}s` : '—' },
+        { label: 'Execution Timeout', value: settings ? `${settings.execution_timeout}s` : '—' },
+        { label: 'Verification Timeout', value: settings ? `${settings.verification_timeout}s` : '—' },
+        { label: 'Max Investigation Retries', value: settings ? String(settings.max_investigation_retries) : '—' },
+        { label: 'Max Execution Retries', value: settings ? String(settings.max_execution_retries) : '—' },
+        { label: 'Max Verification Retries', value: settings ? String(settings.max_verification_retries) : '—' },
+        { label: 'Lock TTL', value: settings ? `${settings.lock_ttl}s` : '—' },
       ],
     },
     {
-      section: 'Actions & Policies',
+      section: 'Notifications',
       icon: Shield,
       color: '#fbbf24',
       glassClass: 'glass-amber',
       items: [
-        { label: 'restart_service', value: 'Requires approval | Max risk: HIGH' },
-        { label: 'clear_logs', value: 'Auto-approve | Max risk: MED' },
-        { label: 'scale_instances', value: 'Requires senior approval | Max risk: HIGH' },
+        { label: 'Slack Webhook', value: settings?.slack_webhook_url ? 'Configured' : 'Not set' },
+        { label: 'SMTP Host', value: settings?.email_smtp_host || 'Not set' },
+        { label: 'SMTP Port', value: settings?.email_smtp_port ? String(settings.email_smtp_port) : 'Not set' },
+        { label: 'Email From', value: settings?.email_from || 'Not set' },
       ],
     },
     {
@@ -118,10 +125,10 @@ export default function SettingsPage() {
                 ? 'Backend not running (Dev Mode)'
                 : 'Unknown',
         },
-        { label: 'Tenant ID', value: (user?.tenant_id || FALLBACK_TENANT_ID).slice(0, 8) + '...' },
-        { label: 'Database', value: 'PostgreSQL 15+ (RLS)' },
+        { label: 'Tenant ID', value: (user?.tenantId || user?.tenant_id || FALLBACK_TENANT_ID).slice(0, 8) + '...' },
+        { label: 'Database', value: 'PostgreSQL' },
         { label: 'Queue', value: 'Redis + ARQ' },
-        { label: 'SSE', value: 'Real-time events' },
+        { label: 'SSE', value: 'Enabled' },
       ],
     },
   ]
@@ -200,21 +207,12 @@ export default function SettingsPage() {
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{section.section}</span>
             </div>
             <div className="space-y-2">
-              {section.items.map(item => {
-                const displayValue = section.section === 'Pipeline' && settings
-                  ? (item.label.includes('Timeout')
-                    ? `${settings[item.label.toLowerCase().replace(/\s+/g, '_').replace('timeout', 'timeout')] || item.value}s`
-                    : item.label.includes('Retries')
-                      ? String(settings[item.label.toLowerCase().replace(/\s+/g, '_').replace('max_', 'max_')] || item.value)
-                      : item.value)
-                  : item.value
-                return (
-                  <div key={item.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item.label}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-heading)' }}>{displayValue}</span>
-                  </div>
-                )
-              })}
+              {section.items.map(item => (
+                <div key={item.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item.label}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-heading)' }}>{item.value}</span>
+                </div>
+              ))}
             </div>
           </div>
         ))}
@@ -277,11 +275,11 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tenant ID</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-heading)', marginTop: 4, wordBreak: 'break-all' }}>{user?.tenant_id || FALLBACK_TENANT_ID}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-heading)', marginTop: 4, wordBreak: 'break-all' }}>{user?.tenantId || user?.tenant_id || FALLBACK_TENANT_ID}</div>
           </div>
           <div className="p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mode</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fbbf24', marginTop: 4 }}>Development (no auth)</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fbbf24', marginTop: 4 }}>{user ? 'Authenticated' : 'Anonymous'}</div>
           </div>
           <div className="p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Version</div>

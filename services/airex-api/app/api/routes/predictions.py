@@ -22,10 +22,11 @@ router = APIRouter()
 async def predict(
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: CurrentUser,
     alert_type: str = Query(..., description="Alert type to predict for"),
     severity: str | None = Query(None),
     host_key: str | None = Query(None),
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Predict likely root cause for a given alert type."""
     return await predict_root_cause(
@@ -41,8 +42,9 @@ async def predict(
 async def prediction_accuracy(
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: CurrentUser,
     days: int = Query(30, ge=1, le=365),
-    current_user: CurrentUser = Depends(require_permission(Permission.INCIDENT_VIEW)),
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
 ):
     """Get prediction accuracy metrics."""
     return await get_prediction_accuracy(session, tenant_id, days=days)

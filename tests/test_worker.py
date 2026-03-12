@@ -1,12 +1,28 @@
 """Focused worker task tests for the ARQ task entrypoints."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from airex_core.core import worker
+WORKER_SERVICE_DIR = Path(__file__).resolve().parents[1] / "services/airex-worker"
+CORE_SERVICE_DIR = Path(__file__).resolve().parents[1] / "services/airex-core"
+worker_service_path = str(WORKER_SERVICE_DIR)
+if worker_service_path in sys.path:
+    sys.path.remove(worker_service_path)
+sys.path.insert(0, worker_service_path)
+
+core_service_path = str(CORE_SERVICE_DIR)
+if core_service_path in sys.path:
+    sys.path.remove(core_service_path)
+sys.path.insert(0, core_service_path)
+
+sys.modules.pop("app", None)
+
+import app.core.worker as worker
 
 
 def _make_incident() -> SimpleNamespace:

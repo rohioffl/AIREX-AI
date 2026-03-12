@@ -12,7 +12,7 @@ from importlib import import_module
 from functools import lru_cache
 from typing import Any, Callable, cast
 
-from app.api.dependencies import RequireAdmin
+from app.api.dependencies import RequireAdmin, require_role
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -91,7 +91,7 @@ async def get_tenant_detail(tenant_name: str) -> TenantDetailResponse:
     )
 
 
-@router.post("/reload", dependencies=[Depends(RequireAdmin)])
+@router.post("/reload", dependencies=[Depends(require_role("admin"))])
 async def reload_tenant_config() -> dict[str, int | str | list[str]]:
     """Reload tenant config from disk without restarting the server (admin only)."""
     reload_config = cast(Callable[[], None], _tenant_config_module().reload_config)
