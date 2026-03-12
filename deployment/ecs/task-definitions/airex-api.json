@@ -23,13 +23,25 @@
         { "name": "LLM_FALLBACK_MODEL", "value": "__LLM_FALLBACK_MODEL__" },
         { "name": "LLM_EMBEDDING_MODEL", "value": "__LLM_EMBEDDING_MODEL__" },
         { "name": "CORS_ORIGINS", "value": "__CORS_ORIGINS__" },
-        { "name": "GOOGLE_OAUTH_CLIENT_ID", "value": "__GOOGLE_OAUTH_CLIENT_ID__" }
+        { "name": "FRONTEND_URL", "value": "__FRONTEND_URL__" },
+        { "name": "GOOGLE_OAUTH_CLIENT_ID", "value": "__GOOGLE_OAUTH_CLIENT_ID__" },
+        { "name": "SITE24X7_ENABLED", "value": "__SITE24X7_ENABLED__" },
+        { "name": "SITE24X7_CLIENT_ID", "value": "__SITE24X7_CLIENT_ID__" },
+        { "name": "SITE24X7_BASE_URL", "value": "__SITE24X7_BASE_URL__" },
+        { "name": "SITE24X7_ACCOUNTS_URL", "value": "__SITE24X7_ACCOUNTS_URL__" },
+        { "name": "EMAIL_SMTP_HOST", "value": "__EMAIL_SMTP_HOST__" },
+        { "name": "EMAIL_SMTP_PORT", "value": "__EMAIL_SMTP_PORT__" },
+        { "name": "EMAIL_SMTP_USER", "value": "__EMAIL_SMTP_USER__" },
+        { "name": "EMAIL_FROM", "value": "__EMAIL_FROM__" }
       ],
       "secrets": [
         { "name": "DATABASE_URL", "valueFrom": "__SECRET_DATABASE_URL_ARN__" },
         { "name": "REDIS_URL", "valueFrom": "__SECRET_REDIS_URL_ARN__" },
         { "name": "SECRET_KEY", "valueFrom": "__SECRET_APP_SECRET_KEY_ARN__" },
-        { "name": "LLM_API_KEY", "valueFrom": "__SECRET_LITELLM_MASTER_KEY_ARN__" }
+        { "name": "LLM_API_KEY", "valueFrom": "__SECRET_LITELLM_MASTER_KEY_ARN__" },
+        { "name": "SITE24X7_CLIENT_SECRET", "valueFrom": "__SECRET_SITE24X7_CLIENT_SECRET_ARN__" },
+        { "name": "SITE24X7_REFRESH_TOKEN", "valueFrom": "__SECRET_SITE24X7_REFRESH_TOKEN_ARN__" },
+        { "name": "EMAIL_SMTP_PASSWORD", "valueFrom": "__SECRET_EMAIL_SMTP_PASSWORD_ARN__" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
