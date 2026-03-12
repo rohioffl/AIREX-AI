@@ -109,7 +109,7 @@ export async function fetchUsers({ limit = 100, offset = 0 } = {}) {
 }
 
 export async function fetchUser(id) {
-  const res = await api.get(`/users/${id}/`)
+  const res = await api.get(`/users/${id}`)
   return res.data
 }
 
@@ -119,12 +119,12 @@ export async function createUser(data) {
 }
 
 export async function updateUser(id, data) {
-  const res = await api.patch(`/users/${id}/`, data)
+  const res = await api.patch(`/users/${id}`, data)
   return res.data
 }
 
 export async function deleteUser(id) {
-  await api.delete(`/users/${id}/`)
+  await api.delete(`/users/${id}`)
 }
 
 export async function resendInvitation(userId) {
