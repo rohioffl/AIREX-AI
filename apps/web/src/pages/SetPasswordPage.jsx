@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
 import { Lock, CheckCircle, XCircle } from 'lucide-react'
 import api from '../services/api'
 import { setTokens } from '../services/tokenStorage'
+import { acceptInvitationWithGoogle } from '../services/auth'
+import { extractErrorMessage } from '../utils/errorHandler'
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '671714206735-8tdd47qt6el9m33fs4kjnocjqrcsq9dg.apps.googleusercontent.com'
 
 export default function SetPasswordPage() {
   const [searchParams] = useSearchParams()
@@ -18,12 +22,87 @@ export default function SetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
+  const googleButtonRef = useRef(null)
 
   useEffect(() => {
     if (!token) {
       setError('Invalid invitation link. Please check your email for the correct link.')
     }
   }, [token])
+
+  const handleGoogleResponse = useCallback(async (response) => {
+    if (!token) {
+      setError('Invalid invitation link')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await acceptInvitationWithGoogle(token, response.credential)
+      
+      // Store tokens from response
+      if (res.access_token) {
+        setTokens({
+          accessToken: res.access_token,
+          refreshToken: res.refresh_token,
+          expiresIn: res.expires_in || 3600,
+        })
+        // Force auth context refresh by reloading
+        window.location.href = '/dashboard'
+        return
+      }
+    } catch (err) {
+      const errorMsg = extractErrorMessage(err) || err.response?.data?.detail || err.message || 'Google sign-in failed'
+      setError(errorMsg)
+      addToast({
+        title: 'Error',
+        message: errorMsg,
+        severity: 'CRITICAL',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [token, addToast])
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !token) return
+
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id) return
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleResponse,
+      })
+      if (googleButtonRef.current) {
+        googleButtonRef.current.innerHTML = ''
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          shape: 'pill',
+          width: 340,
+        })
+      }
+    }
+
+    if (window.google?.accounts?.id) {
+      initGoogle()
+      return undefined
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = initGoogle
+    document.head.appendChild(script)
+
+    return () => {
+      if (document.head.contains(script)) document.head.removeChild(script)
+    }
+  }, [handleGoogleResponse, token])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -127,6 +206,32 @@ export default function SetPasswordPage() {
           </div>
         )}
 
+        {GOOGLE_CLIENT_ID && (
+          <div className="mb-6">
+            <div className="relative mb-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="px-2 bg-transparent text-muted">Or</span>
+              </div>
+            </div>
+            <div className="flex justify-center" ref={googleButtonRef}></div>
+            <p className="mt-3 text-xs text-muted text-center">
+              Sign in with Google to accept your invitation without setting a password
+            </p>
+          </div>
+        )}
+
+        <div className="relative mb-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-border"></div>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="px-2 bg-transparent text-muted">Or set a password</span>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">New Password</label>
@@ -138,6 +243,7 @@ export default function SetPasswordPage() {
               className="w-full px-3 py-2 rounded-lg border border-border bg-input"
               placeholder="At least 8 characters"
               minLength={8}
+              disabled={loading}
             />
           </div>
           
@@ -150,6 +256,7 @@ export default function SetPasswordPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-border bg-input"
               placeholder="Confirm your password"
+              disabled={loading}
             />
           </div>
 

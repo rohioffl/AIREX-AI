@@ -1,7 +1,7 @@
 """Related incidents model for explicit parent/child relationships."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import ForeignKeyConstraint, String, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID as PG_UUID

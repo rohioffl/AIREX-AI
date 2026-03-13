@@ -5,7 +5,6 @@ Auto-generates post-mortem documents from resolved incidents with timeline
 and root cause analysis.
 """
 
-from datetime import datetime, timezone
 from typing import Any
 
 import structlog

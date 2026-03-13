@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import {
-  Users, Building2, ClipboardList, Settings, Brain, LayoutDashboard,
+  Users, Building2, Settings, Brain, LayoutDashboard,
   Plus, Trash2, Edit, Search, CheckCircle, XCircle, Clock, AlertTriangle,
   RefreshCcw, ChevronRight, Server, Save,
   ShieldCheck, Activity, Globe, Cpu, ToggleLeft, ToggleRight, X,
@@ -10,13 +10,13 @@ import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
 import {
   fetchUsers, createUser, updateUser, deleteUser,
-  fetchTenants, fetchIncidents,
+  fetchTenants,
   fetchSettings, updateSettings, fetchBackendHealth,
   fetchMetrics,
 } from '../services/api'
-import { formatRelativeTime } from '../utils/formatters'
 import { extractErrorMessage } from '../utils/errorHandler'
 import { FALLBACK_TENANT_ID } from '../utils/constants'
+import { formatRelativeTime } from '../utils/formatters'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -26,7 +26,6 @@ const TABS = [
   { id: 'tenants',   label: 'Tenants',         icon: Building2 },
   { id: 'settings',  label: 'Settings',        icon: Settings },
   { id: 'models',    label: 'AI Models',       icon: Brain },
-  { id: 'queue',     label: 'Manager Queue',   icon: ClipboardList },
 ]
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -842,99 +841,6 @@ function ModelsTab() {
   )
 }
 
-// ── Manager Queue Tab ─────────────────────────────────────────────────────────
-
-const SEVERITY_COLOR = { CRITICAL: '#fb7185', HIGH: '#fb923c', MEDIUM: '#fbbf24', LOW: '#94a3b8' }
-const SEVERITY_BG    = { CRITICAL: 'rgba(251,113,133,0.12)', HIGH: 'rgba(251,146,60,0.12)', MEDIUM: 'rgba(251,191,36,0.12)', LOW: 'rgba(148,163,184,0.12)' }
-
-function QueueTab() {
-  const [pending, setPending]   = useState([])
-  const [assigned, setAssigned] = useState([])
-  const [failed, setFailed]     = useState([])
-  const [loading, setLoading]   = useState(true)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [awaitingData, failedData] = await Promise.all([
-        fetchIncidents({ state: 'AWAITING_APPROVAL', limit: 50 }),
-        fetchIncidents({ state: 'FAILED_ANALYSIS',   limit: 20 }),
-      ])
-      const items = awaitingData.items || []
-      setPending(items.filter(i => !i.assigned_to))
-      setAssigned(items.filter(i => i.assigned_to))
-      setFailed(failedData.items || [])
-    } catch { /* silent */ }
-    finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const stats = useMemo(() => ({ pending: pending.length, assigned: assigned.length, failed: failed.length }), [pending, assigned, failed])
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Pending Approval" value={stats.pending}  color="#fbbf24" icon={Clock} />
-        <StatCard label="Assigned"         value={stats.assigned} color="#818cf8" icon={Users} />
-        <StatCard label="Failed Analysis"  value={stats.failed}   color="#fb7185" icon={AlertTriangle} />
-      </div>
-      <div className="flex justify-end">
-        <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-          <RefreshCcw size={13} /> Refresh
-        </button>
-      </div>
-      {loading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="glass rounded-xl h-14 skeleton" />)}</div>
-      ) : (
-        <>
-          <QueueSection title="Pending Approval — Unassigned" icon={Clock}         color="#fbbf24" items={pending}  emptyMsg="No unassigned incidents" />
-          <QueueSection title="Pending Approval — Assigned"   icon={Users}         color="#818cf8" items={assigned} emptyMsg="No assigned incidents" />
-          <QueueSection title="Failed Analysis — Review"      icon={AlertTriangle} color="#fb7185" items={failed}   emptyMsg="No failed incidents" />
-        </>
-      )}
-    </div>
-  )
-}
-
-function QueueSection({ title, icon: Icon, color, items, emptyMsg }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Icon size={15} style={{ color }} />
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{title}</span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-input)', borderRadius: 999, padding: '2px 8px' }}>{items.length}</span>
-      </div>
-      {items.length === 0 ? (
-        <div className="glass rounded-xl py-4 text-center" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{emptyMsg}</div>
-      ) : (
-        <div className="glass rounded-xl overflow-hidden">
-          {items.map((inc, idx) => (
-            <div key={inc.id} style={{ borderBottom: idx < items.length - 1 ? '1px solid var(--border)' : 'none' }}>
-              <Link to={`/incidents/${inc.id}`} className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-elevated">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }} className="truncate">{inc.title}</span>
-                    <span style={{ background: SEVERITY_BG[inc.severity] || SEVERITY_BG.LOW, color: SEVERITY_COLOR[inc.severity] || SEVERITY_COLOR.LOW, borderRadius: 999, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
-                      {inc.severity}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{inc.alert_type}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatRelativeTime(inc.created_at)}</span>
-                    {inc.assigned_to && <span style={{ fontSize: 11, color: '#818cf8' }}>Assigned</span>}
-                  </div>
-                </div>
-                <ChevronRight size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-              </Link>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SuperAdminPage() {
@@ -953,7 +859,7 @@ export default function SuperAdminPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>Super Admin</h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Users · Tenants · Settings · AI Models · Manager Queue
+            Users · Tenants · Settings · AI Models
           </p>
         </div>
       </div>
@@ -984,7 +890,6 @@ export default function SuperAdminPage() {
       {activeTab === 'tenants'  && <TenantsTab />}
       {activeTab === 'settings' && <SettingsTab />}
       {activeTab === 'models'   && <ModelsTab />}
-      {activeTab === 'queue'    && <QueueTab />}
     </div>
   )
 }

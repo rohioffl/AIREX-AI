@@ -16,6 +16,9 @@
 - Use the Memory MCP at the start of meaningful project work to recover relevant repo context, prior decisions, architecture facts, and user preferences.
 - Update the Memory MCP after meaningful changes to architecture, deployment, testing status, workflow rules, commits, or other durable project state.
 - Treat Memory MCP usage as a default project rule, not an optional step.
+- **Always use jcodemunch MCP for code navigation and symbol lookup.**
+- **Re-index with jcodemunch after making code changes:** Run `index_folder` with `incremental: true` after modifying files to keep the symbol index current.
+- **Initialize jcodemunch at session start:** Run `index_folder` on relevant directories at the beginning of work sessions to ensure fresh symbol data.
 - Prefer connected MCP servers when they fit the task, especially: `memory`, `filesystem`, `github`, `docker`, `context7`, `grep_app`, `playwright`, `puppeteer`, `websearch`, and `google-drive`.
 - Choose MCP tools by task fit: use documentation/context tools for external library accuracy, browser tools for real UI verification, Docker tools for container/runtime checks, GitHub tools for repository state, and filesystem/search tools for local project inspection.
 - If a connected MCP server is relevant and available, prefer it over ad-hoc workarounds unless there is a clear reason not to.

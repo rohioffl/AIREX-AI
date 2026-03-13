@@ -1,9 +1,10 @@
 """Comment model for incident collaboration."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy import ForeignKey, Text, text
+from sqlalchemy import Text, text
+from .user import User
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

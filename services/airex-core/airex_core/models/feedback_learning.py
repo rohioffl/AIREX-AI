@@ -1,7 +1,7 @@
 """Feedback learning model for tracking approval/rejection patterns."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import String, Text, Float, ForeignKeyConstraint, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID as PG_UUID

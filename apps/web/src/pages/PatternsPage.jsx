@@ -221,7 +221,7 @@ export default function PatternsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>AI Intelligence</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>Proactive</h1>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
           Pattern detection, anomaly monitoring, and predictive analytics
         </p>

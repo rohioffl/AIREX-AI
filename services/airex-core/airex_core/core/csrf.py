@@ -30,6 +30,7 @@ EXEMPT_PATHS = {
     "/api/v1/auth/set-password",
     "/api/v1/auth/reset-password",
     "/api/v1/auth/google",
+    "/api/v1/auth/accept-invitation-with-google",
     "/health",
     "/metrics",
 }

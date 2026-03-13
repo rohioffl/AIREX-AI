@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -105,7 +105,7 @@ async def list_runbooks(
     """List all runbooks, optionally filtered."""
     filters = [Runbook.tenant_id == tenant_id]
     if active_only:
-        filters.append(Runbook.is_active == True)
+        filters.append(Runbook.is_active)
     if alert_type:
         filters.append(Runbook.alert_type == alert_type)
 

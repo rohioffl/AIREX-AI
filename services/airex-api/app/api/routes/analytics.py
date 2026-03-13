@@ -14,7 +14,6 @@ from sqlalchemy import func, select, cast, Date
 from app.api.dependencies import TenantId, TenantSession, RequireAdmin
 from airex_core.models.enums import IncidentState
 from airex_core.models.incident import Incident
-from airex_core.models.state_transition import StateTransition
 
 logger = structlog.get_logger()
 

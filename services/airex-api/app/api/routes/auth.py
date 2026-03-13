@@ -16,6 +16,7 @@ from google.oauth2 import id_token as google_id_token
 from app.api.dependencies import TenantSession
 from airex_core.core.config import settings
 from airex_core.core.security import (
+    AcceptInvitationWithGoogleRequest,
     GoogleLoginRequest,
     LoginRequest,
     RefreshRequest,
@@ -248,6 +249,101 @@ async def google_login(
     )
 
     logger.info("user_google_login", email=user.email, user_id=str(user.id))
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+@router.post("/accept-invitation-with-google", response_model=TokenResponse)
+async def accept_invitation_with_google(
+    body: AcceptInvitationWithGoogleRequest,
+    session: TenantSession,
+) -> TokenResponse:
+    """Accept invitation using Google authentication instead of setting a password.
+    
+    This allows users to complete their invitation by signing in with Google,
+    eliminating the need to set a password. The Google email must match the
+    invited user's email.
+    """
+    # Verify Google ID token
+    claims = _verify_google_id_token(body.id_token)
+
+    email = claims.get("email")
+    if not isinstance(email, str) or not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google account email is required",
+        )
+
+    if claims.get("email_verified") is False:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google email is not verified",
+        )
+
+    normalized_email = email.strip().lower()
+
+    # Find user by invitation token
+    result = await session.execute(
+        select(User).where(User.invitation_token == body.invitation_token)
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid invitation token",
+        )
+
+    # Verify email matches
+    if user.email.lower() != normalized_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Google email '{email}' does not match invited email '{user.email}'",
+        )
+
+    # Check if token expired
+    if user.invitation_expires_at and user.invitation_expires_at < datetime.now(
+        timezone.utc
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation token has expired",
+        )
+
+    # Check if account already activated
+    if user.hashed_password and not user.invitation_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account already activated. Please use regular login.",
+        )
+
+    # Clear invitation token and activate account
+    # Note: We don't set a password - user will use Google auth going forward
+    user.invitation_token = None
+    user.invitation_expires_at = None
+    user.is_active = True
+    await session.flush()
+
+    logger.info(
+        "invitation_accepted_with_google",
+        email=user.email,
+        user_id=str(user.id),
+    )
+
+    # Return tokens so user is logged in
+    access_token = create_access_token(
+        tenant_id=user.tenant_id,
+        subject=user.email,
+        user_id=user.id,
+        role=user.role,
+    )
+    refresh_token = create_refresh_token(
+        tenant_id=user.tenant_id,
+        subject=user.email,
+    )
 
     return TokenResponse(
         access_token=access_token,

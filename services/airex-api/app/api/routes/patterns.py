@@ -4,8 +4,6 @@ API endpoints for incident pattern detection.
 
 from __future__ import annotations
 
-import uuid
-from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status

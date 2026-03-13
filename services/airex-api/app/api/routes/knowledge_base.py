@@ -6,18 +6,16 @@ import uuid
 from datetime import datetime, timezone
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_
 
 from app.api.dependencies import (
     CurrentUser,
     RequireAdmin,
     TenantId,
     TenantSession,
-    require_permission,
 )
-from airex_core.models.enums import Permission
 from airex_core.models.knowledge_base import KnowledgeBase
 
 logger = structlog.get_logger()

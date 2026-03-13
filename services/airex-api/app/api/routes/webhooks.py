@@ -1174,7 +1174,6 @@ async def ingest_grafana(
     severity = SEVERITY_MAP.get(severity_str, SeverityLevel.MEDIUM)
 
     title = body.get("title") or body.get("message") or "Grafana OnCall Alert"
-    description = body.get("message") or body.get("description", "")
 
     host_key = body.get("instance") or body.get("host") or None
     if host_key and len(host_key) > 512:

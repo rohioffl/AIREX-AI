@@ -4,9 +4,7 @@ import { assignIncident, unassignIncident, fetchUsers } from '../../services/api
 import { useAuth } from '../../context/AuthContext'
 
 export default function AssignmentPanel({ incident }) {
-  const { currentUser } = useAuth()
   const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
 

@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.api.dependencies import CurrentUser, RequireAdmin, Redis, TenantId, require_role
+from app.api.dependencies import CurrentUser, Redis, TenantId, require_role
 from airex_core.core.config import settings
 
 DLQ_KEY = "airex:dlq"

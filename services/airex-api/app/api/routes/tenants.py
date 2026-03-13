@@ -12,7 +12,7 @@ from importlib import import_module
 from functools import lru_cache
 from typing import Any, Callable, cast
 
-from app.api.dependencies import RequireAdmin, require_role
+from app.api.dependencies import require_role
 
 logger = structlog.get_logger()
 router = APIRouter()
