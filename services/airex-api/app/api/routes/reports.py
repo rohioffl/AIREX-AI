@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -16,9 +16,7 @@ from app.api.dependencies import (
     RequireOperator,
     TenantId,
     TenantSession,
-    require_permission,
 )
-from airex_core.models.enums import Permission
 from airex_core.models.report_template import ReportTemplate
 
 logger = structlog.get_logger()
@@ -77,7 +75,7 @@ async def list_report_templates(
     """List all report templates for the tenant."""
     filters = [ReportTemplate.tenant_id == tenant_id]
     if active_only:
-        filters.append(ReportTemplate.is_active == True)
+        filters.append(ReportTemplate.is_active)
 
     result = await session.execute(
         select(ReportTemplate).where(*filters).order_by(ReportTemplate.created_at.desc())
@@ -319,7 +317,7 @@ async def generate_report(
         select(ReportTemplate).where(
             ReportTemplate.tenant_id == tenant_id,
             ReportTemplate.id == template_id,
-            ReportTemplate.is_active == True,
+            ReportTemplate.is_active,
         )
     )
     template = result.scalar_one_or_none()

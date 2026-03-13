@@ -147,7 +147,7 @@ export default function AlertsPage() {
     }
   }
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- complex filter/sort/paginate logic, React Compiler cannot preserve
+   
   const visibleAlerts = useMemo(() => {
     let list = incidents
       .filter(i => i.state !== 'REJECTED' && i.alert_type !== 'healthcheck')

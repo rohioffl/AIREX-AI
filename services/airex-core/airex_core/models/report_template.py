@@ -2,9 +2,8 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
-from sqlalchemy import String, Text, Boolean, Integer
+from sqlalchemy import String, Text, Boolean
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text

@@ -5,7 +5,7 @@ API endpoints for predictive analytics.
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import CurrentUser, TenantId, TenantSession, require_permission
 from airex_core.core.rbac import Permission

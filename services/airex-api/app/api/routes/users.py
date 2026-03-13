@@ -14,7 +14,6 @@ from sqlalchemy import func, select
 
 from app.api.dependencies import (
     CurrentUser,
-    RequireAdmin,
     TenantId,
     TenantSession,
     require_role,
@@ -58,17 +57,26 @@ async def list_users(
     session: TenantSession,
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0, ge=0),
+    include_inactive: bool = Query(default=False, description="Include inactive (deleted) users"),
 ) -> UserListResponse:
-    """List all users in the tenant (admin only)."""
-    # Count total
-    count_q = select(func.count()).select_from(User).where(User.tenant_id == tenant_id)
+    """List all users in the tenant (admin only).
+    
+    By default, only active users are returned. Set include_inactive=true to see deleted users.
+    """
+    # Build base query conditions
+    query_filter = User.tenant_id == tenant_id
+    if not include_inactive:
+        query_filter = query_filter & User.is_active
+    
+    # Count total (matching filters)
+    count_q = select(func.count(User.id)).where(query_filter)
     total_result = await session.execute(count_q)
     total = total_result.scalar_one()
 
     # Fetch users
     query = (
         select(User)
-        .where(User.tenant_id == tenant_id)
+        .where(query_filter)
         .order_by(User.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -188,41 +196,96 @@ async def create_user(
         select(User).where(func.lower(User.email) == normalized_email)
     )
     existing = result.scalar_one_or_none()
-    if existing:
+    
+    # Initialize invitation variables for both paths
+    from airex_core.core.security import generate_invitation_token
+    
+    invitation_token = None
+    invitation_expires_at = None
+    hashed_password_value = None
+    
+    # If user exists and is active, return conflict
+    if existing and existing.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
         )
-
-    # Generate invitation token if password not provided
-    from airex_core.core.security import generate_invitation_token
-
-    invitation_token = None
-    invitation_expires_at = None
-    hashed_password_value = None
-
-    if body.password:
-        # Direct creation with password (backward compatibility)
-        hashed_password_value = hash_password(body.password)
+    
+    # If user exists but is inactive, reactivate and update them
+    if existing and not existing.is_active:
+        # Verify tenant matches
+        if existing.tenant_id != tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already registered in a different tenant",
+            )
+        
+        # Reactivate and update the existing user
+        user = existing
+        user.display_name = body.display_name
+        user.role = body.role.lower()
+        user.is_active = body.is_active
+        
+        # Generate invitation token if password not provided
+        if body.password:
+            # Direct creation with password (backward compatibility)
+            hashed_password_value = hash_password(body.password)
+            user.hashed_password = hashed_password_value
+            # Clear any existing invitation tokens
+            user.invitation_token = None
+            user.invitation_expires_at = None
+        else:
+            # Invitation flow: generate new token
+            invitation_token = generate_invitation_token()
+            invitation_expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+            user.invitation_token = invitation_token
+            user.invitation_expires_at = invitation_expires_at
+            # Clear password if user was previously activated
+            if user.hashed_password:
+                user.hashed_password = None
+        
+        await session.flush()
+        
+        logger.info(
+            "user_reactivated_by_admin",
+            email=body.email,
+            user_id=str(user.id),
+            role=body.role,
+            has_invitation=invitation_token is not None,
+        )
     else:
-        # Invitation flow: generate token
-        invitation_token = generate_invitation_token()
-        invitation_expires_at = datetime.now(timezone.utc) + timedelta(
-            days=7
-        )  # 7 day expiry
-
-    user = User(
-        tenant_id=tenant_id,
-        email=normalized_email,
-        hashed_password=hashed_password_value,
-        display_name=body.display_name,
-        role=body.role.lower(),
-        is_active=body.is_active,
-        invitation_token=invitation_token,
-        invitation_expires_at=invitation_expires_at,
-    )
-    session.add(user)
-    await session.flush()
+        # Create new user
+        # Generate invitation token if password not provided
+        if body.password:
+            # Direct creation with password (backward compatibility)
+            hashed_password_value = hash_password(body.password)
+        else:
+            # Invitation flow: generate token
+            invitation_token = generate_invitation_token()
+            invitation_expires_at = datetime.now(timezone.utc) + timedelta(
+                days=7
+            )  # 7 day expiry
+        
+        user = User(
+            tenant_id=tenant_id,
+            email=normalized_email,
+            hashed_password=hashed_password_value,
+            display_name=body.display_name,
+            role=body.role.lower(),
+            is_active=body.is_active,
+            invitation_token=invitation_token,
+            invitation_expires_at=invitation_expires_at,
+        )
+        session.add(user)
+        await session.flush()
+        
+        logger.info(
+            "user_created_by_admin",
+            email=body.email,
+            user_id=str(user.id),
+            role=body.role,
+            has_invitation=invitation_token is not None,
+        )
 
     # Send invitation email if using invitation flow
     if invitation_token:
@@ -245,14 +308,6 @@ async def create_user(
             logger.warning(
                 "user_invitation_email_failed", email=body.email, error=str(exc)
             )
-
-    logger.info(
-        "user_created_by_admin",
-        email=body.email,
-        user_id=str(user.id),
-        role=body.role,
-        has_invitation=invitation_token is not None,
-    )
 
     # Determine invitation status
     invitation_status = None

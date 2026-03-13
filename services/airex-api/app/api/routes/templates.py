@@ -6,19 +6,16 @@ import uuid
 from datetime import datetime, timezone
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import (
     CurrentUser,
     RequireAdmin,
     TenantId,
     TenantSession,
-    require_permission,
 )
-from airex_core.models.enums import Permission
 from airex_core.models.incident_template import IncidentTemplate
 
 logger = structlog.get_logger()
@@ -74,7 +71,7 @@ async def list_templates(
     """List all incident templates for the tenant."""
     filters = [IncidentTemplate.tenant_id == tenant_id]
     if active_only:
-        filters.append(IncidentTemplate.is_active == True)
+        filters.append(IncidentTemplate.is_active)
 
     result = await session.execute(
         select(IncidentTemplate).where(*filters).order_by(IncidentTemplate.created_at.desc())

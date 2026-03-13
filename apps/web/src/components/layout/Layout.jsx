@@ -4,13 +4,14 @@ import {
   LayoutDashboard, AlertTriangle, Settings,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
   X, ChevronRight, Clock, Zap, Ban, HeartPulse, TrendingUp, BookOpen,
-  Terminal, Layers, BarChart3, ShieldCheck
+  Terminal, Layers, BarChart3, ShieldCheck, ClipboardList
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { fetchIncidents } from '../../services/api'
 import { createSSEConnection } from '../../services/sse'
 import ToastContainer from '../common/ToastContainer'
+import LeadApprovalPanel from './LeadApprovalPanel'
 
 const ACTIVE_STATES = [
   'RECEIVED', 'INVESTIGATING', 'RECOMMENDATION_READY',
@@ -25,7 +26,7 @@ const NAV_ITEMS = [
   { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Live Monitoring', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Runbooks', path: '/runbooks', icon: Terminal, roles: ['admin', 'operator'] },
-  { label: 'AI Intelligence', path: '/patterns', icon: Layers, roles: ['admin', 'operator', 'viewer'] },
+  { label: 'Proactive', path: '/patterns', icon: Layers, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin', 'operator'] },
   { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
   { label: 'Admin', path: '/admin', icon: ShieldCheck, roles: ['admin'] },
@@ -41,7 +42,7 @@ const ROUTE_TITLES = {
   '/health-checks':          { label: 'Live Monitoring',  parent: null },
   '/health-checks/site24x7': { label: 'Site24x7',         parent: 'Live Monitoring' },
   '/runbooks':               { label: 'Runbooks',         parent: null },
-  '/patterns':               { label: 'AI Intelligence',  parent: null },
+  '/patterns':               { label: 'Proactive',        parent: null },
   '/reports':                { label: 'Reports',          parent: null },
   '/settings':               { label: 'Settings',         parent: null },
   '/admin':                  { label: 'Super Admin',      parent: null },
@@ -61,6 +62,7 @@ export default function Layout({ children }) {
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showLeadApproval, setShowLeadApproval] = useState(false)
   const bellRef = useRef(null)
   const dropdownRef = useRef(null)
 
@@ -356,6 +358,19 @@ export default function Layout({ children }) {
           </div>
 
           <div className="topbar-right">
+            {/* Lead Approval - admin only */}
+            {(user?.role || '').toLowerCase() === 'admin' && (
+              <button
+                onClick={() => setShowLeadApproval(true)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all hover-lift"
+                style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}
+                title="Lead Approval"
+              >
+                <ClipboardList size={14} />
+                <span className="hidden lg:inline">Lead Approval</span>
+              </button>
+            )}
+
             {/* Status */}
             <div className="status-pill">
               <span className="status-dot status-dot-green" />
@@ -436,6 +451,9 @@ export default function Layout({ children }) {
 
       {/* Toast Container */}
       <ToastContainer />
+
+      {/* Lead Approval Panel */}
+      <LeadApprovalPanel isOpen={showLeadApproval} onClose={() => setShowLeadApproval(false)} />
 
       {/* Mobile overlay */}
       {mobileOpen && (

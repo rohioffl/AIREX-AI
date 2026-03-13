@@ -104,6 +104,14 @@ export function AuthProvider({ children }) {
     }
   }, [logout, token])
 
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      logout()
+    }
+    window.addEventListener('session-expired', handleSessionExpired)
+    return () => window.removeEventListener('session-expired', handleSessionExpired)
+  }, [logout])
+
   const value = useMemo(() => ({
     user, token, loading, login, loginWithGoogle, logout, refresh, isAuthenticated: !!token
   }), [user, token, loading, login, loginWithGoogle, logout, refresh])

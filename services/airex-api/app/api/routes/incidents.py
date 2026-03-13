@@ -7,7 +7,7 @@ import io
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -21,12 +21,13 @@ from app.api.dependencies import (
     RequireOperator,
     TenantId,
     TenantSession,
-    require_permission,
 )
 from airex_core.core.rate_limit import approval_rate_limit
 from airex_core.core.config import settings
 from airex_core.core.state_machine import IllegalStateTransition, transition_state
-from airex_core.models.enums import IncidentState, Permission, SeverityLevel
+from airex_core.models.enums import IncidentState, SeverityLevel
+from airex_core.models.comment import Comment
+from airex_core.models.user import User
 from airex_core.models.feedback_learning import FeedbackLearning
 from airex_core.models.incident import Incident
 from airex_core.models.incident_template import IncidentTemplate
@@ -136,7 +137,7 @@ async def create_incident_manual(
             select(IncidentTemplate).where(
                 IncidentTemplate.tenant_id == tenant_id,
                 IncidentTemplate.id == template_id,
-                IncidentTemplate.is_active == True,
+                IncidentTemplate.is_active,
             )
         )
         template = result.scalar_one_or_none()

@@ -146,3 +146,6 @@ services/airex-core/build/
 services/airex-core/*.egg-info/
 services/airex-core/.eggs/
 mcp.json
+# OpenClaw workspace state
+.openclaw/
+MEMORY.md

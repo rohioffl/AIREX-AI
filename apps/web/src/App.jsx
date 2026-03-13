@@ -42,7 +42,7 @@ export default function App() {
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/incidents/:id" element={<IncidentDetail />} />
                       <Route path="/alerts" element={<AlertsPage />} />
-                      <Route path="/proactive" element={<Navigate to="/health-checks/site24x7?tab=proactive" replace />} />
+                      <Route path="/proactive" element={<Navigate to="/health-checks/site24x7?tab=ai-alerts" replace />} />
                       <Route path="/rejected" element={<RejectedPage />} />
                       <Route path="/live" element={<LiveFeed />} />
                       <Route path="/settings" element={<SettingsPage />} />

@@ -54,7 +54,11 @@ api.interceptors.response.use(
         } catch {
           clearAccessToken()
           localStorage.removeItem('airex-refresh-token')
+          window.dispatchEvent(new Event('session-expired'))
         }
+      } else {
+        clearAccessToken()
+        window.dispatchEvent(new Event('session-expired'))
       }
     }
     return Promise.reject(error)

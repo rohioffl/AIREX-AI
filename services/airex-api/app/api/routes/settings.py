@@ -8,7 +8,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.api.dependencies import CurrentUser, RequireAdmin, TenantId, require_role
+from app.api.dependencies import CurrentUser, TenantId, require_role
 from airex_core.core.config import settings
 
 logger = structlog.get_logger()

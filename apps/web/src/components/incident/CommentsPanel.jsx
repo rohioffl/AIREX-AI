@@ -5,7 +5,6 @@ import { formatRelativeTime } from '../../utils/formatters'
 import { useAuth } from '../../context/AuthContext'
 
 export default function CommentsPanel({ incident }) {
-  const { currentUser } = useAuth()
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(false)
   const [newComment, setNewComment] = useState('')

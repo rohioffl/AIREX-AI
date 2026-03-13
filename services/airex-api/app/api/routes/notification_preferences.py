@@ -7,12 +7,11 @@ Allows users to manage their notification preferences for email and Slack.
 import uuid
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from app.api.dependencies import CurrentUser, TenantId, TenantSession
 from airex_core.models.notification_preference import NotificationPreference
-from airex_core.models.user import User
 from sqlalchemy import select
 
 logger = structlog.get_logger()

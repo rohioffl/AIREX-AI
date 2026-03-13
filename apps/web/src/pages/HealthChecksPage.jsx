@@ -139,14 +139,14 @@ function RecentCheckRow({ check }) {
 
 const TABS = [
   { key: 'monitor', label: 'Monitor Status', icon: HeartPulse },
-  { key: 'proactive', label: 'Proactive Alerts', icon: Radar },
+  { key: 'ai-alerts', label: 'AI Alerts', icon: Radar },
 ]
 
 export default function HealthChecksPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = searchParams.get('tab') === 'proactive' ? 'proactive' : 'monitor'
+  const activeTab = searchParams.get('tab') === 'ai-alerts' ? 'ai-alerts' : 'monitor'
 
   const [dashboard, setDashboard] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -277,7 +277,7 @@ export default function HealthChecksPage() {
       </div>
 
       {/* Proactive Alerts tab */}
-      {activeTab === 'proactive' && <ProactiveAlertsPage />}
+      {activeTab === 'ai-alerts' && <ProactiveAlertsPage />}
 
       {/* Monitor Status tab */}
       {activeTab === 'monitor' && loading && (

@@ -6,7 +6,7 @@ from Site24x7 API for use in frontend and investigation plugins.
 """
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dependencies import Redis, TenantId
 from airex_core.core.config import settings
