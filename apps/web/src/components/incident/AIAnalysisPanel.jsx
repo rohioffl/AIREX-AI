@@ -22,7 +22,7 @@ function ThinkingIndicator() {
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         {texts[textIndex]}
       </div>
-      <div className="flex items-center gap-1" style={{ color: '#818cf8' }}>
+      <div className="flex items-center gap-1" style={{ color: 'var(--neon-indigo)' }}>
         <span className="thinking-dot"></span>
         <span className="thinking-dot"></span>
         <span className="thinking-dot"></span>
@@ -35,7 +35,7 @@ function ThinkingIndicator() {
 function ScoreBadge({ score }) {
   if (score == null) return null
   const pct = Math.round(score * 100)
-  const color = pct >= 80 ? '#10b981' : pct >= 60 ? '#f59e0b' : '#6b7280'
+  const color = pct >= 80 ? 'var(--color-accent-green)' : pct >= 60 ? 'var(--color-accent-amber)' : 'var(--text-muted)'
   return (
     <span
       className="inline-flex items-center rounded-full px-1.5 py-0.5"
@@ -64,7 +64,7 @@ function SimilarIncidentCard({ incident }) {
     >
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
-          <History size={12} style={{ color: '#06b6d4', flexShrink: 0 }} />
+          <History size={12} style={{ color: 'var(--neon-cyan)', flexShrink: 0 }} />
           <span
             style={{
               fontSize: 12,
@@ -116,8 +116,8 @@ function PatternAnalysisCard({ pattern }) {
       }}
     >
       <div className="flex items-center gap-2 mb-2">
-        <TrendingUp size={12} style={{ color: '#818cf8' }} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <TrendingUp size={12} style={{ color: 'var(--neon-indigo)' }} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--neon-indigo)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Pattern Analysis
         </span>
       </div>
@@ -147,7 +147,7 @@ function PatternAnalysisCard({ pattern }) {
           {most_effective_action && (
             <div className="flex items-center gap-1.5">
               <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                Best action: <strong style={{ color: '#10b981' }}>{most_effective_action}</strong>
+                Best action: <strong style={{ color: 'var(--color-accent-green)' }}>{most_effective_action}</strong>
               </span>
             </div>
           )}
@@ -190,10 +190,10 @@ export default function AIAnalysisPanel({ incident }) {
 
   if (!hasContent) {
     return (
-      <div className="glass rounded-xl overflow-hidden" style={{ width: '100%', boxSizing: 'border-box', borderLeft: '4px solid #818cf8' }}>
+      <div className="glass rounded-xl overflow-hidden" style={{ width: '100%', boxSizing: 'border-box', borderLeft: '4px solid var(--neon-indigo)' }}>
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(129,140,248,0.1)', color: '#818cf8' }}>
+            <div className="h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(129,140,248,0.1)', color: 'var(--neon-indigo)' }}>
               <Brain size={16} style={{ animation: 'var(--animate-glow-pulse)' }} />
             </div>
             <div>
@@ -211,7 +211,7 @@ export default function AIAnalysisPanel({ incident }) {
   const preview = getAnalysisPreview(ragStructured, ragContext)
 
   return (
-    <div className="glass rounded-xl overflow-hidden" style={{ width: '100%', boxSizing: 'border-box', borderLeft: '4px solid #818cf8' }}>
+    <div className="glass rounded-xl overflow-hidden" style={{ width: '100%', boxSizing: 'border-box', borderLeft: '4px solid var(--neon-indigo)' }}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center justify-between px-5 py-4 w-full text-left transition-colors"
@@ -223,7 +223,7 @@ export default function AIAnalysisPanel({ incident }) {
         onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(129,140,248,0.1)', color: '#818cf8' }}>
+          <div className="h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(129,140,248,0.1)', color: 'var(--neon-indigo)' }}>
             <Brain size={16} />
           </div>
           <div className="flex-1 min-w-0">
@@ -246,7 +246,7 @@ export default function AIAnalysisPanel({ incident }) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {hasStructured && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#818cf8', padding: '2px 6px', borderRadius: 4, background: 'rgba(129,140,248,0.1)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--neon-indigo)', padding: '2px 6px', borderRadius: 4, background: 'rgba(129,140,248,0.1)' }}>
               STRUCTURED
             </span>
           )}
@@ -306,7 +306,7 @@ export default function AIAnalysisPanel({ incident }) {
                       navigator.clipboard.writeText(ragContext)
                     }}
                     className="flex items-center gap-1 px-2 py-1 rounded transition-colors"
-                    style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', background: 'var(--bg-input)' }}
+                    style={{ fontSize: 11, fontWeight: 600, color: 'var(--neon-indigo)', background: 'var(--bg-input)' }}
                     onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
                     onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                   >
@@ -328,7 +328,7 @@ export default function AIAnalysisPanel({ incident }) {
                     navigator.clipboard.writeText(ragContext || recommendation?.root_cause || '')
                   }}
                   className="flex items-center gap-1 px-2 py-1 rounded transition-colors"
-                  style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', background: 'var(--bg-input)' }}
+                  style={{ fontSize: 11, fontWeight: 600, color: 'var(--neon-indigo)', background: 'var(--bg-input)' }}
                   onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
                   onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                 >

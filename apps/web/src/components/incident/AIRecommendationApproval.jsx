@@ -5,15 +5,15 @@ import ConfirmationModal from '../common/ConfirmationModal'
 import { extractErrorMessage } from '../../utils/errorHandler'
 
 const RISK_THEME = {
-  LOW: { border: '#10b981', bg: 'rgba(16,185,129,0.06)', text: '#10b981' },
-  MED: { border: '#f59e0b', bg: 'rgba(245,158,11,0.06)', text: '#f59e0b' },
-  HIGH: { border: '#f43f5e', bg: 'rgba(244,63,94,0.06)', text: '#f43f5e' },
+  LOW: { border: 'var(--color-accent-green)', bg: 'rgba(16,185,129,0.06)', text: 'var(--color-accent-green)' },
+  MED: { border: 'var(--color-accent-amber)', bg: 'rgba(245,158,11,0.06)', text: 'var(--color-accent-amber)' },
+  HIGH: { border: 'var(--color-accent-red)', bg: 'rgba(244,63,94,0.06)', text: 'var(--color-accent-red)' },
 }
 
 const APPROVAL_LEVEL_THEME = {
-  auto: { label: 'Auto-Approved', color: '#10b981', bg: 'rgba(16,185,129,0.1)', icon: Zap },
-  operator: { label: 'Operator Approval', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', icon: ShieldCheck },
-  senior: { label: 'Senior / Admin Approval Required', color: '#f43f5e', bg: 'rgba(244,63,94,0.1)', icon: ShieldAlert },
+  auto: { label: 'Auto-Approved', color: 'var(--color-accent-green)', bg: 'rgba(16,185,129,0.1)', icon: Zap },
+  operator: { label: 'Operator Approval', color: 'var(--neon-indigo)', bg: 'rgba(99,102,241,0.1)', icon: ShieldCheck },
+  senior: { label: 'Senior / Admin Approval Required', color: 'var(--color-accent-red)', bg: 'rgba(244,63,94,0.1)', icon: ShieldAlert },
 }
 
 export default function AIRecommendationApproval({ incident, ragContext }) {
@@ -90,7 +90,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
         <div className="flex items-start justify-between mb-5">
           <div>
             <h3 className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <Sparkles size={14} style={{ color: '#818cf8' }} />
+              <Sparkles size={14} style={{ color: 'var(--neon-indigo)' }} />
               AI Recommendation & Approval
             </h3>
             {normalizedRecommendation && (
@@ -133,12 +133,12 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
             className="mb-4 p-3 rounded-lg flex items-start gap-2"
             style={{
               background: approvalTheme?.bg || 'rgba(59,130,246,0.05)',
-              border: `1px solid ${(approvalTheme?.color || '#3b82f6')}20`,
+              border: `1px solid ${(approvalTheme?.color || 'var(--neon-indigo)')}20`,
             }}
           >
-            <Info size={14} style={{ color: approvalTheme?.color || '#3b82f6', marginTop: 1, flexShrink: 0 }} />
+            <Info size={14} style={{ color: approvalTheme?.color || 'var(--neon-indigo)', marginTop: 1, flexShrink: 0 }} />
             <div>
-              <p style={{ fontSize: 11, fontWeight: 600, color: approvalTheme?.color || '#3b82f6', marginBottom: 2 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: approvalTheme?.color || 'var(--neon-indigo)', marginBottom: 2 }}>
                 {seniorRequired ? 'Senior/Admin approval required for this action' : 
                  !confidenceMet ? 'Confidence below auto-approval threshold' :
                  'Manual approval required by policy'}
@@ -154,7 +154,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
           <div className="space-y-4">
             <div className="p-4 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
               <div className="flex items-start gap-3">
-                <AlertCircle size={16} style={{ color: '#f59e0b', marginTop: 2, flexShrink: 0 }} />
+                <AlertCircle size={16} style={{ color: 'var(--color-accent-amber)', marginTop: 2, flexShrink: 0 }} />
                 <div className="flex-1">
                   <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)', marginBottom: 4 }}>
                     {awaitingApproval ? 'AI Recommendation Pending' : 'No AI Recommendation Available'}
@@ -166,7 +166,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                   </p>
                   {ragContext && (
                     <div className="mt-3 p-3 rounded" style={{ background: 'rgba(129,140,248,0.05)', border: '1px solid rgba(129,140,248,0.1)' }}>
-                      <p style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', marginBottom: 2 }}>Pattern Analysis Available:</p>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--neon-indigo)', marginBottom: 2 }}>Pattern Analysis Available:</p>
                       <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                         Historical patterns and context have been analyzed. Review the AI Investigation panel above for insights. Based on the patterns detected, you may want to consider manual actions such as investigating the recurring issues or reviewing scheduled jobs.
                       </p>
@@ -183,29 +183,29 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
               className="p-4 rounded-lg transition-all"
               style={{ 
                 background: !selectedAction || selectedAction === normalizedRecommendation.proposed_action ? 'rgba(99,102,241,0.1)' : 'var(--bg-input)',
-                border: `2px solid ${!selectedAction || selectedAction === normalizedRecommendation.proposed_action ? '#818cf8' : 'var(--border)'}`,
+                border: `2px solid ${!selectedAction || selectedAction === normalizedRecommendation.proposed_action ? 'var(--neon-indigo)' : 'var(--border)'}`,
                 cursor: 'pointer'
               }}
               onClick={() => setSelectedAction(normalizedRecommendation.proposed_action)}
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} style={{ color: '#10b981' }} />
+                  <CheckCircle2 size={16} style={{ color: 'var(--color-accent-green)' }} />
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)' }}>
                     Primary Recommendation
                   </span>
-                  <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: '#10b981', background: 'rgba(16,185,129,0.1)' }}>
+                  <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-accent-green)', background: 'var(--glow-emerald)' }}>
                     {(normalizedRecommendation.confidence * 100).toFixed(0)}% confidence
                   </span>
                 </div>
                 {(!selectedAction || selectedAction === normalizedRecommendation.proposed_action) && (
-                  <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: '#818cf8', color: 'white' }}>
+                  <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: 'var(--neon-indigo)', color: 'white' }}>
                     <CheckCircle2 size={12} />
                   </div>
                 )}
               </div>
               <div className="mb-2">
-                <div className="p-3 rounded-lg mb-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: '#818cf8', background: 'var(--terminal-bg)', border: '1px solid rgba(99,102,241,0.1)' }}>
+                <div className="p-3 rounded-lg mb-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--neon-indigo)', background: 'var(--terminal-bg)', border: '1px solid rgba(99,102,241,0.1)' }}>
                   <span style={{ color: 'rgba(99,102,241,0.4)', marginRight: 4 }}>$</span>
                   {normalizedRecommendation.proposed_action}
                 </div>
@@ -231,7 +231,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                 )}
                 {normalizedRecommendation.rationale && (
                   <div className="p-3 rounded" style={{ background: 'rgba(129,140,248,0.05)', border: '1px solid rgba(129,140,248,0.1)' }}>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', marginBottom: 4 }}>Rationale:</p>
+                    <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--neon-indigo)', marginBottom: 4 }}>Rationale:</p>
                     <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                       {normalizedRecommendation.rationale}
                     </p>
@@ -264,7 +264,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                       className="p-4 rounded-lg transition-all"
                       style={{ 
                         background: selectedAction === alt.action ? 'rgba(99,102,241,0.1)' : 'var(--bg-input)',
-                        border: `1px solid ${selectedAction === alt.action ? '#818cf8' : 'var(--border)'}`,
+                        border: `1px solid ${selectedAction === alt.action ? 'var(--neon-indigo)' : 'var(--border)'}`,
                         cursor: 'pointer'
                       }}
                       onClick={() => setSelectedAction(alt.action)}
@@ -274,7 +274,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-heading)' }}>
                             Option {index + 1}
                           </span>
-                          <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: '#f59e0b', background: 'rgba(245,158,11,0.1)' }}>
+                          <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-accent-amber)', background: 'rgba(245,158,11,0.1)' }}>
                             {(alt.confidence * 100).toFixed(0)}% confidence
                           </span>
                           {alt.risk_level && (
@@ -284,18 +284,18 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                           )}
                         </div>
                         {selectedAction === alt.action && (
-                          <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: '#818cf8', color: 'white' }}>
+                          <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: 'var(--neon-indigo)', color: 'white' }}>
                             <CheckCircle2 size={12} />
                           </div>
                         )}
                       </div>
                       <div className="mb-2">
-                        <div className="p-2 rounded mb-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#818cf8', background: 'var(--terminal-bg)', border: '1px solid rgba(99,102,241,0.1)' }}>
+                        <div className="p-2 rounded mb-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neon-indigo)', background: 'var(--terminal-bg)', border: '1px solid rgba(99,102,241,0.1)' }}>
                           <span style={{ color: 'rgba(99,102,241,0.4)', marginRight: 4 }}>$</span>
                           {alt.action}
                         </div>
                         <div className="p-2 rounded" style={{ background: 'rgba(129,140,248,0.03)', border: '1px solid rgba(129,140,248,0.08)' }}>
-                          <p style={{ fontSize: 10, fontWeight: 600, color: '#818cf8', marginBottom: 2 }}>Why this option:</p>
+                          <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--neon-indigo)', marginBottom: 2 }}>Why this option:</p>
                           <p style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
                             {alt.rationale}
                           </p>
@@ -313,7 +313,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
         {canApprove && (
           <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--border)' }}>
             {error && (
-              <p className="mb-4 px-3 py-2 rounded-md" style={{ fontSize: 12, color: '#fb7185', background: 'rgba(244,63,94,0.1)' }}>{error}</p>
+              <p className="mb-4 px-3 py-2 rounded-md" style={{ fontSize: 12, color: 'var(--color-accent-red)', background: 'var(--glow-rose)' }}>{error}</p>
             )}
 
             <div className="flex gap-3 flex-wrap items-center">
@@ -321,7 +321,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                 onClick={() => setModalOpen(true)}
                 disabled={loading || !actionToApprove}
                 className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 12px rgba(99,102,241,0.2)' }}
+                style={{ background: 'var(--gradient-primary)', boxShadow: '0 4px 12px rgba(99,102,241,0.2)' }}
               >
                 {loading ? (
                   <>
@@ -335,7 +335,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                 )}
               </button>
               {seniorRequired && (
-                <span style={{ fontSize: 10, color: '#f43f5e', fontWeight: 600 }}>
+                <span style={{ fontSize: 10, color: 'var(--color-accent-red)', fontWeight: 600 }}>
                   Requires admin role
                 </span>
               )}
@@ -348,14 +348,14 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
           title={seniorRequired ? 'Senior Approval — Confirm Execution' : 'Confirm Execution'}
           message={
             <div className="space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
-              <p>You are about to execute <strong style={{ fontFamily: 'var(--font-mono)', color: '#818cf8' }}>{actionToApprove}</strong> on this incident.</p>
+              <p>You are about to execute <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--neon-indigo)' }}>{actionToApprove}</strong> on this incident.</p>
               {normalizedRecommendation && (!selectedAction || selectedAction === normalizedRecommendation.proposed_action) && (
                 <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   This is the primary recommendation with {(normalizedRecommendation.confidence * 100).toFixed(0)}% confidence.
                 </p>
               )}
               {seniorRequired && (
-                <p style={{ fontSize: 12, color: '#f43f5e', fontWeight: 600 }}>
+                <p style={{ fontSize: 12, color: 'var(--color-accent-red)', fontWeight: 600 }}>
                   This action requires senior/admin approval and will be audited.
                 </p>
               )}

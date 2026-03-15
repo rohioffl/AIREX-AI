@@ -70,7 +70,7 @@ describe('AnomalyBadge', () => {
     render(<AnomalyBadge anomalies={criticalAnomalies} />)
     const header = screen.getByText('2 Anomalies Detected')
     // Critical color is #f43f5e
-    expect(header).toHaveStyle({ color: '#f43f5e' })
+    expect(header).toHaveStyle({ color: 'var(--color-accent-red)' })
   })
 
   it('uses warning styling when highest severity is warning', () => {

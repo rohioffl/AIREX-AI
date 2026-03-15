@@ -84,7 +84,7 @@ export default function IncidentChat({ incidentId }) {
   }
 
   return (
-    <div className="glass rounded-xl overflow-hidden" style={{ borderLeft: '4px solid #06b6d4' }}>
+    <div className="glass rounded-xl overflow-hidden" style={{ borderLeft: '4px solid var(--neon-cyan)' }}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center justify-between px-5 py-4 w-full text-left transition-colors"
@@ -93,7 +93,7 @@ export default function IncidentChat({ incidentId }) {
         <div className="flex items-center gap-3">
           <div
             className="h-8 w-8 rounded-md flex items-center justify-center"
-            style={{ background: 'rgba(6,182,212,0.1)', color: '#06b6d4' }}
+            style={{ background: 'rgba(6,182,212,0.1)', color: 'var(--neon-cyan)' }}
           >
             <MessageSquare size={16} />
           </div>
@@ -145,7 +145,7 @@ export default function IncidentChat({ incidentId }) {
                       className="px-3 py-1.5 rounded-lg transition-colors"
                       style={{
                         fontSize: 11,
-                        color: '#06b6d4',
+                        color: 'var(--neon-cyan)',
                         background: 'rgba(6,182,212,0.06)',
                         border: '1px solid rgba(6,182,212,0.15)',
                       }}
@@ -171,7 +171,7 @@ export default function IncidentChat({ incidentId }) {
                     lineHeight: 1.6,
                     color: msg.role === 'user' ? 'white' : 'var(--text-primary)',
                     background: msg.role === 'user'
-                      ? 'linear-gradient(135deg, #6366f1, #818cf8)'
+                      ? 'var(--gradient-primary)'
                       : 'var(--bg-input)',
                     border: msg.role === 'user'
                       ? 'none'
@@ -207,7 +207,7 @@ export default function IncidentChat({ incidentId }) {
 
           {/* Error */}
           {error && (
-            <div className="mx-4 mb-2 px-3 py-2 rounded-md" style={{ fontSize: 11, color: '#fb7185', background: 'rgba(244,63,94,0.08)' }}>
+            <div className="mx-4 mb-2 px-3 py-2 rounded-md" style={{ fontSize: 11, color: 'var(--color-accent-red)', background: 'rgba(244,63,94,0.08)' }}>
               {error}
             </div>
           )}

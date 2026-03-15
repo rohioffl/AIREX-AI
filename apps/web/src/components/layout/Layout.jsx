@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, AlertTriangle, Settings,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
@@ -46,6 +47,7 @@ const ROUTE_TITLES = {
   '/reports':                { label: 'Reports',          parent: null },
   '/settings':               { label: 'Settings',         parent: null },
   '/admin':                  { label: 'Super Admin',      parent: null },
+  '/profile':               { label: 'Profile',           parent: 'Account' },
 }
 
 export default function Layout({ children }) {
@@ -198,6 +200,11 @@ export default function Layout({ children }) {
       ? user.email.substring(0, 2).toUpperCase()
       : 'OP'
 
+  const displayName = user?.displayName
+    || (user?.email
+      ? user.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      : 'Operator')
+
   return (
     <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
       {/* Sidebar */}
@@ -237,7 +244,7 @@ export default function Layout({ children }) {
                   <span
                     className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold"
                     style={{
-                      background: criticalCount > 0 ? '#f43f5e' : '#fb923c',
+                      background: criticalCount > 0 ? 'var(--color-accent-red)' : 'var(--brand-orange)',
                       color: '#fff',
                       lineHeight: 1,
                     }}
@@ -254,17 +261,24 @@ export default function Layout({ children }) {
         {/* Footer */}
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div className="sidebar-avatar">{initials}</div>
-            <div className="sidebar-footer-text">
-              <span className="sidebar-user-name">{user?.email || 'Operator'}</span>
-              <span className="sidebar-user-role">{user?.role || 'dev mode'}</span>
-            </div>
+            <Link
+              to="/profile"
+              className="flex items-center gap-2 flex-1 min-w-0"
+              style={{ textDecoration: 'none', color: 'inherit' }}
+              onClick={() => setMobileOpen(false)}
+            >
+              <div className="sidebar-avatar">{initials}</div>
+              <div className="sidebar-footer-text">
+                <span className="sidebar-user-name">{displayName}</span>
+                <span className="sidebar-user-role" style={{ opacity: 0.65 }}>{user?.email || 'dev mode'}</span>
+              </div>
+            </Link>
             {user && (
               <button
                 onClick={handleLogout}
                 title="Sign out"
                 className="sidebar-label"
-                style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, flexShrink: 0 }}
               >
                 <LogOut size={14} />
               </button>
@@ -363,7 +377,7 @@ export default function Layout({ children }) {
               <button
                 onClick={() => setShowLeadApproval(true)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all hover-lift"
-                style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}
+                style={{ background: 'rgba(251,191,36,0.12)', color: 'var(--color-accent-amber)', border: '1px solid rgba(245,158,11,0.25)' }}
                 title="Lead Approval"
               >
                 <ClipboardList size={14} />
@@ -396,11 +410,11 @@ export default function Layout({ children }) {
                 style={{ color: 'var(--text-muted)', background: 'var(--bg-input)', border: '1px solid var(--border)' }}
                 aria-label="Toggle notifications"
               >
-                {unreadCount > 0 ? <BellRing size={16} style={{ color: '#fbbf24' }} /> : <Bell size={16} />}
+                {unreadCount > 0 ? <BellRing size={16} style={{ color: 'var(--color-accent-amber)' }} /> : <Bell size={16} />}
                 {unreadCount > 0 && (
                   <span
                     className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold"
-                    style={{ background: '#f43f5e', color: '#fff', lineHeight: 1 }}
+                    style={{ background: 'var(--color-accent-red)', color: '#fff', lineHeight: 1 }}
                   >
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
@@ -408,23 +422,33 @@ export default function Layout({ children }) {
               </button>
 
               {/* Notification Dropdown */}
-              {showNotifications && (
-                <NotificationDropdown
-                  ref={dropdownRef}
-                  notifications={notifications}
-                  unreadCount={unreadCount}
-                  markAllRead={markAllRead}
-                  onClose={() => setShowNotifications(false)}
-                  onClickItem={(id) => {
-                    setShowNotifications(false)
-                    setNotifications(prev => {
-                      const updated = prev.map(x => x.id === id ? { ...x, read: true } : x)
-                      saveReadIds(new Set(updated.filter(x => x.read).map(x => x.id)))
-                      return updated
-                    })
-                  }}
-                />
-              )}
+              <AnimatePresence>
+                {showNotifications && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -6 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 50, transformOrigin: 'top right' }}
+                  >
+                    <NotificationDropdown
+                      ref={dropdownRef}
+                      notifications={notifications}
+                      unreadCount={unreadCount}
+                      markAllRead={markAllRead}
+                      onClose={() => setShowNotifications(false)}
+                      onClickItem={(id) => {
+                        setShowNotifications(false)
+                        setNotifications(prev => {
+                          const updated = prev.map(x => x.id === id ? { ...x, read: true } : x)
+                          saveReadIds(new Set(updated.filter(x => x.read).map(x => x.id)))
+                          return updated
+                        })
+                      }}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>
@@ -432,7 +456,17 @@ export default function Layout({ children }) {
         {/* Content */}
         <main className="flex-1 p-6 overflow-auto">
           <div className="w-full">
-            {children}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={location.pathname}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.18, ease: 'easeInOut' }}
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </main>
 
@@ -456,9 +490,18 @@ export default function Layout({ children }) {
       <LeadApprovalPanel isOpen={showLeadApproval} onClose={() => setShowLeadApproval(false)} />
 
       {/* Mobile overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setMobileOpen(false)} />
-      )}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/50 z-30 md:hidden"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -473,9 +516,6 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
       ref={ref}
       className="rounded-xl overflow-hidden z-50 glass backdrop-blur-xl"
       style={{
-        position: 'absolute',
-        right: 0,
-        top: 'calc(100% + 22px)',
         width: 380,
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
@@ -488,7 +528,7 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
           Notifications
           {unreadCount > 0 && (
             <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold"
-              style={{ background: 'rgba(244,63,94,0.15)', color: '#fb7185' }}>
+              style={{ background: 'var(--glow-rose)', color: 'var(--color-accent-red)' }}>
               {unreadCount}
             </span>
           )}
@@ -497,7 +537,7 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
           {unreadCount > 0 && (
             <button
               onClick={markAllRead}
-              style={{ fontSize: 11, color: '#818cf8', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ fontSize: 11, color: 'var(--neon-indigo)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
             >
               Mark all read
             </button>
@@ -531,7 +571,7 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
             >
               <div className="flex-shrink-0 mt-1.5">
                 {!n.read && ACTIVE_STATES.includes(n.state) ? (
-                  <span className="block w-2 h-2 rounded-full" style={{ background: n.severity === 'CRITICAL' ? '#f43f5e' : '#818cf8' }} />
+                  <span className="block w-2 h-2 rounded-full" style={{ background: n.severity === 'CRITICAL' ? 'var(--color-accent-red)' : 'var(--neon-indigo)' }} />
                 ) : (
                   <span className="block w-2 h-2 rounded-full" style={{ background: 'transparent' }} />
                 )}
@@ -544,7 +584,7 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
                   <span className="rounded px-1.5 py-0.5" style={{
                     fontSize: 9, fontWeight: 700,
                     background: n.severity === 'CRITICAL' ? 'rgba(244,63,94,0.12)' : n.severity === 'HIGH' ? 'rgba(251,146,60,0.12)' : 'rgba(148,163,184,0.1)',
-                    color: n.severity === 'CRITICAL' ? '#fb7185' : n.severity === 'HIGH' ? '#fb923c' : '#94a3b8',
+                    color: n.severity === 'CRITICAL' ? 'var(--color-accent-red)' : n.severity === 'HIGH' ? 'var(--brand-orange)' : 'var(--text-muted)',
                   }}>
                     {n.severity}
                   </span>
@@ -559,7 +599,7 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
               </div>
               <div className="flex-shrink-0">
                 {n.state === 'AWAITING_APPROVAL' ? (
-                  <Zap size={14} style={{ color: '#fbbf24' }} />
+                  <Zap size={14} style={{ color: 'var(--color-accent-amber)' }} />
                 ) : (
                   <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
                 )}
@@ -574,7 +614,7 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
         to="/alerts"
         onClick={onClose}
         className="notification-item block text-center py-2.5 transition-colors"
-        style={{ borderTop: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: '#818cf8' }}
+        style={{ borderTop: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--neon-indigo)' }}
       >
         View all alerts
       </Link>

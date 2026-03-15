@@ -135,11 +135,11 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
         </div>
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            <span className="w-2 h-2 rounded-full" style={{ background: '#6366f1', boxShadow: '0 0 6px rgba(99,102,241,0.5)' }} />
+            <span className="w-2 h-2 rounded-full" style={{ background: 'var(--neon-indigo)', boxShadow: '0 0 6px rgba(99,102,241,0.5)' }} />
             Incidents
           </span>
           <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            <span className="w-2 h-2 rounded-full" style={{ background: '#10b981', boxShadow: '0 0 6px rgba(16,185,129,0.5)' }} />
+            <span className="w-2 h-2 rounded-full" style={{ background: 'var(--color-accent-green)', boxShadow: '0 0 6px rgba(16,185,129,0.5)' }} />
             Resolved
           </span>
         </div>
@@ -164,8 +164,8 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--grid-line)', strokeWidth: 2, strokeDasharray: '4 4' }} />
-              <Area type="monotone" dataKey="incidents" name="Incidents" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#gradIncident)" activeDot={{ r: 4, style: { filter: 'drop-shadow(0 0 4px rgba(99,102,241,0.4))' } }} />
-              <Area type="monotone" dataKey="resolved" name="Resolved" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#gradResolved)" activeDot={{ r: 4, style: { filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.4))' } }} />
+              <Area type="monotone" dataKey="incidents" name="Incidents" stroke="var(--neon-indigo)" strokeWidth={2} fillOpacity={1} fill="url(#gradIncident)" activeDot={{ r: 4, style: { filter: 'drop-shadow(0 0 4px rgba(99,102,241,0.4))' } }} />
+              <Area type="monotone" dataKey="resolved" name="Resolved" stroke="var(--color-accent-green)" strokeWidth={2} fillOpacity={1} fill="url(#gradResolved)" activeDot={{ r: 4, style: { filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.4))' } }} />
             </AreaChart>
           ) : (
               <BarChart data={data}>
@@ -173,8 +173,8 @@ export default function SystemGraph({ incidents = [], type = 'area' }) {
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--bg-input)' }} />
-              <Bar dataKey="incidents" name="Incidents" fill="#6366f1" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="resolved" name="Resolved" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="incidents" name="Incidents" fill="var(--neon-indigo)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="resolved" name="Resolved" fill="var(--color-accent-green)" radius={[4, 4, 0, 0]} />
             </BarChart>
             )}
           </ResponsiveContainer>

@@ -46,7 +46,7 @@ export default function Site24x7MetricsPanel({ incident }) {
     return (
       <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Activity size={18} style={{ color: '#6366f1' }} />
+          <Activity size={18} style={{ color: 'var(--neon-indigo)' }} />
           <h3 className="font-semibold" style={{ color: 'var(--text-heading)' }}>
             Site24x7 Metrics
           </h3>
@@ -81,7 +81,7 @@ export default function Site24x7MetricsPanel({ incident }) {
   return (
     <div className="glass rounded-xl p-6">
       <div className="flex items-center gap-2 mb-4">
-        <Activity size={18} style={{ color: '#6366f1' }} />
+        <Activity size={18} style={{ color: 'var(--neon-indigo)' }} />
         <h3 className="font-semibold" style={{ color: 'var(--text-heading)' }}>
           Site24x7 Monitor Metrics
         </h3>
@@ -125,7 +125,7 @@ export default function Site24x7MetricsPanel({ incident }) {
 
       {outages.no_of_outages > 5 && (
         <div className="mt-4 p-3 rounded-lg" style={{ background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
-          <div className="flex items-center gap-2 text-sm" style={{ color: '#fbbf24' }}>
+          <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-accent-amber)' }}>
             <AlertCircle size={16} />
             <span>⚠️ Frequent outages detected - recurring issue pattern</span>
           </div>

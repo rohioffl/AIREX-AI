@@ -4,22 +4,22 @@ import { submitFeedback } from '../../services/api'
 import { extractErrorMessage } from '../../utils/errorHandler'
 
 const RESOLUTION_TYPE_CONFIG = {
-  auto: { label: 'Autonomous Resolution', color: '#10b981', icon: CheckCircle, desc: 'Fully automated: auto-approved, executed, and verified without human intervention.' },
-  operator: { label: 'Operator-Approved', color: '#3b82f6', icon: CheckCircle, desc: 'Operator approved the recommended action which was then executed automatically.' },
-  senior: { label: 'Senior-Approved', color: '#8b5cf6', icon: CheckCircle, desc: 'Senior/admin approved this high-impact action before execution.' },
-  rejected: { label: 'Rejected by Operator', color: '#f87171', icon: XCircle, desc: 'Operator rejected the automated recommendation.' },
-  failed: { label: 'Resolution Failed', color: '#f43f5e', icon: AlertTriangle, desc: 'Automated resolution did not succeed. Manual intervention may be needed.' },
-  manual: { label: 'Manual Resolution', color: '#f59e0b', icon: CheckCircle, desc: 'Resolved through manual intervention outside the automation pipeline.' },
+  auto: { label: 'Autonomous Resolution', color: 'var(--color-accent-green)', icon: CheckCircle, desc: 'Fully automated: auto-approved, executed, and verified without human intervention.' },
+  operator: { label: 'Operator-Approved', color: 'var(--neon-indigo)', icon: CheckCircle, desc: 'Operator approved the recommended action which was then executed automatically.' },
+  senior: { label: 'Senior-Approved', color: 'var(--neon-purple)', icon: CheckCircle, desc: 'Senior/admin approved this high-impact action before execution.' },
+  rejected: { label: 'Rejected by Operator', color: 'var(--color-accent-red)', icon: XCircle, desc: 'Operator rejected the automated recommendation.' },
+  failed: { label: 'Resolution Failed', color: 'var(--color-accent-red)', icon: AlertTriangle, desc: 'Automated resolution did not succeed. Manual intervention may be needed.' },
+  manual: { label: 'Manual Resolution', color: 'var(--color-accent-amber)', icon: CheckCircle, desc: 'Resolved through manual intervention outside the automation pipeline.' },
 }
 
 const SCORE_OPTIONS = [
-  { value: -1, label: 'Harmful', icon: ThumbsDown, color: '#f43f5e', desc: 'Made things worse' },
-  { value: 0, label: 'Ineffective', icon: XCircle, color: '#f59e0b', desc: 'No impact' },
-  { value: 1, label: 'Poor', icon: Star, color: '#f97316', desc: 'Barely helpful' },
+  { value: -1, label: 'Harmful', icon: ThumbsDown, color: 'var(--color-accent-red)', desc: 'Made things worse' },
+  { value: 0, label: 'Ineffective', icon: XCircle, color: 'var(--color-accent-amber)', desc: 'No impact' },
+  { value: 1, label: 'Poor', icon: Star, color: 'var(--brand-orange)', desc: 'Barely helpful' },
   { value: 2, label: 'Fair', icon: Star, color: '#eab308', desc: 'Some value' },
   { value: 3, label: 'Good', icon: Star, color: '#84cc16', desc: 'Helpful' },
   { value: 4, label: 'Great', icon: Star, color: '#22c55e', desc: 'Very helpful' },
-  { value: 5, label: 'Excellent', icon: ThumbsUp, color: '#10b981', desc: 'Perfect resolution' },
+  { value: 5, label: 'Excellent', icon: ThumbsUp, color: 'var(--color-accent-green)', desc: 'Perfect resolution' },
 ]
 
 function formatDuration(seconds) {
@@ -160,13 +160,13 @@ export default function ResolutionOutcome({ incident }) {
               />
             </div>
             {error && (
-              <p style={{ fontSize: 11, color: '#fb7185' }}>{error}</p>
+              <p style={{ fontSize: 11, color: 'var(--color-accent-red)' }}>{error}</p>
             )}
             <button
               onClick={handleSubmitFeedback}
               disabled={selectedScore == null || submitting}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+              style={{ background: 'var(--gradient-primary)' }}
             >
               {submitting ? <><Loader size={12} className="animate-spin" /> Submitting...</> : <><Send size={12} /> Submit Feedback</>}
             </button>

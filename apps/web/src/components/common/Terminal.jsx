@@ -29,7 +29,7 @@ export default function Terminal({ content, hostname = 'prod-web-01', maxHeight 
           style={{ color: 'var(--text-muted)' }}
           title="Copy output"
         >
-          {copied ? <CheckCircle size={12} style={{ color: '#10b981' }} /> : <Copy size={12} />}
+          {copied ? <CheckCircle size={12} style={{ color: 'var(--color-accent-green)' }} /> : <Copy size={12} />}
         </button>
       </div>
       <div className="terminal-body" style={{ maxHeight }}>

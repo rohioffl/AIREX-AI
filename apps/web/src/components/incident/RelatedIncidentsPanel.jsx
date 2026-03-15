@@ -123,7 +123,7 @@ export default function RelatedIncidentsPanel({ incident }) {
             Related Incidents
           </h3>
           {related.length > 0 && (
-            <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
+            <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{ background: 'var(--glow-indigo)', color: 'var(--neon-indigo)' }}>
               {related.length}
             </span>
           )}
@@ -131,7 +131,7 @@ export default function RelatedIncidentsPanel({ incident }) {
         <button
           onClick={() => setShowLinkModal(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors touch-manipulation"
-          style={{ fontSize: 12, fontWeight: 600, background: 'rgba(99,102,241,0.1)', color: '#818cf8', minHeight: 36 }}
+          style={{ fontSize: 12, fontWeight: 600, background: 'var(--glow-indigo)', color: 'var(--neon-indigo)', minHeight: 36 }}
           onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99,102,241,0.15)'}
           onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(99,102,241,0.1)'}
         >
@@ -163,7 +163,7 @@ export default function RelatedIncidentsPanel({ incident }) {
                     <SeverityBadge severity={rel.related_incident.severity} />
                     <StateBadge state={rel.related_incident.state} />
                     {rel.relationship_type !== 'related' && (
-                      <span className="px-1.5 py-0.5 rounded text-xs font-semibold" style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc' }}>
+                      <span className="px-1.5 py-0.5 rounded text-xs font-semibold" style={{ background: 'var(--glow-purple)', color: 'var(--neon-purple)' }}>
                         {rel.relationship_type}
                       </span>
                     )}
@@ -208,7 +208,7 @@ export default function RelatedIncidentsPanel({ incident }) {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="flex items-center gap-2 mb-4" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>
-              <Link2 size={16} style={{ color: '#6366f1' }} />
+              <Link2 size={16} style={{ color: 'var(--neon-indigo)' }} />
               Link Incident
             </h3>
 
@@ -232,7 +232,7 @@ export default function RelatedIncidentsPanel({ incident }) {
                     onClick={handleSearch}
                     disabled={searching}
                     className="px-4 py-2 rounded-lg transition-colors touch-manipulation"
-                    style={{ background: '#6366f1', color: '#fff', fontSize: 13, fontWeight: 600, minHeight: 40 }}
+                    style={{ background: 'var(--neon-indigo)', color: '#fff', fontSize: 13, fontWeight: 600, minHeight: 40 }}
                   >
                     {searching ? '...' : 'Search'}
                   </button>

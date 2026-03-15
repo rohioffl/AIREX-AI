@@ -281,14 +281,14 @@ export default function AlertsPage() {
         <button
           onClick={() => setShowCreateModal(true)}
           className="px-4 py-2 rounded-lg text-white flex items-center gap-2 transition-colors ml-auto"
-          style={{ background: '#34d399', fontSize: 13 }}
+          style={{ background: 'var(--neon-green)', fontSize: 13 }}
         >
           <Plus size={16} />
           Create Incident
         </button>
 
           <div className="flex items-center gap-2">
-            <Server size={14} style={{ color: '#818cf8' }} />
+            <Server size={14} style={{ color: 'var(--neon-indigo)' }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               Showing alerts for server: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{hostFilter}</span>
             </span>
@@ -296,7 +296,7 @@ export default function AlertsPage() {
           <Link
             to="/alerts"
             className="text-sm transition-colors"
-            style={{ color: '#818cf8', fontWeight: 500 }}
+            style={{ color: 'var(--neon-indigo)', fontWeight: 500 }}
           >
             Clear filter
           </Link>
@@ -307,16 +307,16 @@ export default function AlertsPage() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            <AlertTriangle size={24} style={{ color: '#fb923c' }} />
+            <AlertTriangle size={24} style={{ color: 'var(--brand-orange)' }} />
             Active Alerts
             {counts.all > 0 && (
               <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-bold"
-                style={{ background: counts.critical > 0 ? 'rgba(244,63,94,0.15)' : 'rgba(251,146,60,0.15)', color: counts.critical > 0 ? '#fb7185' : '#fb923c' }}>
+                style={{ background: counts.critical > 0 ? 'rgba(244,63,94,0.15)' : 'rgba(251,146,60,0.15)', color: counts.critical > 0 ? 'var(--color-accent-red)' : 'var(--brand-orange)' }}>
                 {counts.all}
               </span>
             )}
-            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? '#10b981' : '#f43f5e' }}>
-              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: '#10b981', opacity: 0.3 }} />}
+            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? 'var(--color-accent-green)' : 'var(--color-accent-red)' }}>
+              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: 'var(--color-accent-green)', opacity: 0.3 }} />}
             </span>
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -404,7 +404,7 @@ export default function AlertsPage() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all"
               style={{
                 background: alertFilter === f.key ? 'rgba(99,102,241,0.1)' : 'var(--bg-elevated)',
-                color: alertFilter === f.key ? '#818cf8' : 'var(--text-secondary)',
+                color: alertFilter === f.key ? 'var(--neon-indigo)' : 'var(--text-secondary)',
                 border: `1px solid ${alertFilter === f.key ? 'rgba(99,102,241,0.3)' : 'var(--border)'}`,
                 fontSize: 13,
                 fontWeight: 600,
@@ -415,7 +415,7 @@ export default function AlertsPage() {
               <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold"
                 style={{
                   background: alertFilter === f.key ? 'rgba(99,102,241,0.2)' : 'var(--bg-input)',
-                  color: alertFilter === f.key ? '#a5b4fc' : 'var(--text-muted)',
+                  color: alertFilter === f.key ? 'var(--neon-indigo)' : 'var(--text-muted)',
                 }}>
                 {counts[f.key]}
               </span>
@@ -453,7 +453,7 @@ export default function AlertsPage() {
             className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
             style={{
               background: showAdvancedFilters ? 'rgba(99,102,241,0.1)' : 'var(--bg-elevated)',
-              color: showAdvancedFilters ? '#818cf8' : 'var(--text-secondary)',
+              color: showAdvancedFilters ? 'var(--neon-indigo)' : 'var(--text-secondary)',
               border: `1px solid ${showAdvancedFilters ? 'rgba(99,102,241,0.3)' : 'var(--border)'}`,
               fontSize: 13,
               fontWeight: 600,
@@ -462,7 +462,7 @@ export default function AlertsPage() {
             <Filter size={14} />
             Filters
             {(advancedFilters.alertType || advancedFilters.severity || advancedFilters.dateFrom || advancedFilters.dateTo) && (
-              <span className="w-2 h-2 rounded-full" style={{ background: '#818cf8' }} />
+              <span className="w-2 h-2 rounded-full" style={{ background: 'var(--neon-indigo)' }} />
             )}
           </button>
         </div>
@@ -580,7 +580,7 @@ export default function AlertsPage() {
 
       {/* Error */}
       {error && (
-        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244,63,94,0.03)', fontSize: 14, color: '#fb7185' }}>
+        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid var(--color-accent-red)', background: 'var(--glow-rose-subtle)', fontSize: 14, color: 'var(--color-accent-red)' }}>
           <span style={{ fontWeight: 700, marginRight: 8 }}>Error:</span>{error}
         </div>
       )}
@@ -599,7 +599,7 @@ export default function AlertsPage() {
               disabled={bulkActionLoading}
               className="px-4 py-2 rounded-lg transition-all disabled:opacity-50"
               style={{ 
-                background: 'linear-gradient(135deg, #10b981, #34d399)', 
+                background: 'linear-gradient(135deg, var(--color-accent-green), var(--neon-green))',
                 color: '#fff',
                 fontSize: 13,
                 fontWeight: 600
@@ -612,9 +612,9 @@ export default function AlertsPage() {
               disabled={bulkActionLoading}
               className="px-4 py-2 rounded-lg transition-all disabled:opacity-50"
               style={{ 
-                background: 'rgba(244,63,94,0.1)', 
+                background: 'var(--glow-rose)', 
                 border: '1px solid rgba(244,63,94,0.3)',
-                color: '#f43f5e',
+                color: 'var(--color-accent-red)',
                 fontSize: 13,
                 fontWeight: 600
               }}
@@ -642,7 +642,7 @@ export default function AlertsPage() {
       {!loading && !error && (
         visibleAlerts.length === 0 ? (
           <div className="glass rounded-xl py-20 text-center">
-            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4 hover-lift" style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399' }}>
+            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4 hover-lift" style={{ background: 'rgba(52,211,153,0.1)', color: 'var(--neon-green)' }}>
               <ShieldAlert size={24} />
             </div>
             <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-heading)' }}>All clear</p>
@@ -657,7 +657,7 @@ export default function AlertsPage() {
                 checked={selectedIncidents.size === visibleAlerts.length && visibleAlerts.length > 0}
                 onChange={toggleSelectAll}
                 className="w-4 h-4 rounded cursor-pointer"
-                style={{ accentColor: '#6366f1' }}
+                style={{ accentColor: 'var(--neon-indigo)' }}
               />
               <span className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>
                 Select All ({selectedIncidents.size} selected)
@@ -723,7 +723,7 @@ export default function AlertsPage() {
                           style={{
                             background: page === pageNum ? 'rgba(99,102,241,0.1)' : 'var(--bg-elevated)',
                             border: `1px solid ${page === pageNum ? 'rgba(99,102,241,0.3)' : 'var(--border)'}`,
-                            color: page === pageNum ? '#818cf8' : 'var(--text-secondary)',
+                            color: page === pageNum ? 'var(--neon-indigo)' : 'var(--text-secondary)',
                             fontSize: 13,
                             fontWeight: 600,
                           }}

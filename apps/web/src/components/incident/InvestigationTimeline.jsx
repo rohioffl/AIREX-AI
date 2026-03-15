@@ -2,19 +2,19 @@ import { useState } from 'react'
 import { Activity, CheckCircle2, XCircle, Loader, AlertTriangle, Clock } from 'lucide-react'
 
 const STATUS_CONFIG = {
-  started: { icon: Loader, color: '#22d3ee', iconClass: 'animate-spin', label: 'Running' },
-  completed: { icon: CheckCircle2, color: '#10b981', iconClass: '', label: 'Done' },
-  failed: { icon: XCircle, color: '#f43f5e', iconClass: '', label: 'Failed' },
-  anomalies_detected: { icon: AlertTriangle, color: '#f59e0b', iconClass: '', label: 'Anomalies' },
+  started: { icon: Loader, color: 'var(--neon-cyan)', iconClass: 'animate-spin', label: 'Running' },
+  completed: { icon: CheckCircle2, color: 'var(--color-accent-green)', iconClass: '', label: 'Done' },
+  failed: { icon: XCircle, color: 'var(--color-accent-red)', iconClass: '', label: 'Failed' },
+  anomalies_detected: { icon: AlertTriangle, color: 'var(--color-accent-amber)', iconClass: '', label: 'Anomalies' },
 }
 
 const CATEGORY_COLORS = {
-  primary: '#818cf8',
-  monitoring: '#06b6d4',
-  change: '#f59e0b',
-  infrastructure: '#8b5cf6',
-  log_analysis: '#10b981',
-  secondary: '#94a3b8',
+  primary: 'var(--neon-indigo)',
+  monitoring: 'var(--neon-cyan)',
+  change: 'var(--color-accent-amber)',
+  infrastructure: 'var(--neon-purple)',
+  log_analysis: 'var(--color-accent-green)',
+  secondary: 'var(--text-muted)',
 }
 
 export default function InvestigationTimeline({ probeSteps }) {
@@ -28,7 +28,7 @@ export default function InvestigationTimeline({ probeSteps }) {
   const hasAnomalies = probeSteps.some(s => s.anomaly_count > 0)
 
   return (
-    <div className="glass rounded-xl overflow-hidden" style={{ borderLeft: '4px solid #818cf8' }}>
+    <div className="glass rounded-xl overflow-hidden" style={{ borderLeft: '4px solid var(--neon-indigo)' }}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center justify-between px-5 py-4 w-full text-left transition-colors"
@@ -37,7 +37,7 @@ export default function InvestigationTimeline({ probeSteps }) {
         <div className="flex items-center gap-3">
           <div
             className="h-8 w-8 rounded-md flex items-center justify-center"
-            style={{ background: 'rgba(129,140,248,0.1)', color: '#818cf8' }}
+            style={{ background: 'rgba(129,140,248,0.1)', color: 'var(--neon-indigo)' }}
           >
             <Activity size={16} />
           </div>
@@ -58,7 +58,7 @@ export default function InvestigationTimeline({ probeSteps }) {
                 className="h-full transition-all"
                 style={{
                   width: `${totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0}%`,
-                  background: '#818cf8',
+                  background: 'var(--neon-indigo)',
                 }}
               />
             </div>
@@ -109,7 +109,7 @@ export default function InvestigationTimeline({ probeSteps }) {
                     )}
                   </div>
                   {step.anomaly_count > 0 && (
-                    <span style={{ fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>
+                    <span style={{ fontSize: 10, color: 'var(--color-accent-amber)', fontWeight: 600 }}>
                       {step.anomaly_count} anomal{step.anomaly_count === 1 ? 'y' : 'ies'} detected
                     </span>
                   )}

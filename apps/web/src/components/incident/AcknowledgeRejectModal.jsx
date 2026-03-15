@@ -91,7 +91,7 @@ export default function AcknowledgeRejectModal({
               onClick={() => setAction('acknowledge')}
               className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-all"
               style={{ 
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', 
+                background: 'var(--gradient-primary)', 
                 boxShadow: '0 4px 12px rgba(99,102,241,0.2)' 
               }}
               onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
@@ -136,7 +136,7 @@ export default function AcknowledgeRejectModal({
                 disabled={loading || acking}
                  className="flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-60"
                 style={{
-                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  background: 'var(--gradient-primary)',
                   boxShadow: '0 4px 12px rgba(99,102,241,0.2)'
                 }}
               >

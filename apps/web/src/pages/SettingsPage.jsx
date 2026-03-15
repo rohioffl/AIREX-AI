@@ -69,7 +69,7 @@ export default function SettingsPage() {
     {
       section: 'AI / LLM',
       icon: Brain,
-      color: '#a78bfa',
+      color: 'var(--neon-purple)',
       glassClass: 'glass-purple',
       items: [
         { label: 'Provider', value: settings?.llm_provider || '—' },
@@ -86,7 +86,7 @@ export default function SettingsPage() {
     {
       section: 'Pipeline',
       icon: RefreshCw,
-      color: '#38bdf8',
+      color: 'var(--neon-cyan)',
       glassClass: 'glass-cyan',
       items: [
         { label: 'Investigation Timeout', value: settings ? `${settings.investigation_timeout}s` : '—' },
@@ -101,7 +101,7 @@ export default function SettingsPage() {
     {
       section: 'Notifications',
       icon: Shield,
-      color: '#fbbf24',
+      color: 'var(--color-accent-amber)',
       glassClass: 'glass-amber',
       items: [
         { label: 'Slack Webhook', value: settings?.slack_webhook_url ? 'Configured' : 'Not set' },
@@ -113,7 +113,7 @@ export default function SettingsPage() {
     {
       section: 'Infrastructure',
       icon: Server,
-      color: '#34d399',
+      color: 'var(--neon-green)',
       glassClass: 'glass-green',
       items: [
         {
@@ -138,7 +138,7 @@ export default function SettingsPage() {
       {/* Header */}
       <div>
         <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-          <Settings size={24} style={{ color: '#94a3b8' }} />
+          <Settings size={24} style={{ color: 'var(--text-muted)' }} />
           Settings
         </h2>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -153,7 +153,7 @@ export default function SettingsPage() {
           <button
             onClick={fetchHealth}
             className="flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all"
-            style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)' }}
+            style={{ fontSize: 11, fontWeight: 600, color: 'var(--neon-indigo)', background: 'var(--glow-indigo)', border: '1px solid rgba(99,102,241,0.2)' }}
           >
             <RefreshCw size={12} />
             Refresh
@@ -175,11 +175,11 @@ export default function SettingsPage() {
           ].map(s => (
             <div key={s.label} className="flex items-center gap-3 p-3 rounded-lg hover-lift" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
               {s.ok ? (
-                <CheckCircle size={18} style={{ color: '#34d399', flexShrink: 0 }} />
+                <CheckCircle size={18} style={{ color: 'var(--neon-green)', flexShrink: 0 }} />
               ) : loading ? (
                 <RefreshCw size={18} style={{ color: 'var(--text-muted)', flexShrink: 0, animation: 'spin 1s linear infinite' }} />
               ) : (
-                <AlertTriangle size={18} style={{ color: '#fb923c', flexShrink: 0 }} />
+                <AlertTriangle size={18} style={{ color: 'var(--brand-orange)', flexShrink: 0 }} />
               )}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }}>{s.label}</div>
@@ -191,7 +191,7 @@ export default function SettingsPage() {
       </div>
 
       {error && (
-        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244,63,94,0.03)', fontSize: 14, color: '#fb7185' }}>
+        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid var(--color-accent-red)', background: 'var(--glow-rose-subtle)', fontSize: 14, color: 'var(--color-accent-red)' }}>
           <span style={{ fontWeight: 700, marginRight: 8 }}>Error:</span>{error}
         </div>
       )}
@@ -226,7 +226,7 @@ export default function SettingsPage() {
               onClick={handleSave}
               disabled={saving}
               className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all disabled:opacity-50 hover:shadow-lg hover:-translate-y-0.5 glow-indigo"
-              style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+              style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: 'var(--gradient-primary)' }}
             >
               <Save size={14} />
               {saving ? 'Saving...' : 'Save Settings'}
@@ -269,7 +269,7 @@ export default function SettingsPage() {
       {/* Tenant Info */}
       <div className="glass rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
-          <Database size={16} style={{ color: '#818cf8' }} />
+          <Database size={16} style={{ color: 'var(--neon-indigo)' }} />
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Current Session</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -279,7 +279,7 @@ export default function SettingsPage() {
           </div>
           <div className="p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mode</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fbbf24', marginTop: 4 }}>{user ? 'Authenticated' : 'Anonymous'}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-accent-amber)', marginTop: 4 }}>{user ? 'Authenticated' : 'Anonymous'}</div>
           </div>
           <div className="p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Version</div>

@@ -62,21 +62,21 @@ export default function ApprovalControls({ incident }) {
   }
 
   return (
-    <div className="glass rounded-xl p-5" style={{ borderLeft: manualRequired ? '4px solid #f87171' : '4px solid #22d3ee', background: manualRequired ? 'rgba(248,113,113,0.06)' : 'rgba(34,211,238,0.06)' }}>
+    <div className="glass rounded-xl p-5" style={{ borderLeft: manualRequired ? '4px solid var(--color-accent-red)' : '4px solid var(--neon-cyan)', background: manualRequired ? 'rgba(248,113,113,0.06)' : 'rgba(34,211,238,0.06)' }}>
       <div className="flex items-center gap-2 mb-3">
         <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: manualRequired ? 'rgba(248,113,113,0.15)' : 'rgba(34,211,238,0.15)' }}>
           {seniorRequired
-            ? <ShieldAlert size={12} style={{ color: '#f43f5e' }} />
-            : <ShieldCheck size={12} style={{ color: manualRequired ? '#f87171' : '#22d3ee' }} />
+            ? <ShieldAlert size={12} style={{ color: 'var(--color-accent-red)' }} />
+            : <ShieldCheck size={12} style={{ color: manualRequired ? 'var(--color-accent-red)' : 'var(--neon-cyan)' }} />
           }
         </div>
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: manualRequired ? '#f87171' : '#22d3ee', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: manualRequired ? 'var(--color-accent-red)' : 'var(--neon-cyan)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           {seniorRequired ? 'Senior Approval Required' : manualRequired ? 'Manual Review' : 'Approval Required'}
         </h3>
         {seniorRequired && (
           <span
             className="px-2 py-0.5 rounded"
-            style={{ fontSize: 10, fontWeight: 700, color: '#f43f5e', background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.2)' }}
+            style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-accent-red)', background: 'var(--glow-rose)', border: '1px solid rgba(244,63,94,0.2)' }}
           >
             ADMIN ONLY
           </span>
@@ -86,7 +86,7 @@ export default function ApprovalControls({ incident }) {
       {canApprove ? (
         <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
           Ready to execute{' '}
-          <span className="px-1.5 py-0.5 rounded" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#818cf8', background: 'rgba(99,102,241,0.1)' }}>{actionType}</span>
+          <span className="px-1.5 py-0.5 rounded" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neon-indigo)', background: 'var(--glow-indigo)' }}>{actionType}</span>
           {recommendation?.risk_level && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
               Risk: {recommendation.risk_level}
@@ -123,13 +123,13 @@ export default function ApprovalControls({ incident }) {
           }}
           disabled={loading}
         />
-        <p style={{ fontSize: 11, color: trimmedNote.length < 3 ? '#f97316' : 'var(--text-muted)', marginTop: 4 }}>
+        <p style={{ fontSize: 11, color: trimmedNote.length < 3 ? 'var(--brand-orange)' : 'var(--text-muted)', marginTop: 4 }}>
           {trimmedNote.length < 3 ? 'Provide at least 3 characters' : 'This note will appear in the manual-review log'}
         </p>
       </div>
 
       {error && (
-        <p className="mt-2 px-3 py-2 rounded-md" style={{ fontSize: 12, color: '#fb7185', background: 'rgba(244,63,94,0.1)' }}>{error}</p>
+        <p className="mt-2 px-3 py-2 rounded-md" style={{ fontSize: 12, color: 'var(--color-accent-red)', background: 'var(--glow-rose)' }}>{error}</p>
       )}
 
       <div className="mt-5 flex gap-3 flex-wrap">
@@ -138,7 +138,7 @@ export default function ApprovalControls({ incident }) {
             onClick={() => setModalOpen(true)}
             disabled={loading}
             className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 12px rgba(99,102,241,0.2)' }}
+            style={{ background: 'var(--gradient-primary)', boxShadow: '0 4px 12px rgba(99,102,241,0.2)' }}
           >
             {loading ? <><Loader size={14} className="animate-spin" /> Processing...</> : (
               <>

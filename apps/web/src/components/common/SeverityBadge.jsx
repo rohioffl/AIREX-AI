@@ -1,5 +1,5 @@
 const SEVERITY_CONFIG = {
-  CRITICAL: { bg: 'rgba(244,63,94,0.12)',  text: '#fb7185', bgLight: '#FEE2E2', textLight: '#991B1B' },
+  CRITICAL: { bg: 'rgba(244,63,94,0.12)',  text: 'var(--color-accent-red)', bgLight: '#FEE2E2', textLight: '#991B1B' },
   HIGH:     { bg: 'rgba(251,146,60,0.12)', text: '#fb923c', bgLight: 'rgba(251,146,60,0.12)', textLight: '#fb923c' },
   MEDIUM:   { bg: 'rgba(250,204,21,0.1)',  text: '#facc15', bgLight: 'rgba(250,204,21,0.1)', textLight: '#facc15' },
   LOW:      { bg: 'rgba(96,165,250,0.1)',  text: '#60a5fa', bgLight: 'rgba(96,165,250,0.1)', textLight: '#60a5fa' },

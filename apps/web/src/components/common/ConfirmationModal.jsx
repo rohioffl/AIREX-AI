@@ -16,7 +16,7 @@ export default function ConfirmationModal({
         boxShadow: '0 4px 12px rgba(248,113,113,0.35)',
       }
     : {
-        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+        background: 'var(--gradient-primary)',
         boxShadow: '0 4px 12px rgba(99,102,241,0.25)',
       }
 

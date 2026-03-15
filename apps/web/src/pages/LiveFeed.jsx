@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity, Radio, Pause, Play, Trash2, ChevronRight, ArrowDown
+  Activity, Radio, Pause, Play, Trash2, ChevronRight
 } from 'lucide-react'
 import { createSSEConnection } from '../services/sse'
 import ConnectionBanner from '../components/common/ConnectionBanner'
@@ -10,14 +10,14 @@ import SeverityBadge from '../components/common/SeverityBadge'
 import { truncateId } from '../utils/formatters'
 
 const EVENT_COLORS = {
-  incident_created:     { bg: 'rgba(96,165,250,0.08)',  accent: '#60a5fa', label: 'INCIDENT' },
-  state_changed:        { bg: 'rgba(167,139,250,0.08)', accent: '#a78bfa', label: 'STATE' },
-  evidence_added:       { bg: 'rgba(52,211,153,0.08)',  accent: '#34d399', label: 'EVIDENCE' },
-  recommendation_ready: { bg: 'rgba(251,191,36,0.08)',  accent: '#fbbf24', label: 'AI REC' },
-  execution_started:    { bg: 'rgba(56,189,248,0.08)',  accent: '#38bdf8', label: 'EXEC' },
-  execution_log:        { bg: 'rgba(148,163,184,0.06)', accent: '#94a3b8', label: 'LOG' },
-  execution_completed:  { bg: 'rgba(34,211,238,0.08)',  accent: '#22d3ee', label: 'DONE' },
-  verification_result:  { bg: 'rgba(52,211,153,0.08)',  accent: '#34d399', label: 'VERIFY' },
+  incident_created:     { bg: 'var(--glow-sky)',    accent: 'var(--neon-cyan)',   label: 'INCIDENT' },
+  state_changed:        { bg: 'var(--glow-purple)', accent: 'var(--neon-purple)', label: 'STATE' },
+  evidence_added:       { bg: 'var(--glow-emerald)',accent: 'var(--neon-green)',  label: 'EVIDENCE' },
+  recommendation_ready: { bg: 'var(--glow-amber)',  accent: 'var(--color-accent-amber)', label: 'AI REC' },
+  execution_started:    { bg: 'var(--glow-sky)',    accent: 'var(--neon-cyan)',   label: 'EXEC' },
+  execution_log:        { bg: 'rgba(148,163,184,0.06)', accent: 'var(--text-muted)', label: 'LOG' },
+  execution_completed:  { bg: 'var(--glow-cyan)',   accent: 'var(--neon-cyan)',   label: 'DONE' },
+  verification_result:  { bg: 'var(--glow-emerald)',accent: 'var(--neon-green)',  label: 'VERIFY' },
 }
 
 export default function LiveFeed() {
@@ -89,10 +89,10 @@ export default function LiveFeed() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            <Activity size={24} style={{ color: '#818cf8' }} />
+            <Activity size={24} style={{ color: 'var(--neon-indigo)' }} />
             Live Feed
-            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? '#10b981' : '#f43f5e' }}>
-              {connected && !paused && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: '#10b981', opacity: 0.3 }} />}
+            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? 'var(--color-accent-green)' : 'var(--color-accent-red)' }}>
+              {connected && !paused && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: 'var(--color-accent-green)', opacity: 0.3 }} />}
             </span>
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -111,7 +111,7 @@ export default function LiveFeed() {
             style={{
               fontSize: 12, fontWeight: 600,
               background: paused ? 'rgba(251,191,36,0.1)' : 'rgba(52,211,153,0.1)',
-              color: paused ? '#fbbf24' : '#34d399',
+              color: paused ? 'var(--color-accent-amber)' : 'var(--neon-green)',
               border: `1px solid ${paused ? 'rgba(251,191,36,0.2)' : 'rgba(52,211,153,0.2)'}`,
             }}
           >
@@ -147,7 +147,7 @@ export default function LiveFeed() {
             style={{
               fontSize: 11, fontWeight: 600,
               background: filter === f.key ? 'rgba(99,102,241,0.1)' : 'var(--bg-input)',
-              color: filter === f.key ? '#818cf8' : 'var(--text-muted)',
+              color: filter === f.key ? 'var(--neon-indigo)' : 'var(--text-muted)',
               border: `1px solid ${filter === f.key ? 'rgba(99,102,241,0.2)' : 'var(--border)'}`,
             }}
           >
@@ -215,7 +215,7 @@ function EventRow({ event }) {
 
       {/* Link to incident */}
       {incidentId && (
-        <Link to={`/incidents/${incidentId}`} className="flex-shrink-0" style={{ color: '#818cf8' }}>
+        <Link to={`/incidents/${incidentId}`} className="flex-shrink-0" style={{ color: 'var(--neon-indigo)' }}>
           <ChevronRight size={14} />
         </Link>
       )}
@@ -231,7 +231,7 @@ function EventContent({ type, data }) {
     case 'incident_created':
       return (
         <div className="flex items-center gap-2 flex-wrap">
-          <span style={{ ...mono, color: '#60a5fa' }}>{truncateId(data.incident_id || data.id || '')}</span>
+          <span style={{ ...mono, color: 'var(--neon-cyan)' }}>{truncateId(data.incident_id || data.id || '')}</span>
           <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{data.title || 'New incident'}</span>
           {data.severity && <SeverityBadge severity={data.severity} />}
         </div>
@@ -240,7 +240,7 @@ function EventContent({ type, data }) {
     case 'state_changed':
       return (
         <div className="flex items-center gap-2 flex-wrap">
-          <span style={{ ...mono, color: '#818cf8' }}>{truncateId(data.incident_id || '')}</span>
+          <span style={{ ...mono, color: 'var(--neon-indigo)' }}>{truncateId(data.incident_id || '')}</span>
           <StateBadge state={data.from_state || data.old_state || '?'} />
           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>-&gt;</span>
           <StateBadge state={data.new_state || data.to_state || '?'} />
@@ -251,7 +251,7 @@ function EventContent({ type, data }) {
     case 'evidence_added':
       return (
         <div className="flex items-center gap-2">
-          <span style={{ ...mono, color: '#34d399' }}>{truncateId(data.incident_id || '')}</span>
+          <span style={{ ...mono, color: 'var(--neon-green)' }}>{truncateId(data.incident_id || '')}</span>
           <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>Evidence: {data.tool_name || 'unknown'}</span>
         </div>
       )
@@ -259,12 +259,12 @@ function EventContent({ type, data }) {
     case 'recommendation_ready':
       return (
         <div className="flex items-center gap-2 flex-wrap">
-          <span style={{ ...mono, color: '#fbbf24' }}>{truncateId(data.incident_id || '')}</span>
+          <span style={{ ...mono, color: 'var(--color-accent-amber)' }}>{truncateId(data.incident_id || '')}</span>
           <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
             AI recommends: <strong>{data.recommendation?.proposed_action || '?'}</strong>
           </span>
           {data.recommendation?.confidence && (
-            <span style={{ ...mono, color: '#a78bfa' }}>({(data.recommendation.confidence * 100).toFixed(0)}%)</span>
+            <span style={{ ...mono, color: 'var(--neon-purple)' }}>({(data.recommendation.confidence * 100).toFixed(0)}%)</span>
           )}
         </div>
       )
@@ -272,7 +272,7 @@ function EventContent({ type, data }) {
     case 'execution_started':
       return (
         <div className="flex items-center gap-2">
-          <span style={{ ...mono, color: '#38bdf8' }}>{truncateId(data.incident_id || '')}</span>
+          <span style={{ ...mono, color: 'var(--neon-cyan)' }}>{truncateId(data.incident_id || '')}</span>
           <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>Executing: {data.action_type || '?'}</span>
         </div>
       )
@@ -287,7 +287,7 @@ function EventContent({ type, data }) {
     case 'execution_completed':
       return (
         <div className="flex items-center gap-2">
-          <span style={{ ...mono, color: '#22d3ee' }}>{truncateId(data.incident_id || '')}</span>
+          <span style={{ ...mono, color: 'var(--neon-cyan)' }}>{truncateId(data.incident_id || '')}</span>
           <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
             {data.action_type || 'Action'}: <strong>{data.status || '?'}</strong>
           </span>
@@ -298,9 +298,9 @@ function EventContent({ type, data }) {
     case 'verification_result':
       return (
         <div className="flex items-center gap-2">
-          <span style={{ ...mono, color: '#34d399' }}>{truncateId(data.incident_id || '')}</span>
+          <span style={{ ...mono, color: 'var(--neon-green)' }}>{truncateId(data.incident_id || '')}</span>
           <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
-            Verification: <strong style={{ color: data.result === 'RESOLVED' ? '#34d399' : '#fb7185' }}>{data.result || '?'}</strong>
+            Verification: <strong style={{ color: data.result === 'RESOLVED' ? 'var(--neon-green)' : 'var(--color-accent-red)' }}>{data.result || '?'}</strong>
           </span>
         </div>
       )

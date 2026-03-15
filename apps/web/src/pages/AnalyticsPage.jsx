@@ -40,7 +40,7 @@ export default function AnalyticsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            <TrendingUp size={24} style={{ color: '#22d3ee' }} />
+            <TrendingUp size={24} style={{ color: 'var(--neon-cyan)' }} />
             Analytics Dashboard
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -100,7 +100,7 @@ export default function AnalyticsPage() {
               <Area
                 type="monotone"
                 dataKey="mttr_seconds"
-                stroke="#22d3ee"
+                stroke="var(--neon-cyan)"
                 strokeWidth={2}
                 fill="url(#mttrGradient)"
                 name="MTTR (seconds)"
@@ -141,7 +141,7 @@ export default function AnalyticsPage() {
                   )
                 }}
               />
-              <Bar dataKey="resolution_rate" fill="#6366f1" name="Resolution Rate" />
+              <Bar dataKey="resolution_rate" fill="var(--neon-indigo)" name="Resolution Rate" />
             </BarChart>
           </ResponsiveContainer>
         ) : (
@@ -181,9 +181,9 @@ export default function AnalyticsPage() {
               <Line
                 type="monotone"
                 dataKey="avg_confidence"
-                stroke="#a855f7"
+                stroke="var(--neon-purple)"
                 strokeWidth={2}
-                dot={{ fill: '#a855f7', r: 4 }}
+                dot={{ fill: 'var(--neon-purple)', r: 4 }}
                 name="Avg Confidence"
               />
             </LineChart>

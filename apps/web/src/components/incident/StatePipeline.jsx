@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Check } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 const STATE_ORDER = [
   { id: 'RECEIVED',             label: 'Received',      icon: '01' },
@@ -50,25 +51,36 @@ export default function StatePipeline({ currentState }) {
           return (
             <div key={step.id} className="flex items-center flex-1 last:flex-none">
               <div className="flex flex-col items-center gap-1.5 relative z-10">
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center transition-all duration-500"
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    fontFamily: 'var(--font-mono)',
-                    ...(done ? { background: palette.done, color: palette.doneText, border: `1px solid ${palette.doneText}40` } : {}),
-                    ...(active ? { 
-                      background: '#6366F1', 
-                      color: '#fff', 
-                      boxShadow: document.body.classList.contains('light-mode') 
-                        ? '0 0 0 4px rgba(99,102,241,0.15)' 
-                        : `0 0 12px ${palette.active}50`, 
-                      transform: 'scale(1.1)' 
-                    } : {}),
-                    ...(!done && !active ? { background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}),
-                  }}
-                >
-                  {done ? <Check size={14} strokeWidth={3} /> : step.icon}
+                <div className="relative">
+                  {active && (
+                    <motion.div
+                      className="absolute inset-0 rounded-full"
+                      style={{ background: palette.active }}
+                      animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                  )}
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center relative z-10"
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      fontFamily: 'var(--font-mono)',
+                      transition: 'background 0.4s, box-shadow 0.4s, transform 0.4s',
+                      ...(done ? { background: palette.done, color: palette.doneText, border: `1px solid ${palette.doneText}40` } : {}),
+                      ...(active ? {
+                        background: 'var(--neon-indigo)',
+                        color: '#fff',
+                        boxShadow: document.body.classList.contains('light-mode')
+                          ? '0 0 0 4px rgba(99,102,241,0.15)'
+                          : `0 0 12px ${palette.active}50`,
+                        transform: 'scale(1.1)'
+                      } : {}),
+                      ...(!done && !active ? { background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}),
+                    }}
+                  >
+                    {done ? <Check size={14} strokeWidth={3} /> : step.icon}
+                  </div>
                 </div>
                 <span style={{ fontSize: 10, fontWeight: 500, color: active ? 'var(--text-primary)' : 'var(--text-muted)', transition: 'color 0.3s' }}>
                   {step.label}
@@ -107,27 +119,38 @@ export default function StatePipeline({ currentState }) {
               )}
 
               <div className="flex items-center gap-3 relative z-10 w-full">
-                <div
-                  className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center transition-all duration-500"
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    fontFamily: 'var(--font-mono)',
-                    ...(done ? { background: palette.done, color: palette.doneText, border: `1px solid ${palette.doneText}40` } : {}),
-                    ...(active ? { 
-                      background: '#6366F1', 
-                      color: '#fff', 
-                      boxShadow: document.body.classList.contains('light-mode') 
-                        ? '0 0 0 4px rgba(99,102,241,0.15)' 
-                        : `0 0 12px ${palette.active}50`, 
-                      transform: 'scale(1.1)' 
-                    } : {}),
-                    ...(!done && !active ? { background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}),
-                  }}
-                >
-                  {done ? <Check size={14} strokeWidth={3} /> : step.icon}
+                <div className="relative shrink-0">
+                  {active && (
+                    <motion.div
+                      className="absolute inset-0 rounded-full"
+                      style={{ background: palette.active }}
+                      animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                  )}
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center relative z-10"
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      fontFamily: 'var(--font-mono)',
+                      transition: 'background 0.4s, box-shadow 0.4s, transform 0.4s',
+                      ...(done ? { background: palette.done, color: palette.doneText, border: `1px solid ${palette.doneText}40` } : {}),
+                      ...(active ? {
+                        background: 'var(--neon-indigo)',
+                        color: '#fff',
+                        boxShadow: document.body.classList.contains('light-mode')
+                          ? '0 0 0 4px rgba(99,102,241,0.15)'
+                          : `0 0 12px ${palette.active}50`,
+                        transform: 'scale(1.1)'
+                      } : {}),
+                      ...(!done && !active ? { background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}),
+                    }}
+                  >
+                    {done ? <Check size={14} strokeWidth={3} /> : step.icon}
+                  </div>
                 </div>
-                <span 
+                <span
                   className="mt-[2px]"
                   style={{ fontSize: 12, fontWeight: 500, color: active ? 'var(--text-primary)' : 'var(--text-muted)', transition: 'color 0.3s' }}
                 >

@@ -52,16 +52,16 @@ import { rejectIncident } from '../services/api'
 import { extractErrorMessage } from '../utils/errorHandler'
 
 const SEVERITY_ACCENT = {
-  CRITICAL: '#f43f5e',
-  HIGH: '#f97316',
-  MEDIUM: '#f59e0b',
-  LOW: '#10b981',
+  CRITICAL: 'var(--color-accent-red)',
+  HIGH: 'var(--brand-orange)',
+  MEDIUM: 'var(--color-accent-amber)',
+  LOW: 'var(--color-accent-green)',
 }
 
 const APPROVAL_LEVEL_BADGE = {
-  auto: { label: 'Auto-Approved', color: '#10b981', Icon: Zap },
-  operator: { label: 'Operator Approval', color: '#3b82f6', Icon: ShieldCheck },
-  senior: { label: 'Senior Approval', color: '#f43f5e', Icon: ShieldAlert },
+  auto: { label: 'Auto-Approved', color: 'var(--color-accent-green)', Icon: Zap },
+  operator: { label: 'Operator Approval', color: 'var(--neon-cyan)', Icon: ShieldCheck },
+  senior: { label: 'Senior Approval', color: 'var(--color-accent-red)', Icon: ShieldAlert },
 }
 
 export default function IncidentDetail() {
@@ -138,11 +138,11 @@ export default function IncidentDetail() {
       <div 
         className="glass rounded-xl p-5" 
         style={{ 
-          borderLeft: '4px solid #f43f5e', 
+          borderLeft: '4px solid var(--color-accent-red)', 
           background: isDark ? 'rgba(244,63,94,0.03)' : '#FFFFFF',
           border: isDark ? 'none' : '1px solid #E5E7EB',
           fontSize: 14, 
-          color: '#fb7185' 
+          color: 'var(--color-accent-red)' 
         }}
       >
         {error}
@@ -166,7 +166,7 @@ export default function IncidentDetail() {
   const summary = meta.INCIDENT_REASON || meta.INCIDENT_DETAILS
   const latestTransition = incident.state_transitions?.[incident.state_transitions.length - 1]
   const confidence = meta.recommendation?.confidence != null ? Math.round(meta.recommendation.confidence * 100) : null
-  const accent = SEVERITY_ACCENT[incident.severity] || '#f97316'
+  const accent = SEVERITY_ACCENT[incident.severity] || 'var(--brand-orange)'
   const manualReason = typeof meta._manual_review_reason === 'string' ? meta._manual_review_reason.trim() : ''
   const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
 
@@ -185,7 +185,7 @@ export default function IncidentDetail() {
             borderLeft: '3px solid rgba(248,113,113,0.9)',
             background: 'rgba(248,113,113,0.08)',
             fontSize: 12,
-            color: '#fb7185',
+            color: 'var(--color-accent-red)',
           }}
         >
           {rejectError}
@@ -210,8 +210,8 @@ export default function IncidentDetail() {
             style={{
               fontSize: 12,
               fontWeight: 700,
-              background: 'rgba(99,102,241,0.1)',
-              color: '#818cf8',
+              background: 'var(--glow-indigo)',
+              color: 'var(--neon-indigo)',
               border: '1px solid rgba(99,102,241,0.25)',
             }}
             title="Acknowledge incident"
@@ -230,7 +230,7 @@ export default function IncidentDetail() {
               fontSize: 12,
               fontWeight: 700,
               background: isDark ? 'rgba(248,113,113,0.1)' : '#FFFFFF',
-              color: '#f87171',
+              color: 'var(--color-accent-red)',
               border: isDark ? '1px solid rgba(248,113,113,0.25)' : '1px solid #E5E7EB',
             }}
             title="Reject incident"
@@ -251,7 +251,7 @@ export default function IncidentDetail() {
               background: isDark 
                 ? (connected ? 'rgba(16,185,129,0.05)' : 'rgba(244,63,94,0.05)')
                 : (connected ? '#ECFDF5' : '#FEF2F2'),
-              color: connected ? '#34d399' : '#fb7185',
+              color: connected ? 'var(--neon-green)' : 'var(--color-accent-red)',
             }}
           >
             {connected ? <Radio size={12} /> : <WifiOff size={12} />}
@@ -277,7 +277,7 @@ export default function IncidentDetail() {
             className="absolute left-0 top-0 bottom-0"
             style={{
               width: '4px',
-              background: '#DC2626',
+              background: 'var(--color-accent-red)',
               borderRadius: '4px 0 0 4px',
             }}
           />
@@ -298,7 +298,7 @@ export default function IncidentDetail() {
                 <StateBadge state={incident.state} />
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{incident.alert_type}</span>
                 {cloud && (
-                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: '#93c5fd', background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)' }}>
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: 'var(--neon-cyan)', background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)' }}>
                     <Cloud size={11} />
                     {cloud}
                   </span>
@@ -309,13 +309,13 @@ export default function IncidentDetail() {
                   </span>
                 )}
                 {region && (
-                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: '#f8fafc', background: 'rgba(8,145,178,0.15)', border: '1px solid rgba(8,145,178,0.3)' }}>
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: 'var(--neon-cyan)', background: 'rgba(8,145,178,0.15)', border: '1px solid rgba(8,145,178,0.3)' }}>
                     <MapPin size={11} />
                     {region}
                   </span>
                 )}
                 {unstable && (
-                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: '#fbbf24', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)' }}>
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: 'var(--color-accent-amber)', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(245,158,11,0.25)' }}>
                     <AlertTriangle size={11} />
                     flapping
                   </span>
@@ -400,7 +400,7 @@ export default function IncidentDetail() {
             <div 
               className="glass rounded-xl p-4" 
               style={{ 
-                borderLeft: `3px solid ${incident.state === 'REJECTED' ? '#f87171' : '#22d3ee'}`,
+                borderLeft: `3px solid ${incident.state === 'REJECTED' ? 'var(--color-accent-red)' : 'var(--neon-cyan)'}`,
                 background: isDark 
                   ? (incident.state === 'REJECTED' ? 'rgba(248,113,113,0.08)' : 'rgba(34,211,238,0.08)')
                   : '#F8FAFC',
@@ -410,7 +410,7 @@ export default function IncidentDetail() {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Last Action</span>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: incident.state === 'REJECTED' ? '#f87171' : 'var(--text-heading)' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: incident.state === 'REJECTED' ? 'var(--color-accent-red)' : 'var(--text-heading)' }}>
                     {latestTransition.to_state === 'REJECTED' ? 'Manually rejected' : `Moved to ${latestTransition.to_state}`}
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{latestTransition.reason || 'No reason provided'}</p>
@@ -431,7 +431,7 @@ export default function IncidentDetail() {
                 border: isDark ? 'none' : '1px solid #E2E8F0',
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Operator note</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-accent-red)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Operator note</div>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{manualReason}</p>
               {manualAt && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Noted {manualAt}</div>
@@ -472,9 +472,9 @@ export default function IncidentDetail() {
               <Link
                 to={`/alerts?host=${encodeURIComponent(incident.host_key)}`}
                 className="flex items-center gap-1 transition-colors"
-                style={{ fontSize: 10, fontWeight: 600, color: '#818cf8', textDecoration: 'none' }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#a5b4fc'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#818cf8'}
+                style={{ fontSize: 10, fontWeight: 600, color: 'var(--neon-indigo)', textDecoration: 'none' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--neon-indigo)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--neon-indigo)'}
               >
                 View all ({incident.related_incidents.length})
                 <ChevronRight size={12} />
@@ -511,7 +511,7 @@ export default function IncidentDetail() {
                       <span className="flex items-center gap-2 flex-shrink-0">
                         <StateBadge state={rel.state} />
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>{rel.alert_type}</span>
-                        <ChevronRight size={14} style={{ color: '#818cf8' }} />
+                        <ChevronRight size={14} style={{ color: 'var(--neon-indigo)' }} />
                       </span>
                     </div>
                   </li>

@@ -5,11 +5,11 @@ import ConnectionBanner from '../components/common/ConnectionBanner'
 import AlertRow from '../components/alert/AlertRow'
 
 const SEVERITY_FILTERS = [
-  { key: 'all', label: 'All', color: '#94a3b8' },
-  { key: 'CRITICAL', label: 'Critical', color: '#fb7185' },
-  { key: 'HIGH', label: 'High', color: '#fb923c' },
-  { key: 'MEDIUM', label: 'Medium', color: '#22d3ee' },
-  { key: 'LOW', label: 'Low', color: '#10b981' },
+  { key: 'all', label: 'All', color: 'var(--text-muted)' },
+  { key: 'CRITICAL', label: 'Critical', color: 'var(--color-accent-red)' },
+  { key: 'HIGH', label: 'High', color: 'var(--brand-orange)' },
+  { key: 'MEDIUM', label: 'Medium', color: 'var(--neon-cyan)' },
+  { key: 'LOW', label: 'Low', color: 'var(--color-accent-green)' },
 ]
 
 export default function RejectedPage() {
@@ -40,16 +40,16 @@ export default function RejectedPage() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            <Ban size={24} style={{ color: '#f87171' }} />
+            <Ban size={24} style={{ color: 'var(--color-accent-red)' }} />
             Rejected Alerts
             {counts.all > 0 && (
               <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-bold"
-                style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171' }}>
+                style={{ background: 'rgba(248,113,113,0.15)', color: 'var(--color-accent-red)' }}>
                 {counts.all}
               </span>
             )}
-            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? '#10b981' : '#f43f5e' }}>
-              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: '#10b981', opacity: 0.3 }} />}
+            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? 'var(--color-accent-green)' : 'var(--color-accent-red)' }}>
+              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: 'var(--color-accent-green)', opacity: 0.3 }} />}
             </span>
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -96,7 +96,7 @@ export default function RejectedPage() {
       )}
 
       {error && (
-        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244,63,94,0.03)', fontSize: 14, color: '#fb7185' }}>
+        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid var(--color-accent-red)', background: 'var(--glow-rose-subtle)', fontSize: 14, color: 'var(--color-accent-red)' }}>
           <span style={{ fontWeight: 700, marginRight: 8 }}>Error:</span>{error}
         </div>
       )}
@@ -104,7 +104,7 @@ export default function RejectedPage() {
       {!loading && !error && (
         filtered.length === 0 ? (
           <div className="glass rounded-xl py-20 text-center">
-            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4 hover-lift" style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171' }}>
+            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4 hover-lift" style={{ background: 'rgba(248,113,113,0.12)', color: 'var(--color-accent-red)' }}>
               <ShieldX size={24} />
             </div>
             <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-heading)' }}>No rejected alerts</p>

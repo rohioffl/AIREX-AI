@@ -15,21 +15,21 @@ import { formatTimestamp } from '../../utils/formatters'
 const STATUS_CONFIG = {
   verification_failed: {
     label: 'Verification Failed',
-    color: '#f87171',
+    color: 'var(--color-accent-red)',
     bg: 'rgba(248,113,113,0.1)',
     border: 'rgba(248,113,113,0.25)',
     Icon: XCircle,
   },
   policy_rejected: {
     label: 'Policy Rejected',
-    color: '#f59e0b',
+    color: 'var(--color-accent-amber)',
     bg: 'rgba(245,158,11,0.1)',
     border: 'rgba(245,158,11,0.25)',
     Icon: ShieldAlert,
   },
   executing: {
     label: 'Executing',
-    color: '#3b82f6',
+    color: 'var(--neon-cyan)',
     bg: 'rgba(59,130,246,0.1)',
     border: 'rgba(59,130,246,0.25)',
     Icon: RotateCcw,
@@ -70,7 +70,7 @@ export default function FallbackHistory({ incident }) {
         <div className="flex items-center gap-2">
           <RotateCcw
             size={14}
-            style={{ color: '#f59e0b' }}
+            style={{ color: 'var(--color-accent-amber)' }}
           />
           <span
             style={{
@@ -91,7 +91,7 @@ export default function FallbackHistory({ incident }) {
               width: 18,
               height: 18,
               background: 'rgba(251,191,36,0.15)',
-              color: '#f59e0b',
+              color: 'var(--color-accent-amber)',
               border: '1px solid rgba(251,191,36,0.3)',
             }}
           >
@@ -103,9 +103,9 @@ export default function FallbackHistory({ incident }) {
               style={{
                 fontSize: 10,
                 fontWeight: 600,
-                color: '#f59e0b',
+                color: 'var(--color-accent-amber)',
                 background: 'rgba(251,191,36,0.12)',
-                border: '1px solid rgba(251,191,36,0.25)',
+                border: '1px solid rgba(245,158,11,0.25)',
               }}
             >
               <AlertTriangle size={10} />
@@ -139,7 +139,7 @@ export default function FallbackHistory({ incident }) {
                   fontFamily: 'var(--font-mono)',
                   fontSize: 11,
                   fontWeight: 600,
-                  color: '#f87171',
+                  color: 'var(--color-accent-red)',
                   background: 'rgba(248,113,113,0.1)',
                   textDecoration: 'line-through',
                 }}
@@ -153,8 +153,8 @@ export default function FallbackHistory({ incident }) {
                   fontFamily: 'var(--font-mono)',
                   fontSize: 11,
                   fontWeight: 600,
-                  color: '#10b981',
-                  background: 'rgba(16,185,129,0.1)',
+                  color: 'var(--color-accent-green)',
+                  background: 'var(--glow-emerald)',
                 }}
               >
                 {currentAction}

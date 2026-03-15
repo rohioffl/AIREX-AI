@@ -137,7 +137,7 @@ export default function TimelineChart({ transitions, incidentCreatedAt, incident
                 ? 'rgba(99,102,241,0.15)'
                 : 'var(--bg-input)',
               color: filterStates.size === 0 || filterStates.has(state)
-                ? '#818cf8'
+                ? 'var(--neon-indigo)'
                 : 'var(--text-muted)',
               border: `1px solid ${filterStates.size === 0 || filterStates.has(state) ? 'rgba(99,102,241,0.3)' : 'var(--border)'}`,
               opacity: filterStates.size > 0 && !filterStates.has(state) ? 0.4 : 1,
@@ -208,9 +208,9 @@ export default function TimelineChart({ transitions, incidentCreatedAt, incident
             <Line
               type="stepAfter"
               dataKey="state"
-              stroke="#6366f1"
+              stroke="var(--neon-indigo)"
               strokeWidth={2}
-              dot={{ fill: '#6366f1', r: 4 }}
+              dot={{ fill: 'var(--neon-indigo)', r: 4 }}
               activeDot={{ r: 6 }}
             />
           </LineChart>

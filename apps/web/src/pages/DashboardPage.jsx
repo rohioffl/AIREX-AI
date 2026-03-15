@@ -87,10 +87,10 @@ export default function DashboardPage() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            <TrendingUp size={26} style={{ color: '#22d3ee' }} />
+            <TrendingUp size={26} style={{ color: 'var(--neon-cyan)' }} />
             <span className="text-gradient-multi">Command Dashboard</span>
-            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? '#10b981' : '#f43f5e' }}>
-              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: '#10b981', opacity: 0.3 }} />}
+            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? 'var(--color-accent-green)' : 'var(--color-accent-red)' }}>
+              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: 'var(--color-accent-green)', opacity: 0.3 }} />}
             </span>
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -133,26 +133,26 @@ export default function DashboardPage() {
                 value: metrics?.mttr_seconds
                   ? formatDuration(metrics.mttr_seconds)
                   : '—',
-                color: '#10b981'
+                color: 'var(--color-accent-green)'
               },
               {
                 label: 'Avg Investigation',
                 value: metrics?.avg_investigation_seconds
                   ? formatDuration(metrics.avg_investigation_seconds)
                   : '—',
-                color: '#6366f1'
+                color: 'var(--neon-indigo)'
               },
               {
                 label: 'AI Confidence',
                 value: metrics?.ai_confidence_avg
                   ? `${Math.round(metrics.ai_confidence_avg * 100)}%`
                   : '—',
-                color: '#a855f7'
+                color: 'var(--neon-purple)'
               },
               {
                 label: 'Auto-resolved',
                 value: metrics ? String(metrics.auto_resolved_count) : String(summary.alertActions),
-                color: '#22d3ee'
+                color: 'var(--neon-cyan)'
               },
             ].map((s) => (
               <div key={s.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -169,7 +169,7 @@ export default function DashboardPage() {
                 className="flex-1 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all"
                 style={{
                   background: graphType === t ? 'rgba(99,102,241,0.1)' : 'var(--bg-input)',
-                  color: graphType === t ? '#818cf8' : 'var(--text-muted)',
+                  color: graphType === t ? 'var(--neon-indigo)' : 'var(--text-muted)',
                   border: `1px solid ${graphType === t ? 'rgba(99,102,241,0.2)' : 'var(--border)'}`,
                 }}
               >
@@ -189,7 +189,7 @@ export default function DashboardPage() {
       )}
 
       {error && (
-        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244,63,94,0.03)', fontSize: 14, color: '#fb7185' }}>
+        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid var(--color-accent-red)', background: 'var(--glow-rose-subtle)', fontSize: 14, color: 'var(--color-accent-red)' }}>
           <span style={{ fontWeight: 700, marginRight: 8 }}>Error:</span>{error}
         </div>
       )}

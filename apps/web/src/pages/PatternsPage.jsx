@@ -5,24 +5,24 @@ import { useToasts } from '../context/ToastContext'
 import { useNavigate } from 'react-router-dom'
 
 const SEVERITY_STYLES = {
-  CRITICAL: { background: 'rgba(244,63,94,0.12)', color: '#fb7185' },
-  HIGH:     { background: 'rgba(251,146,60,0.12)', color: '#fb923c' },
-  MEDIUM:   { background: 'rgba(245,158,11,0.12)', color: '#fbbf24' },
-  LOW:      { background: 'rgba(16,185,129,0.12)', color: '#34d399' },
+  CRITICAL: { background: 'rgba(244,63,94,0.12)', color: 'var(--color-accent-red)' },
+  HIGH:     { background: 'rgba(251,146,60,0.12)', color: 'var(--brand-orange)' },
+  MEDIUM:   { background: 'var(--glow-amber)', color: 'var(--color-accent-amber)' },
+  LOW:      { background: 'rgba(16,185,129,0.12)', color: 'var(--neon-green)' },
 }
 
 const TREND_ICONS = {
-  increasing:        { icon: TrendingUp,   color: '#f43f5e', label: 'Increasing' },
-  decreasing:        { icon: TrendingDown, color: '#10b981', label: 'Decreasing' },
+  increasing:        { icon: TrendingUp,   color: 'var(--color-accent-red)', label: 'Increasing' },
+  decreasing:        { icon: TrendingDown, color: 'var(--color-accent-green)', label: 'Decreasing' },
   stable:            { icon: Minus,        color: 'var(--text-muted)', label: 'Stable' },
   insufficient_data: { icon: Minus,        color: 'var(--text-muted)', label: 'N/A' },
 }
 
-const ANOMALY_BORDER = { high: '#f43f5e', medium: '#f59e0b', low: '#3b82f6' }
+const ANOMALY_BORDER = { high: 'var(--color-accent-red)', medium: 'var(--color-accent-amber)', low: 'var(--neon-cyan)' }
 const ANOMALY_BADGE = {
-  high:   { background: 'rgba(244,63,94,0.12)',  color: '#fb7185' },
-  medium: { background: 'rgba(245,158,11,0.12)', color: '#fbbf24' },
-  low:    { background: 'rgba(59,130,246,0.12)',  color: '#60a5fa' },
+  high:   { background: 'rgba(244,63,94,0.12)',  color: 'var(--color-accent-red)' },
+  medium: { background: 'var(--glow-amber)', color: 'var(--color-accent-amber)' },
+  low:    { background: 'rgba(59,130,246,0.12)',  color: 'var(--neon-cyan)' },
 }
 
 const card = {
@@ -43,9 +43,9 @@ function PatternCard({ pattern }) {
       <div className="flex items-start justify-between cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <Layers size={16} style={{ color: '#818cf8' }} />
+            <Layers size={16} style={{ color: 'var(--neon-indigo)' }} />
             <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-heading)' }}>{pattern.alert_type}</span>
-            <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'rgba(99,102,241,0.12)', color: '#818cf8' }}>
+            <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'rgba(99,102,241,0.12)', color: 'var(--neon-indigo)' }}>
               {pattern.incident_count} incidents
             </span>
             <span className="flex items-center gap-1" style={{ fontSize: 12, color: trend.color }}>
@@ -93,7 +93,7 @@ function PatternCard({ pattern }) {
               <div className="flex flex-wrap gap-1">
                 {pattern.incident_ids.slice(0, 5).map(id => (
                   <button key={id} onClick={() => navigate(`/incidents/${id}`)}
-                    style={{ padding: '3px 8px', borderRadius: 6, fontSize: 12, fontFamily: 'var(--font-mono)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', cursor: 'pointer' }}>
+                    style={{ padding: '3px 8px', borderRadius: 6, fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--glow-indigo)', color: 'var(--neon-indigo)', border: '1px solid rgba(99,102,241,0.2)', cursor: 'pointer' }}>
                     {id.slice(0, 8)}…
                   </button>
                 ))}
@@ -249,7 +249,7 @@ export default function PatternsPage() {
 
       {loading && (
         <div className="flex justify-center py-12">
-          <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--border)', borderTopColor: '#818cf8' }} />
+          <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--border)', borderTopColor: 'var(--neon-indigo)' }} />
         </div>
       )}
 
@@ -289,7 +289,7 @@ export default function PatternsPage() {
           </div>
           {anomalies.anomalies.length === 0 ? (
             <div className="rounded-xl py-12 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-              <Shield size={40} style={{ color: '#10b981', margin: '0 auto 12px', opacity: 0.6 }} />
+              <Shield size={40} style={{ color: 'var(--color-accent-green)', margin: '0 auto 12px', opacity: 0.6 }} />
               <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>All Clear</p>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>No anomalies detected in the current window</p>
             </div>
@@ -333,9 +333,9 @@ export default function PatternsPage() {
                   <>
                     <div style={{ padding: 16, borderRadius: 10, background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)' }}>
                       <div className="flex items-center gap-2 mb-2">
-                        <Cpu size={16} style={{ color: '#818cf8' }} />
+                        <Cpu size={16} style={{ color: 'var(--neon-indigo)' }} />
                         <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-heading)' }}>Top Prediction</span>
-                        <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: '#818cf8' }}>
+                        <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: 'var(--neon-indigo)' }}>
                           {(predictions.confidence * 100).toFixed(0)}% confidence
                         </span>
                       </div>
@@ -356,7 +356,7 @@ export default function PatternsPage() {
                         <div className="space-y-2">
                           {predictions.all_predictions.map((p, idx) => (
                             <div key={idx} className="flex items-center gap-3 rounded-lg" style={{ padding: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-                              <span style={{ width: 40, fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#818cf8', textAlign: 'center' }}>
+                              <span style={{ width: 40, fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--neon-indigo)', textAlign: 'center' }}>
                                 {(p.probability * 100).toFixed(0)}%
                               </span>
                               <div className="flex-1">
@@ -364,7 +364,7 @@ export default function PatternsPage() {
                                 <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.recommended_action} • {p.historical_count} occurrences</p>
                               </div>
                               <div style={{ width: 80, height: 6, borderRadius: 999, background: 'var(--bg-input)', overflow: 'hidden' }}>
-                                <div style={{ width: `${p.probability * 100}%`, height: '100%', borderRadius: 999, background: '#818cf8' }} />
+                                <div style={{ width: `${p.probability * 100}%`, height: '100%', borderRadius: 999, background: 'var(--neon-indigo)' }} />
                               </div>
                             </div>
                           ))}

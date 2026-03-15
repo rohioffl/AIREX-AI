@@ -101,7 +101,7 @@ export default function ReportsPage() {
         <button
           onClick={() => setShowCreateModal(true)}
           className="px-4 py-2 rounded-lg text-white flex items-center gap-2 transition-colors"
-          style={{ background: '#34d399', fontSize: 13 }}
+          style={{ background: 'var(--neon-green)', fontSize: 13 }}
         >
           <Plus size={16} />
           Create Report
@@ -120,7 +120,7 @@ export default function ReportsPage() {
           <button
             onClick={() => setShowCreateModal(true)}
             className="px-4 py-2 rounded-lg text-white"
-            style={{ background: '#34d399', fontSize: 13 }}
+            style={{ background: 'var(--neon-green)', fontSize: 13 }}
           >
             Create Report Template
           </button>
@@ -171,7 +171,7 @@ export default function ReportsPage() {
                   disabled={generatingReportId === report.id}
                   className="flex-1 px-3 py-1.5 rounded text-xs flex items-center justify-center gap-1 transition-colors"
                   style={{
-                    background: generatingReportId === report.id ? 'var(--text-muted)' : '#6366f1',
+                    background: generatingReportId === report.id ? 'var(--text-muted)' : 'var(--neon-indigo)',
                     color: 'white',
                     cursor: generatingReportId === report.id ? 'not-allowed' : 'pointer',
                   }}
@@ -191,7 +191,7 @@ export default function ReportsPage() {
                 <button
                   onClick={() => handleDelete(report.id)}
                   className="p-1.5 rounded hover:bg-input transition-colors"
-                  style={{ color: '#ef4444' }}
+                  style={{ color: 'var(--color-accent-red)' }}
                   title="Delete"
                 >
                   <Trash2 size={14} />
@@ -249,7 +249,7 @@ function ReportModal({ report, onClose, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="flex items-center gap-2 mb-4" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}>
-          <FileText size={18} style={{ color: '#6366f1' }} />
+          <FileText size={18} style={{ color: 'var(--neon-indigo)' }} />
           {report ? 'Edit Report Template' : 'Create Report Template'}
         </h3>
 
@@ -334,7 +334,7 @@ function ReportModal({ report, onClose, onSave }) {
             <button
               type="submit"
               className="px-4 py-2 rounded-lg text-white transition-colors"
-              style={{ background: '#34d399', fontSize: 13 }}
+              style={{ background: 'var(--neon-green)', fontSize: 13 }}
             >
               {report ? 'Update' : 'Create'}
             </button>

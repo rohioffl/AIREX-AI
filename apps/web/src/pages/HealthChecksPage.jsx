@@ -224,7 +224,7 @@ export default function HealthChecksPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(34,211,238,0.1))', border: '1px solid rgba(99,102,241,0.2)' }}>
-            <HeartPulse size={24} className="text-[#818cf8]" />
+            <HeartPulse size={24} className="text-[var(--neon-indigo)]" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-[var(--text-heading)]">Site24x7 Health Checks</h1>
@@ -265,7 +265,7 @@ export default function HealthChecksPage() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
               style={{
                 background: isActive ? 'rgba(99,102,241,0.15)' : 'transparent',
-                color: isActive ? '#818cf8' : 'var(--text-muted)',
+                color: isActive ? 'var(--neon-indigo)' : 'var(--text-muted)',
                 border: isActive ? '1px solid rgba(99,102,241,0.25)' : '1px solid transparent',
               }}
             >

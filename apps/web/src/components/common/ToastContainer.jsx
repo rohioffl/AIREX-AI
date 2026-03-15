@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, AlertOctagon, Bell, X, Clock } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useToasts } from '../../context/ToastContext'
 
 const STATUS_MAP = {
-  CRITICAL: { color: '#f43f5e', Icon: AlertOctagon },
-  HIGH:     { color: '#f59e0b', Icon: AlertTriangle },
-  MEDIUM:   { color: '#22d3ee', Icon: AlertTriangle },
-  LOW:      { color: '#6366f1', Icon: Bell },
+  CRITICAL: { color: 'var(--color-accent-red)', Icon: AlertOctagon },
+  HIGH:     { color: 'var(--color-accent-amber)', Icon: AlertTriangle },
+  MEDIUM:   { color: 'var(--neon-cyan)', Icon: AlertTriangle },
+  LOW:      { color: 'var(--neon-indigo)', Icon: Bell },
 }
 
 function Toast({ toast, onDismiss }) {
-  const [exiting, setExiting] = useState(false)
   const [progress, setProgress] = useState(100)
 
   const severity = toast.severity || 'MEDIUM'
@@ -25,8 +25,7 @@ function Toast({ toast, onDismiss }) {
 
   const handleDismiss = (e) => {
     e.stopPropagation()
-    setExiting(true)
-    setTimeout(() => onDismiss(toast.id), 300)
+    onDismiss(toast.id)
   }
 
   const formatTime = (ts) => {
@@ -35,7 +34,15 @@ function Toast({ toast, onDismiss }) {
   }
 
   return (
-    <div className={`toast ${exiting ? 'toast-exit' : ''}`} onClick={toast.onClick}>
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: 60, scale: 0.92 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 60, scale: 0.92 }}
+      transition={{ type: 'spring', stiffness: 480, damping: 38 }}
+      className="toast"
+      onClick={toast.onClick}
+    >
       <div className="toast-accent" style={{ background: color }} />
       <div className="toast-icon" style={{ color }}>
         <Icon size={18} />
@@ -54,20 +61,20 @@ function Toast({ toast, onDismiss }) {
       <div className="toast-progress">
         <div className="toast-progress-bar" style={{ width: `${progress}%`, background: color }} />
       </div>
-    </div>
+    </motion.div>
   )
 }
 
 export default function ToastContainer() {
   const { toasts, dismissToast } = useToasts()
 
-  if (toasts.length === 0) return null
-
   return (
     <div className="toast-container">
-      {toasts.map(t => (
-        <Toast key={t.id} toast={t} onDismiss={dismissToast} />
-      ))}
+      <AnimatePresence mode="popLayout">
+        {toasts.map(t => (
+          <Toast key={t.id} toast={t} onDismiss={dismissToast} />
+        ))}
+      </AnimatePresence>
     </div>
   )
 }
