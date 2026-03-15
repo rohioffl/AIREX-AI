@@ -1,7 +1,8 @@
 .tmp/
 tmp/
 profitgrid/
-
+memory/
+everything-claude-code
 # Local development commands (personal reference)
 commands.txt
 powers/
@@ -95,6 +96,9 @@ mcp-cli-config.json
 .venv/
 venv/
 env/
+**/.venv_*/
+services/airex-api/.venv_api/
+services/airex-worker/.venv_worker/
 
 # Terraform / deployment artifacts
 **/.terraform/
@@ -113,6 +117,7 @@ deployment/ecs/**/.rendered-task-definitions/
 backend.hcl
 deployment/ecs/.manual-deploy.env
 deployment/ecs/.manual-deploy-venv/
+deployment/ecs/terraform/environments/prod/tfplan
 
 # Local scaffolds / imported templates
 source-code/

@@ -6,9 +6,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
+
+from airex_core.core.rate_limit import auth_rate_limit
 
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
@@ -40,6 +42,7 @@ router = APIRouter()
     "/register",
     status_code=status.HTTP_201_CREATED,
     response_model=UserResponse,
+    dependencies=[Depends(auth_rate_limit)],
 )
 async def register(
     body: RegisterRequest,
@@ -82,7 +85,7 @@ async def register(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
 async def login(
     body: LoginRequest,
     session: TenantSession,
@@ -125,7 +128,7 @@ async def login(
     )
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
 async def refresh(
     body: RefreshRequest,
     session: TenantSession,
@@ -193,7 +196,7 @@ def _verify_google_id_token(token: str) -> dict[str, object]:
         ) from exc
 
 
-@router.post("/google", response_model=TokenResponse)
+@router.post("/google", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
 async def google_login(
     body: GoogleLoginRequest,
     session: TenantSession,
@@ -256,7 +259,7 @@ async def google_login(
     )
 
 
-@router.post("/accept-invitation-with-google", response_model=TokenResponse)
+@router.post("/accept-invitation-with-google", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
 async def accept_invitation_with_google(
     body: AcceptInvitationWithGoogleRequest,
     session: TenantSession,
@@ -363,7 +366,7 @@ class ResetPasswordRequest(BaseModel):
     email: str
 
 
-@router.post("/set-password", response_model=TokenResponse)
+@router.post("/set-password", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
 async def set_password(
     body: SetPasswordRequest,
     session: TenantSession,
@@ -426,7 +429,7 @@ async def set_password(
     )
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", dependencies=[Depends(auth_rate_limit)])
 async def reset_password(
     body: ResetPasswordRequest,
     session: TenantSession,
