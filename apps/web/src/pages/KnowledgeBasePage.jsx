@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, Search, Plus, Tag, Filter, X } from 'lucide-react'
 import { fetchKnowledgeBase, createKnowledgeBaseEntry, updateKnowledgeBaseEntry, deleteKnowledgeBaseEntry } from '../services/api'
@@ -18,11 +18,7 @@ export default function KnowledgeBasePage() {
   const [alertTypeFilter, setAlertTypeFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
 
-  useEffect(() => {
-    loadEntries()
-  }, [searchQuery, alertTypeFilter, categoryFilter])
-
-  const loadEntries = async () => {
+  const loadEntries = useCallback(async () => {
     try {
       setLoading(true)
       const params = {}
@@ -40,7 +36,11 @@ export default function KnowledgeBasePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [searchQuery, alertTypeFilter, categoryFilter, addToast])
+
+  useEffect(() => {
+    loadEntries()
+  }, [loadEntries])
 
   const handleCreate = async (formData) => {
     try {

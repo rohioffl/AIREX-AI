@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
@@ -73,8 +73,7 @@ export default function IncidentDetail() {
   const [rejectLoading, setRejectLoading] = useState(false)
   const [rejectError, setRejectError] = useState(null)
   const [showShortcutsModal, setShowShortcutsModal] = useState(false)
-  const [approveLoading, setApproveLoading] = useState(false)
-  const approveRef = useRef(null)
+  const [, setApproveLoading] = useState(false)
 
   // Keyboard shortcuts
   useKeyboardShortcuts({

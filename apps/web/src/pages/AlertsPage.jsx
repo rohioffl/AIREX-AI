@@ -9,9 +9,7 @@ import {
 import useIncidents from '../hooks/useIncidents'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import AlertRow from '../components/alert/AlertRow'
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
-import { useAuth } from '../context/AuthContext'
 import CreateIncidentModal from '../components/incident/CreateIncidentModal'
 import { exportIncidents, bulkApprove, bulkReject } from '../services/api'
 
@@ -45,7 +43,7 @@ export default function AlertsPage() {
     host_key: hostFilter || null
   })
   const [alertFilter, setAlertFilter] = useState('all')
-  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [, setShowCreateModal] = useState(false)
   const [sortBy, setSortBy] = useState('created_desc')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState({
@@ -59,10 +57,8 @@ export default function AlertsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedIncidents, setSelectedIncidents] = useState(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
-  const [showShortcutsModal, setShowShortcutsModal] = useState(false)
   const searchInputRef = useRef(null)
   const navigate = useNavigate()
-  const { user } = useAuth()
 
   // Update filters when URL search or host changes
   useEffect(() => {
