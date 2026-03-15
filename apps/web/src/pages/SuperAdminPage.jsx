@@ -32,9 +32,9 @@ const TABS = [
 
 function roleMeta(role) {
   const r = (role || 'operator').toLowerCase()
-  if (r === 'admin')  return { label: 'ADMIN',    color: '#c084fc', bg: 'rgba(192,132,252,0.12)' }
-  if (r === 'viewer') return { label: 'VIEWER',   color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' }
-  return                     { label: 'OPERATOR', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)' }
+  if (r === 'admin')  return { label: 'ADMIN',    color: 'var(--neon-purple)', bg: 'rgba(192,132,252,0.12)' }
+  if (r === 'viewer') return { label: 'VIEWER',   color: 'var(--text-muted)', bg: 'rgba(148,163,184,0.12)' }
+  return                     { label: 'OPERATOR', color: 'var(--neon-cyan)', bg: 'rgba(56,189,248,0.12)' }
 }
 
 function RoleBadge({ role }) {
@@ -46,7 +46,7 @@ function RoleBadge({ role }) {
   )
 }
 
-function StatCard({ label, value, color = '#818cf8', icon: Icon, sub }) {
+function StatCard({ label, value, color = 'var(--neon-indigo)', icon: Icon, sub }) {
   return (
     <div className="glass rounded-xl p-4 flex flex-col gap-1">
       <div className="flex items-center justify-between mb-1">
@@ -121,9 +121,9 @@ function OverviewTab({ onNavigate }) {
               {loading ? (
                 <div className="w-4 h-4 rounded-full animate-pulse" style={{ background: 'var(--border)' }} />
               ) : s.ok ? (
-                <CheckCircle size={16} style={{ color: '#34d399', flexShrink: 0 }} />
+                <CheckCircle size={16} style={{ color: 'var(--neon-green)', flexShrink: 0 }} />
               ) : (
-                <AlertTriangle size={16} style={{ color: '#fb923c', flexShrink: 0 }} />
+                <AlertTriangle size={16} style={{ color: 'var(--brand-orange)', flexShrink: 0 }} />
               )}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }}>{s.label}</div>
@@ -136,10 +136,10 @@ function OverviewTab({ onNavigate }) {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Users"    value={users.length}                              color="#818cf8" icon={Users}     sub={`${users.filter(u=>u.is_active!==false).length} active`} />
-        <StatCard label="Tenants"        value={tenants.length}                             color="#22d3ee" icon={Building2} sub="Configured" />
-        <StatCard label="Total Servers"  value={tenants.reduce((s,t)=>s+(t.server_count||0),0)} color="#34d399" icon={Server}    sub="Across all tenants" />
-        <StatCard label="Active Alerts"  value={metrics?.active_alerts ?? '—'}             color="#fb923c" icon={AlertTriangle} sub={`${metrics?.critical_alerts ?? 0} critical`} />
+        <StatCard label="Total Users"    value={users.length}                              color="var(--neon-indigo)" icon={Users}     sub={`${users.filter(u=>u.is_active!==false).length} active`} />
+        <StatCard label="Tenants"        value={tenants.length}                             color="var(--neon-cyan)" icon={Building2} sub="Configured" />
+        <StatCard label="Total Servers"  value={tenants.reduce((s,t)=>s+(t.server_count||0),0)} color="var(--neon-green)" icon={Server}    sub="Across all tenants" />
+        <StatCard label="Active Alerts"  value={metrics?.active_alerts ?? '—'}             color="var(--brand-orange)" icon={AlertTriangle} sub={`${metrics?.critical_alerts ?? 0} critical`} />
       </div>
 
       {/* Quick Navigation */}
@@ -152,7 +152,7 @@ function OverviewTab({ onNavigate }) {
             style={{ border: '1px solid var(--border)', cursor: 'pointer' }}
           >
             <div className="p-2 rounded-lg" style={{ background: 'rgba(99,102,241,0.12)' }}>
-              <tab.icon size={16} style={{ color: '#818cf8' }} />
+              <tab.icon size={16} style={{ color: 'var(--neon-indigo)' }} />
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{tab.label}</div>
@@ -260,10 +260,10 @@ function UsersTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Users"    value={stats.total}   color="#818cf8" icon={Users} />
-        <StatCard label="Active"         value={stats.active}  color="#34d399" icon={CheckCircle} />
-        <StatCard label="Admins"         value={stats.admins}  color="#c084fc" icon={ShieldCheck} />
-        <StatCard label="Pending Invite" value={stats.pending} color="#fbbf24" icon={Clock} />
+        <StatCard label="Total Users"    value={stats.total}   color="var(--neon-indigo)" icon={Users} />
+        <StatCard label="Active"         value={stats.active}  color="var(--neon-green)" icon={CheckCircle} />
+        <StatCard label="Admins"         value={stats.admins}  color="var(--neon-purple)" icon={ShieldCheck} />
+        <StatCard label="Pending Invite" value={stats.pending} color="var(--color-accent-amber)" icon={Clock} />
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -289,7 +289,7 @@ function UsersTab() {
           <option value="operator">Operator</option>
           <option value="viewer">Viewer</option>
         </select>
-        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: 'var(--gradient-primary)' }}>
           <Plus size={14} /> Add User
         </button>
         <button onClick={load} className="p-2 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
@@ -323,7 +323,7 @@ function UsersTab() {
                   <td style={{ padding: '10px 16px' }}>
                     <span style={{
                       background: u.is_active !== false ? 'rgba(52,211,153,0.12)' : 'rgba(244,63,94,0.12)',
-                      color: u.is_active !== false ? '#34d399' : '#fb7185',
+                      color: u.is_active !== false ? 'var(--neon-green)' : 'var(--color-accent-red)',
                       borderRadius: 999, padding: '3px 9px', fontSize: 11, fontWeight: 700,
                     }}>
                       {u.is_active !== false ? 'Active' : 'Inactive'}
@@ -333,7 +333,7 @@ function UsersTab() {
                     {u.invitation_status ? (
                       <span style={{
                         background: u.invitation_status === 'accepted' ? 'rgba(52,211,153,0.12)' : 'rgba(251,191,36,0.12)',
-                        color: u.invitation_status === 'accepted' ? '#34d399' : '#fbbf24',
+                        color: u.invitation_status === 'accepted' ? 'var(--neon-green)' : 'var(--color-accent-amber)',
                         borderRadius: 999, padding: '3px 9px', fontSize: 11, fontWeight: 700,
                       }}>
                         {u.invitation_status}
@@ -345,14 +345,14 @@ function UsersTab() {
                   </td>
                   <td style={{ padding: '10px 16px' }}>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setEditingUser(u)} className="p-1.5 rounded transition-colors" style={{ color: '#818cf8', background: 'rgba(99,102,241,0.1)' }} title="Edit">
+                      <button onClick={() => setEditingUser(u)} className="p-1.5 rounded transition-colors" style={{ color: 'var(--neon-indigo)', background: 'var(--glow-indigo)' }} title="Edit">
                         <Edit size={13} />
                       </button>
-                      <button onClick={() => handleToggleActive(u)} className="p-1.5 rounded transition-colors" style={{ color: u.is_active !== false ? '#fb7185' : '#34d399', background: 'var(--bg-input)' }} title={u.is_active !== false ? 'Deactivate' : 'Activate'}>
+                      <button onClick={() => handleToggleActive(u)} className="p-1.5 rounded transition-colors" style={{ color: u.is_active !== false ? 'var(--color-accent-red)' : 'var(--neon-green)', background: 'var(--bg-input)' }} title={u.is_active !== false ? 'Deactivate' : 'Activate'}>
                         {u.is_active !== false ? <XCircle size={13} /> : <CheckCircle size={13} />}
                       </button>
                       {u.id !== currentUser?.user_id && (
-                        <button onClick={() => handleDelete(u.id, u.email)} className="p-1.5 rounded transition-colors" style={{ color: '#fb7185', background: 'rgba(244,63,94,0.1)' }} title="Deactivate user">
+                        <button onClick={() => handleDelete(u.id, u.email)} className="p-1.5 rounded transition-colors" style={{ color: 'var(--color-accent-red)', background: 'var(--glow-rose)' }} title="Deactivate user">
                           <Trash2 size={13} />
                         </button>
                       )}
@@ -428,7 +428,7 @@ function UserModal({ user, onClose, onSaved }) {
         )}
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
             {saving ? 'Saving…' : user ? 'Save Changes' : 'Create & Invite'}
           </button>
         </div>
@@ -465,9 +465,9 @@ function TenantsTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard label="Total Tenants"   value={tenants.length}                                         color="#818cf8" icon={Building2} />
-        <StatCard label="Cloud Providers" value={[...new Set(tenants.map(t => t.cloud))].filter(Boolean).length} color="#22d3ee" icon={Globe} />
-        <StatCard label="Total Servers"   value={tenants.reduce((s, t) => s + (t.server_count || 0), 0)} color="#34d399" icon={Server} />
+        <StatCard label="Total Tenants"   value={tenants.length}                                         color="var(--neon-indigo)" icon={Building2} />
+        <StatCard label="Cloud Providers" value={[...new Set(tenants.map(t => t.cloud))].filter(Boolean).length} color="var(--neon-cyan)" icon={Globe} />
+        <StatCard label="Total Servers"   value={tenants.reduce((s, t) => s + (t.server_count || 0), 0)} color="var(--neon-green)" icon={Server} />
       </div>
 
       <div className="flex justify-between items-center">
@@ -476,7 +476,7 @@ function TenantsTab() {
           <button onClick={load} className="p-2 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <RefreshCcw size={14} style={{ color: 'var(--text-muted)' }} />
           </button>
-          <button onClick={() => setShowOnboard(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+          <button onClick={() => setShowOnboard(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: 'var(--gradient-primary)' }}>
             <Plus size={14} /> Onboard Tenant
           </button>
         </div>
@@ -491,8 +491,8 @@ function TenantsTab() {
           {tenants.map(t => (
             <div key={t.name} className="glass rounded-xl p-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.15)' }}>
-                  <Building2 size={18} style={{ color: '#818cf8' }} />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--glow-indigo)' }}>
+                  <Building2 size={18} style={{ color: 'var(--neon-indigo)' }} />
                 </div>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>{t.display_name}</div>
@@ -504,12 +504,12 @@ function TenantsTab() {
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#22d3ee', fontFamily: 'var(--font-mono)' }}>{t.server_count ?? 0}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--neon-cyan)', fontFamily: 'var(--font-mono)' }}>{t.server_count ?? 0}</div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>servers</div>
                 </div>
                 <span style={{
                   background: t.cloud === 'gcp' ? 'rgba(52,211,153,0.12)' : 'rgba(251,191,36,0.12)',
-                  color: t.cloud === 'gcp' ? '#34d399' : '#fbbf24',
+                  color: t.cloud === 'gcp' ? 'var(--neon-green)' : 'var(--color-accent-amber)',
                   borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
                 }}>
                   {t.cloud || 'unknown'}
@@ -588,14 +588,14 @@ function TenantOnboardModal({ onClose, onSaved }) {
         {configSnippet && (
           <div>
             <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Config Snippet (add to tenants.yaml)</label>
-            <pre style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', color: '#34d399', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+            <pre style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--neon-green)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
               {configSnippet}
             </pre>
           </div>
         )}
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
             {saving ? 'Generating…' : 'Generate Config'}
           </button>
         </div>
@@ -664,7 +664,7 @@ function SettingsTab() {
             </div>
             <button onClick={() => setSettings(s => ({ ...s, auto_approve: !s?.auto_approve }))} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
               {settings?.auto_approve
-                ? <ToggleRight size={32} style={{ color: '#10b981' }} />
+                ? <ToggleRight size={32} style={{ color: 'var(--color-accent-green)' }} />
                 : <ToggleLeft  size={32} style={{ color: 'var(--text-muted)' }} />}
             </button>
           </div>
@@ -710,7 +710,7 @@ function SettingsTab() {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving || !settings} className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+        <button onClick={handleSave} disabled={saving || !settings} className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60 transition-all hover:-translate-y-0.5" style={{ background: 'var(--gradient-primary)' }}>
           <Save size={14} />
           {saving ? 'Saving…' : 'Save Settings'}
         </button>
@@ -758,7 +758,7 @@ function ModelsTab() {
       <div className="glass rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 rounded-lg" style={{ background: 'rgba(167,139,250,0.12)' }}>
-            <Brain size={16} style={{ color: '#a78bfa' }} />
+            <Brain size={16} style={{ color: 'var(--neon-purple)' }} />
           </div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>LLM Provider & Models</div>
@@ -787,7 +787,7 @@ function ModelsTab() {
       <div className="glass rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 rounded-lg" style={{ background: 'rgba(251,146,60,0.12)' }}>
-            <Activity size={16} style={{ color: '#fb923c' }} />
+            <Activity size={16} style={{ color: 'var(--brand-orange)' }} />
           </div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Circuit Breaker</div>
@@ -811,8 +811,8 @@ function ModelsTab() {
         <SectionHeader title="Model Status" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
-            { label: 'Primary Model',  value: settings?.llm_primary_model  || 'gemini-2.0-flash',      color: '#34d399', status: 'Active' },
-            { label: 'Fallback Model', value: settings?.llm_fallback_model || 'gemini-2.0-flash-lite', color: '#fbbf24', status: 'Standby' },
+            { label: 'Primary Model',  value: settings?.llm_primary_model  || 'gemini-2.0-flash',      color: 'var(--neon-green)', status: 'Active' },
+            { label: 'Fallback Model', value: settings?.llm_fallback_model || 'gemini-2.0-flash-lite', color: 'var(--color-accent-amber)', status: 'Standby' },
           ].map(m => (
             <div key={m.label} className="flex items-center gap-4 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
               <Cpu size={16} style={{ color: m.color }} />
@@ -832,7 +832,7 @@ function ModelsTab() {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving || !settings} className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60 transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+        <button onClick={handleSave} disabled={saving || !settings} className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60 transition-all hover:-translate-y-0.5" style={{ background: 'var(--gradient-primary)' }}>
           <Save size={14} />
           {saving ? 'Saving…' : 'Save Model Config'}
         </button>
@@ -854,7 +854,7 @@ export default function SuperAdminPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <div className="p-3 rounded-xl" style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1))', border: '1px solid rgba(99,102,241,0.2)' }}>
-          <ShieldCheck size={22} style={{ color: '#818cf8' }} />
+          <ShieldCheck size={22} style={{ color: 'var(--neon-indigo)' }} />
         </div>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>Super Admin</h1>

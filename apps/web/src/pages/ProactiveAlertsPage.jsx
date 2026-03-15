@@ -124,16 +124,16 @@ export default function ProactiveAlertsPage() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            <Radar size={24} style={{ color: '#22d3ee' }} />
+            <Radar size={24} style={{ color: 'var(--neon-cyan)' }} />
             Proactive Alerts
             {counts.all > 0 && (
               <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-bold"
-                style={{ background: counts.critical > 0 ? 'rgba(244,63,94,0.15)' : 'rgba(34,211,238,0.15)', color: counts.critical > 0 ? '#fb7185' : '#22d3ee' }}>
+                style={{ background: counts.critical > 0 ? 'rgba(244,63,94,0.15)' : 'rgba(34,211,238,0.15)', color: counts.critical > 0 ? 'var(--color-accent-red)' : 'var(--neon-cyan)' }}>
                 {counts.all}
               </span>
             )}
-            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? '#10b981' : '#f43f5e' }}>
-              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: '#10b981', opacity: 0.3 }} />}
+            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? 'var(--color-accent-green)' : 'var(--color-accent-red)' }}>
+              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: 'var(--color-accent-green)', opacity: 0.3 }} />}
             </span>
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -149,7 +149,7 @@ export default function ProactiveAlertsPage() {
             style={{
               background: 'rgba(34,211,238,0.08)',
               border: '1px solid rgba(34,211,238,0.2)',
-              color: '#22d3ee',
+              color: 'var(--neon-cyan)',
               fontSize: 13,
               fontWeight: 600,
             }}
@@ -199,7 +199,7 @@ export default function ProactiveAlertsPage() {
             className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all"
             style={{
               background: alertFilter === f.key ? 'rgba(34,211,238,0.1)' : 'var(--bg-elevated)',
-              color: alertFilter === f.key ? '#22d3ee' : 'var(--text-secondary)',
+              color: alertFilter === f.key ? 'var(--neon-cyan)' : 'var(--text-secondary)',
               border: `1px solid ${alertFilter === f.key ? 'rgba(34,211,238,0.3)' : 'var(--border)'}`,
               fontSize: 13,
               fontWeight: 600,
@@ -249,7 +249,7 @@ export default function ProactiveAlertsPage() {
 
       {/* Error */}
       {error && (
-        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244,63,94,0.03)', fontSize: 14, color: '#fb7185' }}>
+        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid var(--color-accent-red)', background: 'var(--glow-rose-subtle)', fontSize: 14, color: 'var(--color-accent-red)' }}>
           <span style={{ fontWeight: 700, marginRight: 8 }}>Error:</span>{error}
         </div>
       )}
@@ -258,7 +258,7 @@ export default function ProactiveAlertsPage() {
       {!loading && !error && (
         visibleAlerts.length === 0 ? (
           <div className="glass rounded-xl py-20 text-center">
-            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4 hover-lift" style={{ background: 'rgba(34,211,238,0.1)', color: '#22d3ee' }}>
+            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full mb-4 hover-lift" style={{ background: 'rgba(34,211,238,0.1)', color: 'var(--neon-cyan)' }}>
               <ShieldAlert size={24} />
             </div>
             <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-heading)' }}>No proactive alerts</p>

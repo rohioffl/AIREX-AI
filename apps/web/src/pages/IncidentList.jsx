@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell,
   AlertOctagon,
@@ -65,8 +66,8 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
             {title}
-            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? '#10b981' : '#f43f5e' }}>
-              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: '#10b981', opacity: 0.3 }} />}
+            <span className="relative w-2 h-2 rounded-full" style={{ background: connected ? 'var(--color-accent-green)' : 'var(--color-accent-red)' }}>
+              {connected && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: 'var(--color-accent-green)', opacity: 0.3 }} />}
             </span>
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -97,10 +98,10 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Quick Stats</span>
           <div className="flex-1 flex flex-col gap-3">
             {[
-              { label: 'MTTR', value: '—', color: '#10b981' }, // Will be populated from metrics API
-              { label: 'Avg Investigation', value: '—', color: '#6366f1' },
-              { label: 'AI Confidence', value: '—', color: '#a855f7' },
-              { label: 'Auto-resolved', value: `${stats.resolved}`, color: '#22d3ee' },
+              { label: 'MTTR', value: '—', color: 'var(--color-accent-green)' }, // Will be populated from metrics API
+              { label: 'Avg Investigation', value: '—', color: 'var(--neon-indigo)' },
+              { label: 'AI Confidence', value: '—', color: 'var(--neon-purple)' },
+              { label: 'Auto-resolved', value: `${stats.resolved}`, color: 'var(--neon-cyan)' },
             ].map(s => (
               <div key={s.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{s.label}</span>
@@ -116,7 +117,7 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
                 className="flex-1 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all"
                 style={{
                   background: graphType === t ? 'rgba(99,102,241,0.1)' : 'var(--bg-input)',
-                  color: graphType === t ? '#818cf8' : 'var(--text-muted)',
+                  color: graphType === t ? 'var(--neon-indigo)' : 'var(--text-muted)',
                   border: `1px solid ${graphType === t ? 'rgba(99,102,241,0.2)' : 'var(--border)'}`,
                 }}
               >
@@ -192,7 +193,7 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
 
       {/* Error */}
       {error && (
-        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244,63,94,0.03)', fontSize: 14, color: '#fb7185' }}>
+        <div className="glass rounded-xl p-4" style={{ borderLeft: '4px solid var(--color-accent-red)', background: 'var(--glow-rose-subtle)', fontSize: 14, color: 'var(--color-accent-red)' }}>
           <span style={{ fontWeight: 700, marginRight: 8 }}>Error:</span>{error}
         </div>
       )}
@@ -211,24 +212,42 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
           <>
             {view === 'grid' ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {incidents.map((inc, i) => (
-                  <div key={inc.id} className="animate-fade-in slide-down" style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'both' }}>
-                    <IncidentCard incident={inc} />
-                  </div>
-                ))}
+                <AnimatePresence mode="popLayout">
+                  {incidents.map((inc, i) => (
+                    <motion.div
+                      key={inc.id}
+                      layout
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.28, ease: 'easeOut' }}
+                    >
+                      <IncidentCard incident={inc} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             ) : (
               <div className="space-y-3">
-                {incidents.map((inc, i) => (
-                  <div key={inc.id} className="animate-fade-in slide-down" style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'both' }}>
-                    <IncidentListRow incident={inc} />
-                  </div>
-                ))}
+                <AnimatePresence mode="popLayout">
+                  {incidents.map((inc, i) => (
+                    <motion.div
+                      key={inc.id}
+                      layout
+                      initial={{ opacity: 0, x: -16 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 16, scale: 0.98 }}
+                      transition={{ delay: Math.min(i * 0.035, 0.25), duration: 0.25, ease: 'easeOut' }}
+                    >
+                      <IncidentListRow incident={inc} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
             {hasMore && (
               <div className="flex justify-center pt-4">
-                <button onClick={loadMore} className="px-6 py-2.5 rounded-xl font-semibold text-sm transition-all hover-lift" style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)' }}>
+                <button onClick={loadMore} className="px-6 py-2.5 rounded-xl font-semibold text-sm transition-all hover-lift" style={{ background: 'var(--glow-indigo)', color: 'var(--neon-indigo)', border: '1px solid rgba(99,102,241,0.2)' }}>
                   Load More Incidents
                 </button>
               </div>
@@ -266,10 +285,10 @@ function Select({ value, onChange, options, placeholder }) {
 }
 
 const SEVERITY_SHADES = {
-  CRITICAL: '#f43f5e',
-  HIGH: '#f97316',
-  MEDIUM: '#f59e0b',
-  LOW: '#10b981',
+  CRITICAL: 'var(--color-accent-red)',
+  HIGH: 'var(--brand-orange)',
+  MEDIUM: 'var(--color-accent-amber)',
+  LOW: 'var(--color-accent-green)',
 }
 
 function IncidentListRow({ incident }) {
@@ -282,7 +301,7 @@ function IncidentListRow({ incident }) {
   const manualReason = typeof meta._manual_review_reason === 'string' ? meta._manual_review_reason.trim() : ''
   const manualReview = Boolean(meta._manual_review_required || manualReason)
   const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
-  const accent = manualReview ? '#f87171' : (SEVERITY_SHADES[incident.severity] || '#f97316')
+  const accent = manualReview ? 'var(--color-accent-red)' : (SEVERITY_SHADES[incident.severity] || 'var(--brand-orange)')
 
   return (
     <Link
@@ -311,7 +330,7 @@ function IncidentListRow({ incident }) {
               </span>
             )}
             {manualReview && (
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: '#f87171', background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.25)' }}>
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: 'var(--color-accent-red)', background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.25)' }}>
                 Manual Review
               </span>
             )}
@@ -330,24 +349,24 @@ function IncidentListRow({ incident }) {
               </span>
             )}
             {unstable && (
-              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', color: '#fbbf24' }}>
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: 'var(--color-accent-amber)' }}>
                 <AlertTriangle size={10} /> flapping
               </span>
             )}
             {meta.recommendation?.confidence && (
-              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', color: '#38bdf8' }}>
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'var(--glow-sky)', border: '1px solid rgba(56,189,248,0.2)', color: 'var(--neon-cyan)' }}>
                 <GaugeCircle size={10} /> {Math.round(meta.recommendation.confidence * 100)}% AI
               </span>
             )}
             {meta.recommendation?.proposed_action && (
-              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#fb7185' }}>
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: 'var(--color-accent-red)' }}>
                 <Activity size={10} /> {meta.recommendation.proposed_action}
               </span>
             )}
           </div>
           {manualReason && (
             <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              <span style={{ color: '#f87171', fontWeight: 600 }}>Operator note:</span> {manualReason}
+              <span style={{ color: 'var(--color-accent-red)', fontWeight: 600 }}>Operator note:</span> {manualReason}
               {manualAt && <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>({manualAt})</span>}
             </p>
           )}

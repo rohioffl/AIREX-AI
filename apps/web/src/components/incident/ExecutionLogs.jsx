@@ -26,13 +26,13 @@ export default function ExecutionLogs({ executions, state, liveLogs }) {
         <div key={exec.id} className="glass rounded-lg overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5" style={{ background: 'var(--bg-input)' }}>
             <div className="flex items-center gap-2">
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#818cf8' }}>{exec.action_type}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neon-indigo)' }}>{exec.action_type}</span>
               <span className="px-1.5 py-0.5 rounded" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-input)' }}>
                 #{exec.attempt}
               </span>
             </div>
             <div className="flex items-center gap-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-              <span style={{ color: exec.status === 'COMPLETED' ? '#34d399' : exec.status === 'FAILED' ? '#fb7185' : '#38bdf8' }}>
+              <span style={{ color: exec.status === 'COMPLETED' ? 'var(--neon-green)' : exec.status === 'FAILED' ? 'var(--color-accent-red)' : '#38bdf8' }}>
                 {exec.status}
               </span>
               {exec.duration_seconds != null && (
@@ -49,8 +49,8 @@ export default function ExecutionLogs({ executions, state, liveLogs }) {
       {liveLogs && liveLogs.length > 0 && (
         <div className="glass rounded-lg overflow-hidden" style={{ borderLeft: '2px solid rgba(16,185,129,0.5)' }}>
           <div className="px-4 py-2 flex items-center gap-2" style={{ background: 'rgba(16,185,129,0.03)' }}>
-            <span className="h-2 w-2 rounded-full animate-pulse" style={{ background: '#34d399' }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Live</span>
+            <span className="h-2 w-2 rounded-full animate-pulse" style={{ background: 'var(--neon-green)' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--neon-green)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Live</span>
           </div>
           <Terminal content={liveLogs.join('\n')} hostname="live-exec" maxHeight={200} />
           <div ref={logsEndRef} />

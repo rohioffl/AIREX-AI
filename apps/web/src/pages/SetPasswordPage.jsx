@@ -175,7 +175,7 @@ export default function SetPasswordPage() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
         <div className="glass rounded-xl p-8 max-w-md w-full text-center">
-          <CheckCircle size={48} className="mx-auto mb-4" style={{ color: '#10b981' }} />
+          <CheckCircle size={48} className="mx-auto mb-4" style={{ color: 'var(--color-accent-green)' }} />
           <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-heading)' }}>
             Password Set Successfully!
           </h2>
@@ -191,14 +191,14 @@ export default function SetPasswordPage() {
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
       <div className="glass rounded-xl p-8 max-w-md w-full">
         <div className="flex items-center gap-3 mb-6">
-          <Lock size={24} style={{ color: '#6366f1' }} />
+          <Lock size={24} style={{ color: 'var(--neon-indigo)' }} />
           <h2 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>
             Set Your Password
           </h2>
         </div>
         
         {error && (
-          <div className="mb-4 p-3 rounded-lg flex items-center gap-2" style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)' }}>
+          <div className="mb-4 p-3 rounded-lg flex items-center gap-2" style={{ background: 'var(--glow-rose)', border: '1px solid rgba(244,63,94,0.3)' }}>
             <XCircle size={16} className="text-red-500" />
             <p className="text-sm text-red-500">{error}</p>
           </div>
@@ -262,7 +262,7 @@ export default function SetPasswordPage() {
             type="submit"
             disabled={loading || !token}
             className="w-full px-4 py-2 rounded-lg transition-all disabled:opacity-50"
-            style={{ fontSize: 14, fontWeight: 600, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+            style={{ fontSize: 14, fontWeight: 600, color: '#fff', background: 'var(--gradient-primary)' }}
           >
             {loading ? 'Setting Password...' : 'Set Password'}
           </button>

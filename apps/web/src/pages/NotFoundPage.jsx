@@ -5,8 +5,8 @@ export default function NotFoundPage() {
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
       <div className="text-center max-w-md px-6">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6" style={{ background: 'rgba(99, 102, 241, 0.1)' }}>
-          <AlertTriangle size={40} style={{ color: '#6366f1' }} />
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6" style={{ background: 'var(--glow-indigo)' }}>
+          <AlertTriangle size={40} style={{ color: 'var(--neon-indigo)' }} />
         </div>
         
         <h1 className="text-4xl font-bold mb-3" style={{ color: 'var(--text-heading)' }}>
@@ -24,7 +24,7 @@ export default function NotFoundPage() {
             to="/dashboard"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-all"
             style={{ 
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', 
+              background: 'var(--gradient-primary)', 
               color: '#fff',
               fontSize: 14,
               fontWeight: 600

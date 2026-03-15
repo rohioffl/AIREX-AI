@@ -109,7 +109,7 @@ export default function AlertRow({
             }}
             onClick={(e) => e.stopPropagation()}
             className="w-4 h-4 rounded cursor-pointer"
-            style={{ accentColor: '#6366f1' }}
+            style={{ accentColor: 'var(--neon-indigo)' }}
           />
         </div>
       )}
@@ -122,11 +122,11 @@ export default function AlertRow({
         <div className="flex-shrink-0">
           {alert.severity === 'CRITICAL' ? (
             <div className="relative">
-              <AlertOctagon size={20} style={{ color: '#fb7185' }} />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: '#f43f5e', animation: 'pulse 2s infinite' }} />
+              <AlertOctagon size={20} style={{ color: 'var(--color-accent-red)' }} />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: 'var(--color-accent-red)', animation: 'pulse 2s infinite' }} />
             </div>
           ) : alert.severity === 'HIGH' ? (
-            <AlertTriangle size={20} style={{ color: '#fb923c' }} />
+            <AlertTriangle size={20} style={{ color: 'var(--brand-orange)' }} />
           ) : (
             <Bell size={20} style={{ color: 'var(--text-muted)' }} />
           )}
@@ -141,7 +141,7 @@ export default function AlertRow({
             </span>
             {(!badgeLabel && needsAction) && (
               <span className="flex-shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', fontSize: 10, fontWeight: 700 }}>
+                style={{ background: 'rgba(251,191,36,0.15)', color: 'var(--color-accent-amber)', fontSize: 10, fontWeight: 700 }}>
                 <Zap size={9} />
                 ACTION
               </span>
@@ -149,7 +149,7 @@ export default function AlertRow({
             {manualReview && !badgeLabel && (
               <span
                 className="flex-shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171', fontSize: 10, fontWeight: 700 }}
+                style={{ background: 'rgba(248,113,113,0.15)', color: 'var(--color-accent-red)', fontSize: 10, fontWeight: 700 }}
               >
                 Manual Review
               </span>
@@ -172,7 +172,7 @@ export default function AlertRow({
           
           {/* Compact Info Row - All on one line */}
           <div className="flex items-center gap-2.5 flex-wrap" style={{ fontSize: 11 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', color: '#818cf8', fontWeight: 600 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--neon-indigo)', fontWeight: 600 }}>
               {truncateId(alert.id)}
             </span>
             <span style={{ 
@@ -228,7 +228,7 @@ export default function AlertRow({
           {manualNote && (
             <div className="mt-1.5 p-1.5 rounded" style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.1)' }}>
               <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                <span style={{ color: '#f87171', fontWeight: 600 }}>Note:</span> {manualNote}
+                <span style={{ color: 'var(--color-accent-red)', fontWeight: 600 }}>Note:</span> {manualNote}
                 {manualAt && (
                   <span style={{ color: 'var(--text-muted)', marginLeft: 4, fontSize: 10 }}>
                     ({formatRelativeTime(manualAt)})

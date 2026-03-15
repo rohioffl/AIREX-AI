@@ -10,9 +10,9 @@ const CONFIGS = {
     iconClass: 'animate-spin',
     iconBg: 'rgba(34,211,238,0.1)',
     iconBorder: 'rgba(34,211,238,0.2)',
-    iconColor: '#22d3ee',
+    iconColor: 'var(--neon-cyan)',
     title: 'Verifying Fix',
-    titleColor: '#22d3ee',
+    titleColor: 'var(--neon-cyan)',
     desc: 'Running post-execution health checks...',
   },
   RESOLVED: {
@@ -22,9 +22,9 @@ const CONFIGS = {
     iconClass: '',
     iconBg: 'rgba(16,185,129,0.1)',
     iconBorder: 'rgba(16,185,129,0.2)',
-    iconColor: '#34d399',
+    iconColor: 'var(--color-accent-green)',
     title: 'Incident Resolved',
-    titleColor: '#34d399',
+    titleColor: 'var(--color-accent-green)',
     desc: 'Verification passed. Normal operations restored.',
   },
   FAILED_VERIFICATION: {
@@ -34,9 +34,9 @@ const CONFIGS = {
     iconClass: '',
     iconBg: 'rgba(244,63,94,0.1)',
     iconBorder: 'rgba(244,63,94,0.2)',
-    iconColor: '#fb7185',
+    iconColor: 'var(--color-accent-red)',
     title: 'Verification Failed',
-    titleColor: '#fb7185',
+    titleColor: 'var(--color-accent-red)',
     desc: 'System still reporting issues. Manual intervention may be required.',
   },
 }
@@ -77,7 +77,7 @@ export default function VerificationResult({ state, incident }) {
                 className="flex items-start gap-2 py-1"
                 style={{ fontSize: 12, color: 'var(--text-secondary)' }}
               >
-                <span style={{ color: isResolved ? '#10b981' : c.iconColor, flexShrink: 0, marginTop: 2 }}>
+                <span style={{ color: isResolved ? 'var(--color-accent-green)' : c.iconColor, flexShrink: 0, marginTop: 2 }}>
                   {isResolved ? '\u2713' : '\u25CB'}
                 </span>
                 <span>{criterion}</span>

@@ -74,13 +74,13 @@ function roleMeta(role) {
 
 function statusMeta(isActive) {
   return isActive
-    ? badgeStyle('rgba(16, 185, 129, 0.16)', '#34d399')
-    : badgeStyle('rgba(244, 63, 94, 0.16)', '#fb7185')
+    ? badgeStyle('rgba(16, 185, 129, 0.16)', 'var(--neon-green)')
+    : badgeStyle('rgba(244, 63, 94, 0.16)', 'var(--color-accent-red)')
 }
 
 function invitationMeta(status) {
-  if (status === 'accepted') return badgeStyle('rgba(16, 185, 129, 0.16)', '#34d399')
-  if (status === 'expired') return badgeStyle('rgba(244, 63, 94, 0.16)', '#fb7185')
+  if (status === 'accepted') return badgeStyle('rgba(16, 185, 129, 0.16)', 'var(--neon-green)')
+  if (status === 'expired') return badgeStyle('rgba(244, 63, 94, 0.16)', 'var(--color-accent-red)')
   return badgeStyle('rgba(245, 158, 11, 0.16)', '#fbbf24')
 }
 
@@ -269,7 +269,7 @@ export default function UserManagementPage() {
             onClick={() => setShowCreateModal(true)}
             className="inline-flex min-h-11 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition"
             style={{
-              background: isDark ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'linear-gradient(135deg,#2563eb,#06b6d4)',
+              background: isDark ? 'var(--gradient-primary)' : 'linear-gradient(135deg,#2563eb,#06b6d4)',
               boxShadow: isDark ? '0 10px 24px rgba(99,102,241,0.35)' : '0 8px 18px rgba(37,99,235,0.28)',
             }}
           >
@@ -335,7 +335,7 @@ export default function UserManagementPage() {
         {selectedUsers.size > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg p-3" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
             <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{selectedUsers.size} selected</span>
-            <button onClick={handleBulkActivate} className="rounded-md px-3 py-1.5 text-xs font-semibold text-white" style={{ background: '#059669' }}>Activate</button>
+            <button onClick={handleBulkActivate} className="rounded-md px-3 py-1.5 text-xs font-semibold text-white" style={{ background: 'var(--neon-green)' }}>Activate</button>
             <button onClick={handleBulkDeactivate} className="rounded-md px-3 py-1.5 text-xs font-semibold text-white" style={{ background: '#dc2626' }}>Deactivate</button>
             <button
               onClick={() => setSelectedUsers(new Set())}
@@ -446,7 +446,7 @@ export default function UserManagementPage() {
                                 }
                               }}
                               className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold"
-                              style={{ background: 'rgba(56,189,248,0.16)', color: '#38bdf8' }}
+                              style={{ background: 'var(--glow-sky)', color: 'var(--neon-cyan)' }}
                               title="Resend invitation"
                             >
                               <Mail size={12} /> Resend
@@ -466,7 +466,7 @@ export default function UserManagementPage() {
                             <button
                               onClick={() => handleDelete(u.id)}
                               className="rounded-md p-2"
-                              style={{ color: '#fb7185', background: 'transparent' }}
+                              style={{ color: 'var(--color-accent-red)', background: 'transparent' }}
                               title="Deactivate user"
                             >
                               <Trash2 size={15} />
@@ -560,7 +560,7 @@ function UserModal({ user, onClose, onSave }) {
           </Field>
 
           {!user && (
-            <div className="rounded-lg p-3 text-sm" style={{ background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.25)', color: '#38bdf8' }}>
+            <div className="rounded-lg p-3 text-sm" style={{ background: 'var(--glow-sky)', border: '1px solid rgba(56,189,248,0.25)', color: 'var(--neon-cyan)' }}>
               An invitation email will be sent. The user sets password from that link.
             </div>
           )}
@@ -594,7 +594,7 @@ function UserModal({ user, onClose, onSave }) {
               {formData.role === 'admin' && 'Full platform access including administration.'}
             </p>
             {roleChanged && !isSelf && (
-              <p className="mt-1 text-xs" style={{ color: '#fbbf24' }}>
+              <p className="mt-1 text-xs" style={{ color: 'var(--color-accent-amber)' }}>
                 Role will change from {user.role.toUpperCase()} to {formData.role.toUpperCase()}.
               </p>
             )}
@@ -623,7 +623,7 @@ function UserModal({ user, onClose, onSave }) {
             <button
               type="submit"
               className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
-              style={{ background: isDark ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'linear-gradient(135deg,#2563eb,#06b6d4)' }}
+              style={{ background: isDark ? 'var(--gradient-primary)' : 'linear-gradient(135deg,#2563eb,#06b6d4)' }}
             >
               {user ? 'Update user' : 'Create user'}
             </button>

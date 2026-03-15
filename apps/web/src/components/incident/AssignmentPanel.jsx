@@ -54,7 +54,7 @@ export default function AssignmentPanel({ incident }) {
     <div className="glass rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <UserCheck size={18} style={{ color: '#6366f1' }} />
+          <UserCheck size={18} style={{ color: 'var(--neon-indigo)' }} />
           <h3 className="font-semibold" style={{ color: 'var(--text-heading)' }}>
             Assignment
           </h3>
@@ -64,8 +64,8 @@ export default function AssignmentPanel({ incident }) {
       {assignedUser ? (
         <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'var(--bg-input)' }}>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'rgba(99, 102, 241, 0.1)' }}>
-              <User size={16} style={{ color: '#6366f1' }} />
+            <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--glow-indigo)' }}>
+              <User size={16} style={{ color: 'var(--neon-indigo)' }} />
             </div>
             <div>
               <div className="font-medium text-sm" style={{ color: 'var(--text-heading)' }}>
@@ -81,8 +81,8 @@ export default function AssignmentPanel({ incident }) {
             disabled={assigning}
             className="p-1.5 rounded transition-colors disabled:opacity-50"
             style={{ 
-              color: '#f43f5e',
-              background: 'rgba(244, 63, 94, 0.1)'
+              color: 'var(--color-accent-red)',
+              background: 'var(--glow-rose)'
             }}
             title="Unassign"
           >
@@ -124,8 +124,8 @@ export default function AssignmentPanel({ incident }) {
                     className="w-full px-4 py-2 text-left hover:bg-input transition-colors flex items-center gap-2"
                     style={{ fontSize: 13 }}
                   >
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'rgba(99, 102, 241, 0.1)' }}>
-                      <User size={12} style={{ color: '#6366f1' }} />
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--glow-indigo)' }}>
+                      <User size={12} style={{ color: 'var(--neon-indigo)' }} />
                     </div>
                     <div>
                       <div className="font-medium" style={{ color: 'var(--text-heading)' }}>

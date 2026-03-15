@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   Clock,
   ChevronRight,
@@ -14,10 +15,10 @@ import SeverityBadge from '../common/SeverityBadge'
 import { truncateId, formatTimestamp, formatDuration } from '../../utils/formatters'
 
 const SEVERITY_ACCENTS = {
-  CRITICAL: '#f43f5e',
-  HIGH: '#f97316',
-  MEDIUM: '#f59e0b',
-  LOW: '#10b981',
+  CRITICAL: 'var(--color-accent-red)',
+  HIGH: 'var(--brand-orange)',
+  MEDIUM: 'var(--color-accent-amber)',
+  LOW: 'var(--color-accent-green)',
 }
 
  
@@ -68,17 +69,20 @@ export default function IncidentCard({ incident }) {
   const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
 
   return (
-    <div
-      className="rounded-2xl transition-all"
+    <motion.div
+      className="rounded-2xl"
       style={{
         background: `linear-gradient(135deg, ${accent}33, transparent 80%)`,
         padding: 1,
         boxShadow: `0 4px 20px ${accent}1a`,
       }}
+      whileHover={{ scale: 1.015, y: -3, boxShadow: `0 8px 30px ${accent}2a` }}
+      whileTap={{ scale: 0.985 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
     >
       <Link
         to={`/incidents/${incident.id}`}
-        className="block h-full rounded-[22px] glass p-5 glass-hover backdrop-blur-md group"
+        className="block h-full rounded-[22px] glass p-5 backdrop-blur-md group"
         style={{ border: '1px solid rgba(255,255,255,0.08)', position: 'relative' }}
       >
         <div className="flex items-start justify-between gap-3 mb-4">
@@ -105,7 +109,7 @@ export default function IncidentCard({ incident }) {
               </span>
               {manualReview && (
                 <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5"
-                  style={{ fontSize: 11, color: '#f87171', background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)' }}>
+                  style={{ fontSize: 11, color: 'var(--color-accent-red)', background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)' }}>
                   Manual Review
                 </span>
               )}
@@ -146,7 +150,7 @@ export default function IncidentCard({ incident }) {
             label="Repeats"
             value={`${alertCount}×`}
             hint={unstable ? 'flapping' : 'steady'}
-            accent={alertCount > 1 ? '#f59e0b' : accent}
+            accent={alertCount > 1 ? 'var(--color-accent-amber)' : accent}
           />
           <MetricTile
             icon={Clock}
@@ -160,7 +164,7 @@ export default function IncidentCard({ incident }) {
             label="Retries"
             value={`${totalRetries}/3`}
             hint={totalRetries > 0 ? 'attention' : 'clean run'}
-            accent={totalRetries > 0 ? '#f97316' : '#10b981'}
+            accent={totalRetries > 0 ? 'var(--brand-orange)' : 'var(--color-accent-green)'}
           />
         </div>
 
@@ -169,7 +173,7 @@ export default function IncidentCard({ incident }) {
             {alertCount > 1 && (
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 animate-fade-in"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', animationDelay: '100ms', animationFillMode: 'both' }}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-accent-amber)', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', animationDelay: '100ms', animationFillMode: 'both' }}
               >
                 <Repeat size={10} />
                 amplified
@@ -178,7 +182,7 @@ export default function IncidentCard({ incident }) {
             {unstable && (
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 animate-fade-in"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#fbbf24', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', animationDelay: '150ms', animationFillMode: 'both' }}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-accent-amber)', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(245,158,11,0.25)', animationDelay: '150ms', animationFillMode: 'both' }}
               >
                 <AlertTriangle size={10} />
                 flapping
@@ -187,7 +191,7 @@ export default function IncidentCard({ incident }) {
             {confidence != null && (
               <span
                 className="inline-flex items-center gap-2 rounded-full px-2 py-0.5 animate-fade-in"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(8,145,178,0.15)', color: '#38bdf8', border: '1px solid rgba(8,145,178,0.3)', animationDelay: '200ms', animationFillMode: 'both' }}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(8,145,178,0.15)', color: 'var(--neon-cyan)', border: '1px solid rgba(8,145,178,0.3)', animationDelay: '200ms', animationFillMode: 'both' }}
               >
                 <GaugeCircle size={10} />
                 AI {confidence}%
@@ -196,7 +200,7 @@ export default function IncidentCard({ incident }) {
             {meta.recommendation?.proposed_action && (
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 animate-fade-in"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(56,189,248,0.08)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.2)', animationDelay: '250ms', animationFillMode: 'both' }}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--glow-sky)', color: 'var(--neon-cyan)', border: '1px solid rgba(56,189,248,0.2)', animationDelay: '250ms', animationFillMode: 'both' }}
               >
                 <Flame size={10} />
                 {meta.recommendation.proposed_action}
@@ -205,7 +209,7 @@ export default function IncidentCard({ incident }) {
             {manualReason && (
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 animate-fade-in"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.25)', animationDelay: '300ms', animationFillMode: 'both' }}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(248,113,113,0.12)', color: 'var(--color-accent-red)', border: '1px solid rgba(248,113,113,0.25)', animationDelay: '300ms', animationFillMode: 'both' }}
               >
                 Note Saved
               </span>
@@ -216,7 +220,7 @@ export default function IncidentCard({ incident }) {
 
         {manualReason && (
           <div className="mt-4 rounded-xl px-3 py-2" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Operator note</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-accent-red)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Operator note</div>
             <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{manualReason}</p>
             {manualAt && (
               <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>Added {manualAt}</div>
@@ -224,6 +228,6 @@ export default function IncidentCard({ incident }) {
           </div>
         )}
       </Link>
-    </div>
+    </motion.div>
   )
 }

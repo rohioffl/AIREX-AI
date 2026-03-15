@@ -10,7 +10,7 @@ const PLUGINS = [
     name: 'Site24x7',
     description: 'Monitor service health, uptime, and proactive alerts via Site24x7 synthetic & infrastructure monitors.',
     icon: HeartPulse,
-    iconColor: '#818cf8',
+    iconColor: 'var(--neon-indigo)',
     iconBg: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(34,211,238,0.1))',
     iconBorder: 'rgba(99,102,241,0.25)',
     status: 'connected',
@@ -22,7 +22,7 @@ const PLUGINS = [
     name: 'Prometheus & Grafana',
     description: 'Pull metrics from Prometheus and surface Grafana dashboard alerts and anomaly annotations.',
     icon: BarChart2,
-    iconColor: '#f97316',
+    iconColor: 'var(--brand-orange)',
     iconBg: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(251,191,36,0.1))',
     iconBorder: 'rgba(249,115,22,0.25)',
     status: 'coming_soon',
@@ -34,7 +34,7 @@ const PLUGINS = [
     name: 'Datadog',
     description: 'Ingest Datadog monitor events, APM traces, and log-based alerts into the AIREX incident pipeline.',
     icon: Activity,
-    iconColor: '#a855f7',
+    iconColor: 'var(--neon-purple)',
     iconBg: 'linear-gradient(135deg, rgba(168,85,247,0.2), rgba(236,72,153,0.1))',
     iconBorder: 'rgba(168,85,247,0.25)',
     status: 'coming_soon',
@@ -46,7 +46,7 @@ const PLUGINS = [
     name: 'PagerDuty',
     description: 'Sync PagerDuty incidents and on-call schedules, enabling bi-directional alert acknowledgment.',
     icon: Bell,
-    iconColor: '#22d3ee',
+    iconColor: 'var(--neon-cyan)',
     iconBg: 'linear-gradient(135deg, rgba(34,211,238,0.2), rgba(99,102,241,0.1))',
     iconBorder: 'rgba(34,211,238,0.25)',
     status: 'coming_soon',
@@ -58,7 +58,7 @@ const PLUGINS = [
     name: 'New Relic',
     description: 'Stream New Relic alert conditions and golden signal violations into AIREX for AI-driven triage.',
     icon: Layers,
-    iconColor: '#10b981',
+    iconColor: 'var(--color-accent-green)',
     iconBg: 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(34,211,238,0.1))',
     iconBorder: 'rgba(16,185,129,0.25)',
     status: 'coming_soon',
@@ -70,7 +70,7 @@ const PLUGINS = [
     name: 'AWS CloudWatch',
     description: 'Route CloudWatch alarms and Composite Alarms directly into the AIREX incident state machine.',
     icon: Clock,
-    iconColor: '#f59e0b',
+    iconColor: 'var(--color-accent-amber)',
     iconBg: 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(249,115,22,0.1))',
     iconBorder: 'rgba(245,158,11,0.25)',
     status: 'coming_soon',
@@ -80,8 +80,8 @@ const PLUGINS = [
 ]
 
 const STATUS_BADGE = {
-  connected: { label: 'Connected', color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)' },
-  coming_soon: { label: 'Coming Soon', color: '#6b7280', bg: 'rgba(107,114,128,0.1)', border: 'rgba(107,114,128,0.2)' },
+  connected: { label: 'Connected', color: 'var(--color-accent-green)', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)' },
+  coming_soon: { label: 'Coming Soon', color: 'var(--text-muted)', bg: 'rgba(107,114,128,0.1)', border: 'rgba(107,114,128,0.2)' },
 }
 
 export default function LiveMonitoringPage() {
@@ -102,7 +102,7 @@ export default function LiveMonitoringPage() {
               border: '1px solid rgba(99,102,241,0.25)',
             }}
           >
-            <HeartPulse size={22} style={{ color: '#818cf8' }} />
+            <HeartPulse size={22} style={{ color: 'var(--neon-indigo)' }} />
           </div>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
@@ -122,7 +122,7 @@ export default function LiveMonitoringPage() {
       >
         <div>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Active Integrations</p>
-          <p style={{ fontSize: 20, fontWeight: 700, color: '#10b981' }}>{connected.length}</p>
+          <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-accent-green)' }}>{connected.length}</p>
         </div>
         <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 24 }}>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Coming Soon</p>

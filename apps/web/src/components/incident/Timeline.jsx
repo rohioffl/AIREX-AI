@@ -9,7 +9,7 @@ export default function Timeline({ transitions }) {
 
   return (
     <div className="relative">
-      <div className="absolute left-[11px] top-2 bottom-2 w-px" style={{ background: 'linear-gradient(to bottom, #6366f1 0%, var(--border) 50%, transparent 100%)' }} />
+      <div className="absolute left-[11px] top-2 bottom-2 w-px" style={{ background: 'linear-gradient(to bottom, var(--neon-indigo) 0%, var(--border) 50%, transparent 100%)' }} />
       <div className="space-y-4">
         {transitions.map((t, i) => (
           <div key={t.id} className="relative flex gap-4 group">
@@ -17,9 +17,9 @@ export default function Timeline({ transitions }) {
               <div
                 className="h-[9px] w-[9px] rounded-full border-2 transition-all"
                 style={i === transitions.length - 1
-                  ? { 
-                      borderColor: '#6366F1', 
-                      background: '#6366F1', 
+                  ? {
+                      borderColor: 'var(--neon-indigo)',
+                      background: 'var(--neon-indigo)',
                       borderWidth: document.body.classList.contains('light-mode') ? '2.5px' : '2px',
                       boxShadow: document.body.classList.contains('light-mode') 
                         ? '0 0 0 4px rgba(99,102,241,0.15)' 

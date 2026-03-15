@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FileText, ChevronDown, Copy } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { formatTimestamp } from '../../utils/formatters'
 import AnomalyBadge from './AnomalyBadge'
 
@@ -91,7 +92,7 @@ export default function EvidencePanel({ evidence, incident }) {
                         fontSize: 9,
                         fontWeight: 700,
                         flexShrink: 0,
-                        color: anomalies.some(a => a.severity === 'critical') ? '#f43f5e' : '#f59e0b',
+                        color: anomalies.some(a => a.severity === 'critical') ? 'var(--color-accent-red)' : 'var(--color-accent-amber)',
                         background: anomalies.some(a => a.severity === 'critical') ? 'rgba(244,63,94,0.08)' : 'rgba(245,158,11,0.08)',
                         border: `1px solid ${anomalies.some(a => a.severity === 'critical') ? 'rgba(244,63,94,0.25)' : 'rgba(245,158,11,0.25)'}`,
                       }}
@@ -131,58 +132,67 @@ export default function EvidencePanel({ evidence, incident }) {
               </div>
             </button>
 
-            {isExpanded && (
-              <div style={{ borderTop: '1px solid var(--border)' }}>
-                {/* Anomaly badges in expanded view */}
-                {anomalies && (
-                  <div className="px-4 pt-3">
-                    <AnomalyBadge anomalies={anomalies} />
-                  </div>
-                )}
-                <div className="p-4" style={{ background: 'var(--terminal-bg)' }}>
-                  <div className="flex justify-between items-center mb-3">
-                    <div className="flex items-center gap-2">
-                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Raw Output</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-input)' }}>
-                        {e.raw_output?.length.toLocaleString() || 0} chars
-                      </span>
+            <AnimatePresence initial={false}>
+              {isExpanded && (
+                <motion.div
+                  key="expanded"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeInOut' }}
+                  style={{ overflow: 'hidden', borderTop: '1px solid var(--border)' }}
+                >
+                  {/* Anomaly badges in expanded view */}
+                  {anomalies && (
+                    <div className="px-4 pt-3">
+                      <AnomalyBadge anomalies={anomalies} />
                     </div>
-                    <button
-                      onClick={(ev) => {
-                        ev.stopPropagation()
-                        navigator.clipboard.writeText(e.raw_output)
-                      }}
-                      className="flex items-center gap-1 px-2 py-1 rounded transition-colors"
-                      style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', background: 'var(--bg-input)' }}
-                      onMouseEnter={(ev) => ev.currentTarget.style.opacity = '0.8'}
-                      onMouseLeave={(ev) => ev.currentTarget.style.opacity = '1'}
-                    >
-                      <Copy size={11} /> Copy
-                    </button>
-                  </div>
-                  <div className="relative rounded" style={{
-                    maxHeight: '600px',
-                    overflow: 'auto',
-                    background: 'var(--bg-input)',
-                    padding: '12px',
-                    border: '1px solid var(--border)'
-                  }}>
-                    <pre style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11,
-                      color: 'var(--terminal-text)',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      lineHeight: 1.5,
-                      margin: 0,
-                      padding: 0
+                  )}
+                  <div className="p-4" style={{ background: 'var(--terminal-bg)' }}>
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Raw Output</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-input)' }}>
+                          {e.raw_output?.length.toLocaleString() || 0} chars
+                        </span>
+                      </div>
+                      <button
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          navigator.clipboard.writeText(e.raw_output)
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 rounded transition-colors"
+                        style={{ fontSize: 11, fontWeight: 600, color: 'var(--neon-indigo)', background: 'var(--bg-input)' }}
+                        onMouseEnter={(ev) => ev.currentTarget.style.opacity = '0.8'}
+                        onMouseLeave={(ev) => ev.currentTarget.style.opacity = '1'}
+                      >
+                        <Copy size={11} /> Copy
+                      </button>
+                    </div>
+                    <div className="relative rounded" style={{
+                      maxHeight: '600px',
+                      overflow: 'auto',
+                      background: 'var(--bg-input)',
+                      padding: '12px',
+                      border: '1px solid var(--border)'
                     }}>
-                      {e.raw_output}
-                    </pre>
+                      <pre style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--terminal-text)',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        lineHeight: 1.5,
+                        margin: 0,
+                        padding: 0
+                      }}>
+                        {e.raw_output}
+                      </pre>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )
       })}

@@ -115,7 +115,7 @@ export default function KnowledgeBasePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            <BookOpen size={24} style={{ color: '#94a3b8' }} />
+            <BookOpen size={24} style={{ color: 'var(--text-muted)' }} />
             Knowledge Base
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
@@ -125,7 +125,7 @@ export default function KnowledgeBasePage() {
         <button
           onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all touch-manipulation"
-          style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', minHeight: 44 }}
+          style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: 'var(--gradient-primary)', minHeight: 44 }}
         >
           <Plus size={16} />
           Add Entry
@@ -219,7 +219,7 @@ export default function KnowledgeBasePage() {
                       style={{ minWidth: 32, minHeight: 32 }}
                       title="Delete"
                     >
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: '#f87171' }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: 'var(--color-accent-red)' }}>
                         <path d="M3.5 3.5L10.5 10.5M10.5 3.5L3.5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                       </svg>
                     </button>
@@ -232,11 +232,11 @@ export default function KnowledgeBasePage() {
               </p>
 
               <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
+                <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: 'var(--glow-indigo)', color: 'var(--neon-indigo)' }}>
                   {entry.alert_type}
                 </span>
                 {entry.category && (
-                  <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc' }}>
+                  <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: 'var(--glow-purple)', color: 'var(--neon-purple)' }}>
                     {entry.category}
                   </span>
                 )}
@@ -326,7 +326,7 @@ function KnowledgeBaseModal({ entry, onClose, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="flex items-center gap-2 mb-4" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}>
-          <BookOpen size={18} style={{ color: '#6366f1' }} />
+          <BookOpen size={18} style={{ color: 'var(--neon-indigo)' }} />
           {entry ? 'Edit Knowledge Base Entry' : 'Create Knowledge Base Entry'}
         </h3>
 
@@ -426,7 +426,7 @@ function KnowledgeBaseModal({ entry, onClose, onSave }) {
             <button
               type="submit"
               className="px-4 py-2 rounded-lg transition-all touch-manipulation"
-              style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', minHeight: 40 }}
+              style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: 'var(--gradient-primary)', minHeight: 40 }}
             >
               {entry ? 'Update' : 'Create'}
             </button>

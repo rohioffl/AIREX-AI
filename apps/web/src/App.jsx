@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext'
 import Layout from './components/layout/Layout'
 import PrivateRoute from './components/common/PrivateRoute'
 import RequireRole from './components/common/RequireRole'
+import ErrorBoundary from './components/common/ErrorBoundary'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import IncidentDetail from './pages/IncidentDetail'
@@ -23,6 +24,7 @@ import KnowledgeBasePage from './pages/KnowledgeBasePage'
 import ReportsPage from './pages/ReportsPage'
 import RunbooksPage from './pages/RunbooksPage'
 import PatternsPage from './pages/PatternsPage'
+import ProfilePage from './pages/ProfilePage'
 
 export default function App() {
   return (
@@ -31,32 +33,33 @@ export default function App() {
         <AuthProvider>
           <ToastProvider>
             <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/set-password" element={<SetPasswordPage />} />
+              <Route path="/" element={<ErrorBoundary><LandingPage /></ErrorBoundary>} />
+              <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
+              <Route path="/set-password" element={<ErrorBoundary><SetPasswordPage /></ErrorBoundary>} />
               <Route path="/*" element={
                 <PrivateRoute>
                   <Layout>
                     <Routes>
                       <Route path="/incidents" element={<Navigate to="/alerts" replace />} />
-                      <Route path="/dashboard" element={<DashboardPage />} />
-                      <Route path="/incidents/:id" element={<IncidentDetail />} />
-                      <Route path="/alerts" element={<AlertsPage />} />
+                      <Route path="/dashboard" element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
+                      <Route path="/incidents/:id" element={<ErrorBoundary><IncidentDetail /></ErrorBoundary>} />
+                      <Route path="/alerts" element={<ErrorBoundary><AlertsPage /></ErrorBoundary>} />
                       <Route path="/proactive" element={<Navigate to="/health-checks/site24x7?tab=ai-alerts" replace />} />
-                      <Route path="/rejected" element={<RejectedPage />} />
-                      <Route path="/live" element={<LiveFeed />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/analytics" element={<AnalyticsPage />} />
-                      <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
-                      <Route path="/reports" element={<ReportsPage />} />
-                      <Route path="/runbooks" element={<RunbooksPage />} />
-                      <Route path="/patterns" element={<PatternsPage />} />
-                      <Route path="/health-checks" element={<LiveMonitoringPage />} />
-                      <Route path="/health-checks/site24x7" element={<HealthChecksPage />} />
+                      <Route path="/rejected" element={<ErrorBoundary><RejectedPage /></ErrorBoundary>} />
+                      <Route path="/live" element={<ErrorBoundary><LiveFeed /></ErrorBoundary>} />
+                      <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+                      <Route path="/analytics" element={<ErrorBoundary><AnalyticsPage /></ErrorBoundary>} />
+                      <Route path="/knowledge-base" element={<ErrorBoundary><KnowledgeBasePage /></ErrorBoundary>} />
+                      <Route path="/reports" element={<ErrorBoundary><ReportsPage /></ErrorBoundary>} />
+                      <Route path="/runbooks" element={<ErrorBoundary><RunbooksPage /></ErrorBoundary>} />
+                      <Route path="/patterns" element={<ErrorBoundary><PatternsPage /></ErrorBoundary>} />
+                      <Route path="/profile" element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
+                      <Route path="/health-checks" element={<ErrorBoundary><LiveMonitoringPage /></ErrorBoundary>} />
+                      <Route path="/health-checks/site24x7" element={<ErrorBoundary><HealthChecksPage /></ErrorBoundary>} />
                       <Route path="/admin/users" element={<Navigate to="/admin?tab=users" replace />} />
                       <Route path="/admin" element={
                         <RequireRole roles="admin">
-                          <SuperAdminPage />
+                          <ErrorBoundary><SuperAdminPage /></ErrorBoundary>
                         </RequireRole>
                       } />
                       <Route path="*" element={<NotFoundPage />} />

@@ -11,7 +11,7 @@ export default function ConnectionBanner({ connected, reconnecting, initial }) {
     return (
       <div
         style={{
-          background: 'rgba(99,102,241,0.08)',
+          background: 'var(--glow-indigo)',
           border: '1px solid rgba(99,102,241,0.2)',
           borderRadius: 8,
           padding: '8px 14px',
@@ -20,7 +20,7 @@ export default function ConnectionBanner({ connected, reconnecting, initial }) {
           gap: 8,
           marginBottom: 16,
           fontSize: 12,
-          color: '#818cf8',
+          color: 'var(--neon-indigo)',
           fontWeight: 500,
         }}
       >
@@ -50,7 +50,7 @@ export default function ConnectionBanner({ connected, reconnecting, initial }) {
         gap: 10,
         marginBottom: 16,
         fontSize: 13,
-        color: reconnecting ? '#f59e0b' : '#f43f5e',
+        color: reconnecting ? 'var(--color-accent-amber)' : 'var(--color-accent-red)',
         fontWeight: 500,
       }}
     >

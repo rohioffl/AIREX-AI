@@ -83,7 +83,7 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="flex items-center gap-2" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}>
-            <Plus size={18} style={{ color: '#34d399' }} />
+            <Plus size={18} style={{ color: 'var(--neon-green)' }} />
             Create Incident
           </h2>
           <button
@@ -209,7 +209,7 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
               className="px-4 py-2 rounded-lg text-white transition-colors"
               style={{ 
                 fontSize: 13,
-                background: loading ? 'var(--text-muted)' : '#34d399',
+                background: loading ? 'var(--text-muted)' : 'var(--neon-green)',
                 cursor: loading ? 'not-allowed' : 'pointer'
               }}
               disabled={loading}

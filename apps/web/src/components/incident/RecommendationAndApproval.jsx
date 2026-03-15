@@ -42,7 +42,7 @@ export default function RecommendationAndApproval({ recommendation, state, incid
         <div className="flex items-start justify-between mb-5">
           <div>
             <h3 className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <Sparkles size={14} style={{ color: '#818cf8' }} />
+              <Sparkles size={14} style={{ color: 'var(--neon-indigo)' }} />
               AI Recommendation
             </h3>
             <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
@@ -66,7 +66,7 @@ export default function RecommendationAndApproval({ recommendation, state, incid
           </div>
           <div>
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Proposed Action</span>
-            <div className="p-3 rounded-lg" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: '#818cf8', background: 'var(--terminal-bg)', border: '1px solid rgba(99,102,241,0.1)' }}>
+            <div className="p-3 rounded-lg" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--neon-indigo)', background: 'var(--terminal-bg)', border: '1px solid rgba(99,102,241,0.1)' }}>
               <span style={{ color: 'rgba(99,102,241,0.4)', marginRight: 4 }}>$</span>
               {recommendation.proposed_action}
             </div>

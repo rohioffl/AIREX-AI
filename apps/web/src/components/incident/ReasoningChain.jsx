@@ -37,7 +37,7 @@ export default function ReasoningChain({ reasoningChain, verificationCriteria })
                 <div
                   key={idx}
                   className="flex gap-3 py-2 px-3 rounded-lg"
-                  style={{ background: 'rgba(129,140,248,0.03)', borderLeft: '2px solid #818cf8' }}
+                  style={{ background: 'rgba(129,140,248,0.03)', borderLeft: '2px solid var(--neon-indigo)' }}
                 >
                   <div
                     className="flex items-center justify-center rounded-full flex-shrink-0"
@@ -46,7 +46,7 @@ export default function ReasoningChain({ reasoningChain, verificationCriteria })
                       height: 22,
                       fontSize: 10,
                       fontWeight: 700,
-                      color: '#818cf8',
+                      color: 'var(--neon-indigo)',
                       background: 'rgba(129,140,248,0.1)',
                       border: '1px solid rgba(129,140,248,0.2)',
                     }}
@@ -81,7 +81,7 @@ export default function ReasoningChain({ reasoningChain, verificationCriteria })
                     className="flex items-start gap-2 py-1 px-3 rounded"
                     style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'rgba(16,185,129,0.03)' }}
                   >
-                    <span style={{ color: '#10b981', flexShrink: 0, marginTop: 1 }}>{'\u2713'}</span>
+                    <span style={{ color: 'var(--color-accent-green)', flexShrink: 0, marginTop: 1 }}>{'\u2713'}</span>
                     {criterion}
                   </li>
                 ))}

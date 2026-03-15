@@ -45,7 +45,7 @@ export default function CommentsPanel({ incident }) {
   return (
     <div className="glass rounded-xl p-6">
       <div className="flex items-center gap-2 mb-4">
-        <MessageSquare size={18} style={{ color: '#6366f1' }} />
+        <MessageSquare size={18} style={{ color: 'var(--neon-indigo)' }} />
         <h3 className="font-semibold" style={{ color: 'var(--text-heading)' }}>
           Comments
         </h3>
@@ -64,8 +64,8 @@ export default function CommentsPanel({ incident }) {
         <div className="space-y-4 mb-4 max-h-96 overflow-y-auto">
           {comments.map((comment) => (
             <div key={comment.id} className="flex gap-3">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'rgba(99, 102, 241, 0.1)' }}>
-                <User size={16} style={{ color: '#6366f1' }} />
+              <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--glow-indigo)' }}>
+                <User size={16} style={{ color: 'var(--neon-indigo)' }} />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
@@ -99,7 +99,7 @@ export default function CommentsPanel({ incident }) {
           disabled={!newComment.trim() || submitting}
           className="px-4 py-2 rounded-lg transition-all disabled:opacity-50"
           style={{ 
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', 
+            background: 'var(--gradient-primary)', 
             color: '#fff',
             fontSize: 14,
             fontWeight: 600

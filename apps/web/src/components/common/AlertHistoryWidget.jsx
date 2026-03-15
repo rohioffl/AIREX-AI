@@ -79,13 +79,13 @@ export default function AlertHistoryWidget({ days = 7 }) {
     <div className="glass p-5">
       <div className="flex items-center justify-between mb-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2">
-          <AlertTriangle size={16} style={{ color: '#f59e0b' }} />
+          <AlertTriangle size={16} style={{ color: 'var(--color-accent-amber)' }} />
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>
             Alert History ({days}d)
           </span>
         </div>
         <div className="flex items-center gap-1.5" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          <span className="w-2 h-2 rounded-full" style={{ background: '#f59e0b', boxShadow: '0 0 6px rgba(245,158,11,0.5)' }} />
+          <span className="w-2 h-2 rounded-full" style={{ background: 'var(--color-accent-amber)', boxShadow: '0 0 6px rgba(245,158,11,0.5)' }} />
           Degraded / Down
         </div>
       </div>

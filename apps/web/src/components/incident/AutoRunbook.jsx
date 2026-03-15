@@ -63,7 +63,7 @@ export default function AutoRunbook({ incident }) {
         aria-label="Toggle auto-generated runbook"
       >
         <div className="flex items-center gap-2 flex-wrap">
-          <BookOpen size={14} style={{ color: '#10b981' }} />
+          <BookOpen size={14} style={{ color: 'var(--color-accent-green)' }} />
           <span
             style={{
               fontSize: 11,
@@ -80,7 +80,7 @@ export default function AutoRunbook({ incident }) {
             style={{
               fontSize: 10,
               fontWeight: 600,
-              color: '#10b981',
+              color: 'var(--color-accent-green)',
               background: 'rgba(16,185,129,0.12)',
               border: '1px solid rgba(16,185,129,0.25)',
             }}
@@ -131,7 +131,7 @@ export default function AutoRunbook({ incident }) {
               className="flex items-center gap-2 p-3 rounded-lg"
               style={{
                 fontSize: 12,
-                color: '#f87171',
+                color: 'var(--color-accent-red)',
                 background: 'rgba(248,113,113,0.08)',
                 border: '1px solid rgba(248,113,113,0.2)',
               }}

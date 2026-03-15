@@ -27,7 +27,7 @@ class ErrorBoundary extends Component {
           </pre>
           <button
             onClick={() => window.location.reload()}
-            style={{ marginTop: 24, padding: '8px 24px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+            style={{ marginTop: 24, padding: '8px 24px', background: 'var(--neon-indigo)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
           >
             Reload
           </button>

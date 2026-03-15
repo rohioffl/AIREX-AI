@@ -1,9 +1,9 @@
 import { AlertTriangle } from 'lucide-react'
 
 const SEVERITY_THEME = {
-  critical: { color: '#f43f5e', bg: 'rgba(244,63,94,0.08)', border: 'rgba(244,63,94,0.25)' },
-  warning: { color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)' },
-  info: { color: '#06b6d4', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.25)' },
+  critical: { color: 'var(--color-accent-red)', bg: 'rgba(244,63,94,0.08)', border: 'rgba(244,63,94,0.25)' },
+  warning: { color: 'var(--color-accent-amber)', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)' },
+  info: { color: 'var(--neon-cyan)', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.25)' },
 }
 
 export default function AnomalyBadge({ anomalies }) {

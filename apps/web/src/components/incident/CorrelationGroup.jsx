@@ -47,7 +47,7 @@ export default function CorrelationGroup({ incident }) {
         aria-label="Toggle correlation group"
       >
         <div className="flex items-center gap-2 flex-wrap">
-          <GitBranch size={14} style={{ color: '#a855f7' }} />
+          <GitBranch size={14} style={{ color: 'var(--neon-purple)' }} />
           <span
             style={{
               fontSize: 11,
@@ -64,7 +64,7 @@ export default function CorrelationGroup({ incident }) {
             style={{
               fontSize: 10,
               fontWeight: 700,
-              color: '#a855f7',
+              color: 'var(--neon-purple)',
               background: 'rgba(168,85,247,0.12)',
               border: '1px solid rgba(168,85,247,0.3)',
             }}
@@ -126,8 +126,8 @@ export default function CorrelationGroup({ incident }) {
                     fontFamily: 'var(--font-mono)',
                     fontSize: 10,
                     fontWeight: 600,
-                    color: '#a855f7',
-                    background: 'rgba(168,85,247,0.1)',
+                    color: 'var(--neon-purple)',
+                    background: 'var(--glow-purple)',
                     border: '1px solid rgba(168,85,247,0.2)',
                   }}
                 >
@@ -187,7 +187,7 @@ export default function CorrelationGroup({ incident }) {
                           style={{
                             fontFamily: 'var(--font-mono)',
                             fontSize: 10,
-                            color: '#a855f7',
+                            color: 'var(--neon-purple)',
                           }}
                         >
                           {rel.host_key}
@@ -208,7 +208,7 @@ export default function CorrelationGroup({ incident }) {
                     <StateBadge state={rel.state} />
                     <ChevronRight
                       size={14}
-                      style={{ color: '#a855f7' }}
+                      style={{ color: 'var(--neon-purple)' }}
                     />
                   </span>
                 </div>
