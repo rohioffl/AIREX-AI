@@ -8,9 +8,8 @@
 - Database: `docs/database_skill.md`
 
 ## Cursor/Copilot Rule Files
-- `.cursor/rules/`: not present
-- `.cursorrules`: not present
-- `.github/copilot-instructions.md`: not present
+- `.cursor/rules/airex.mdc`: AIREX project-specific rules (architecture, state machine, paths)
+- `.cursor/rules/`: generic rules (coding-style, security, testing, patterns per language)
 
 ## 0) Session Workflow Rules
 - Use the Memory MCP at the start of meaningful project work to recover relevant repo context, prior decisions, architecture facts, and user preferences.
@@ -25,38 +24,45 @@
 
 ## 1) Build, Lint, and Test Commands
 ### 1.1 Backend (FastAPI + SQLAlchemy Async + ARQ)
-Setup:
+Setup (API):
 ```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
+cd services/airex-api
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
-Run API + worker:
+Setup (Worker):
 ```bash
-uvicorn app.main:app --reload
-arq app.core.worker.WorkerSettings
+cd services/airex-worker
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 ```
-Migrations:
+Run API:
 ```bash
-alembic upgrade head
-alembic history
+cd services/airex-api && uvicorn app.main:app --reload
+```
+Run worker:
+```bash
+cd services/airex-worker && arq app.core.worker.WorkerSettings
+```
+Migrations (Alembic lives in `database/`, not inside the service packages):
+```bash
+cd database && alembic upgrade head
+cd database && alembic history
 ```
 Lint + type-check:
 ```bash
-ruff check app/
-mypy app/ --ignore-missing-imports
+cd services/airex-api && ruff check app/ && mypy app/ --ignore-missing-imports
 ```
-Tests:
+Tests (test suite lives in `tests/` at the repo root):
 ```bash
-pytest
-python -m pytest
+cd tests && pytest
+cd tests && python -m pytest
 ```
 Run a single backend test:
 ```bash
-python -m pytest tests/test_llm_client.py
-python -m pytest tests/test_state_machine.py::test_valid_transition
-python -m pytest tests/ -k "recommendation and not slow"
+cd tests && python -m pytest test_llm_client.py
+cd tests && python -m pytest test_state_machine.py::test_valid_transition
+cd tests && python -m pytest -k "recommendation and not slow"
 ```
 
 ### 1.2 Frontend (React 19 + Vite + Vitest)
@@ -148,8 +154,12 @@ Single-tenant runtime note:
 
 Recommended pre-PR validation:
 ```bash
-# backend
-cd backend && ruff check app/ && mypy app/ --ignore-missing-imports && pytest
+# shared core
+cd services/airex-core && python3 -m compileall airex_core
+# backend lint
+cd services/airex-api && ruff check app/ && mypy app/ --ignore-missing-imports
+# tests
+cd tests && pytest
 # frontend
 cd apps/web && npm run lint && npm run test && npm run build
 # e2e (for UI/API flow changes)
