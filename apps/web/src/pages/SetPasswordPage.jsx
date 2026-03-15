@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
 import { Lock, CheckCircle, XCircle } from 'lucide-react'
 import api from '../services/api'
@@ -13,7 +12,6 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '671714206735-
 export default function SetPasswordPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { login } = useAuth()
   const { addToast } = useToasts()
   
   const token = searchParams.get('token')
@@ -139,11 +137,11 @@ export default function SetPasswordPage() {
         })
         // Parse token to get user info and update auth context
         try {
-          const payload = JSON.parse(atob(res.data.access_token.split('.')[1]))
+          JSON.parse(atob(res.data.access_token.split('.')[1]))
           // Force auth context refresh by reloading
           window.location.href = '/dashboard'
           return
-        } catch (e) {
+        } catch {
           // Fallback: navigate
           navigate('/dashboard')
         }

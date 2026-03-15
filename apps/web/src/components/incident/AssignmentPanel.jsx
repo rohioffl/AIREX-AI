@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { User, UserCheck, X } from 'lucide-react'
 import { assignIncident, unassignIncident, fetchUsers } from '../../services/api'
-import { useAuth } from '../../context/AuthContext'
 
 export default function AssignmentPanel({ incident }) {
   const [users, setUsers] = useState([])

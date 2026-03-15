@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Link2, X, Plus, Search, ChevronRight } from 'lucide-react'
 import { fetchRelatedIncidents, linkIncident, unlinkIncident, fetchIncidents } from '../../services/api'
@@ -19,11 +19,7 @@ export default function RelatedIncidentsPanel({ incident }) {
   const [relationshipType, setRelationshipType] = useState('related')
   const [linkNote, setLinkNote] = useState('')
 
-  useEffect(() => {
-    loadRelated()
-  }, [incident?.id])
-
-  const loadRelated = async () => {
+  const loadRelated = useCallback(async () => {
     if (!incident?.id) return
     try {
       setLoading(true)
@@ -34,7 +30,11 @@ export default function RelatedIncidentsPanel({ incident }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [incident?.id])
+
+  useEffect(() => {
+    loadRelated()
+  }, [loadRelated])
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {

@@ -1,0 +1,1715 @@
+<!-- =====
+Navigation: ← → arrow keys, Space, mouse wheel, swipe
+
+Easy customization:
+- Colors: change --cyan, --magenta, --violet CSS variables at the top
+- Fonts: swap Fontshare imports (clash-display, satoshi)
+- Background: adjust --navy or the grid overlay opacity
+
+===== -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIREX — Autonomous SRE Incident Response</title>
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="stylesheet"
+    href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&f[]=satoshi@400,500,700&display=swap">
+  <style>
+    /* ===== RESET & BASE ===== */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #080c18;
+      --surface: #0d1425;
+      --surface2: #111a30;
+      --border: rgba(0, 212, 255, 0.12);
+      --cyan: #00d4ff;
+      --magenta: #ff0080;
+      --violet: #8b5cf6;
+      --green: #00ff88;
+      --amber: #ffb800;
+      --red: #ff4444;
+      --text: #e2eaf5;
+      --muted: #5a7090;
+      --font-head: 'Clash Display', system-ui, sans-serif;
+      --font-body: 'Satoshi', system-ui, sans-serif;
+      --font-mono: 'Courier New', monospace;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+    }
+
+    /* ===== PRESENTATION CONTAINER ===== */
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ===== SLIDES ===== */
+    .slide {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: clamp(24px, 4vw, 60px);
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.55s cubic-bezier(0.4, 0, 0.2, 1), transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: all;
+    }
+
+    .slide.exit {
+      opacity: 0;
+      transform: translateY(-40px);
+      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ===== GRID BACKGROUND ===== */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ===== GLOW ORBS ===== */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .orb-1 {
+      width: 600px;
+      height: 600px;
+      background: var(--cyan);
+      top: -200px;
+      right: -200px;
+    }
+
+    .orb-2 {
+      width: 500px;
+      height: 500px;
+      background: var(--magenta);
+      bottom: -150px;
+      left: -150px;
+    }
+
+    .orb-3 {
+      width: 400px;
+      height: 400px;
+      background: var(--violet);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0.08;
+    }
+
+    /* ===== PROGRESS BAR ===== */
+    .progress-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--magenta));
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 100;
+      box-shadow: 0 0 10px var(--cyan);
+    }
+
+    /* ===== SLIDE COUNTER ===== */
+    .slide-counter {
+      position: fixed;
+      bottom: 20px;
+      right: 24px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      z-index: 100;
+      letter-spacing: 0.1em;
+    }
+
+    /* ===== NAV DOTS ===== */
+    .nav-dots {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      z-index: 100;
+    }
+
+    .nav-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      cursor: pointer;
+      transition: all 0.3s;
+      border: none;
+      padding: 0;
+    }
+
+    .nav-dot.active {
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+      transform: scale(1.3);
+    }
+
+    /* ===== SCANLINE OVERLAY ===== */
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(0deg,
+          transparent,
+          transparent 2px,
+          rgba(0, 0, 0, 0.03) 2px,
+          rgba(0, 0, 0, 0.03) 4px);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ===== TYPOGRAPHY ===== */
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: clamp(10px, 1.2vw, 13px);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: clamp(8px, 1.5vh, 16px);
+    }
+
+    h1 {
+      font-family: var(--font-head);
+      font-size: clamp(48px, 7vw, 96px);
+      font-weight: 700;
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      color: #fff;
+    }
+
+    h2 {
+      font-family: var(--font-head);
+      font-size: clamp(28px, 4vw, 52px);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    h3 {
+      font-family: var(--font-head);
+      font-size: clamp(16px, 2vw, 24px);
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+
+    .slide-content {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 1100px;
+    }
+
+    /* ===== GLOWS ===== */
+    .text-cyan {
+      color: var(--cyan);
+    }
+
+    .text-magenta {
+      color: var(--magenta);
+    }
+
+    .text-violet {
+      color: var(--violet);
+    }
+
+    .text-green {
+      color: var(--green);
+    }
+
+    .text-amber {
+      color: var(--amber);
+    }
+
+    .text-red {
+      color: var(--red);
+    }
+
+    .glow-cyan {
+      text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+    }
+
+    .glow-magenta {
+      text-shadow: 0 0 20px rgba(255, 0, 128, 0.5);
+    }
+
+    /* ===== CARDS ===== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: clamp(14px, 2vw, 24px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0.4;
+    }
+
+    .card-cyan {
+      border-color: rgba(0, 212, 255, 0.25);
+    }
+
+    .card-magenta {
+      border-color: rgba(255, 0, 128, 0.25);
+    }
+
+    .card-violet {
+      border-color: rgba(139, 92, 246, 0.25);
+    }
+
+    .card-green {
+      border-color: rgba(0, 255, 136, 0.25);
+    }
+
+    /* ===== BADGE ===== */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: clamp(9px, 1vw, 11px);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .badge-cyan {
+      background: rgba(0, 212, 255, 0.1);
+      color: var(--cyan);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+
+    .badge-magenta {
+      background: rgba(255, 0, 128, 0.1);
+      color: var(--magenta);
+      border: 1px solid rgba(255, 0, 128, 0.3);
+    }
+
+    .badge-green {
+      background: rgba(0, 255, 136, 0.1);
+      color: var(--green);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+    }
+
+    .badge-amber {
+      background: rgba(255, 184, 0, 0.1);
+      color: var(--amber);
+      border: 1px solid rgba(255, 184, 0, 0.3);
+    }
+
+    .badge-red {
+      background: rgba(255, 68, 68, 0.1);
+      color: var(--red);
+      border: 1px solid rgba(255, 68, 68, 0.3);
+    }
+
+    .badge-violet {
+      background: rgba(139, 92, 246, 0.1);
+      color: var(--violet);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+    }
+
+    .badge-muted {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* ===== DIVIDER ===== */
+    .divider {
+      width: 48px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--magenta));
+      border-radius: 2px;
+      margin: clamp(10px, 1.5vh, 18px) 0;
+      box-shadow: 0 0 8px var(--cyan);
+    }
+
+    /* ===== REVEAL ANIMATIONS ===== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .reveal-d1 {
+      transition-delay: 0.1s;
+    }
+
+    .reveal-d2 {
+      transition-delay: 0.2s;
+    }
+
+    .reveal-d3 {
+      transition-delay: 0.3s;
+    }
+
+    .reveal-d4 {
+      transition-delay: 0.4s;
+    }
+
+    .reveal-d5 {
+      transition-delay: 0.5s;
+    }
+
+    .reveal-d6 {
+      transition-delay: 0.6s;
+    }
+
+    .reveal-d7 {
+      transition-delay: 0.7s;
+    }
+
+    .reveal-d8 {
+      transition-delay: 0.8s;
+    }
+
+    /* ===== SLIDE 1: TITLE ===== */
+    #slide-1 {
+      align-items: flex-start;
+      justify-content: center;
+    }
+
+    .title-wordmark {
+      font-family: var(--font-head);
+      font-size: clamp(80px, 12vw, 160px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 0.9;
+      background: linear-gradient(135deg, #fff 30%, var(--cyan) 70%, var(--magenta) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .title-tagline {
+      font-size: clamp(14px, 2vw, 20px);
+      color: var(--muted);
+      margin-top: clamp(12px, 2vh, 20px);
+      letter-spacing: 0.05em;
+    }
+
+    .title-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: clamp(16px, 2.5vh, 28px);
+    }
+
+    .title-url {
+      margin-top: clamp(20px, 3vh, 36px);
+      font-family: var(--font-mono);
+      font-size: clamp(11px, 1.3vw, 14px);
+      color: var(--cyan);
+      opacity: 0.7;
+      letter-spacing: 0.08em;
+    }
+
+    /* Big decorative AIREX on right */
+    .title-deco {
+      position: absolute;
+      right: -2%;
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: var(--font-head);
+      font-size: clamp(200px, 25vw, 360px);
+      font-weight: 700;
+      letter-spacing: -0.06em;
+      line-height: 1;
+      color: rgba(0, 212, 255, 0.04);
+      pointer-events: none;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    /* ===== SLIDE 2: PROBLEM ===== */
+    #slide-2 .big-stat {
+      font-family: var(--font-head);
+      font-size: clamp(80px, 12vw, 140px);
+      font-weight: 700;
+      line-height: 0.9;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, var(--magenta), var(--violet));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(10px, 1.5vw, 20px);
+      margin-top: clamp(16px, 2.5vh, 28px);
+    }
+
+    .problem-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: clamp(10px, 1.5vw, 16px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .problem-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .problem-text {
+      font-size: clamp(12px, 1.4vw, 15px);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    /* ===== SLIDE 3: SOLUTION ===== */
+    .solution-flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: clamp(10px, 1.5vw, 16px);
+      margin-top: clamp(20px, 3vh, 32px);
+      width: 100%;
+    }
+
+    .flow-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: clamp(14px, 1.8vw, 22px);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .flow-number {
+      font-family: var(--font-mono);
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 700;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .flow-title {
+      font-family: var(--font-head);
+      font-size: clamp(14px, 1.8vw, 20px);
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .flow-desc {
+      font-size: clamp(11px, 1.2vw, 13px);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .flow-arrow {
+      position: absolute;
+      right: calc(-1 * clamp(10px, 1.5vw, 16px) / 2 - 8px);
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--cyan);
+      font-size: 16px;
+      z-index: 2;
+    }
+
+    /* ===== SLIDE 4: REQUEST FLOW ===== */
+    .flow-steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      overflow: hidden;
+      width: 100%;
+      flex-wrap: nowrap;
+    }
+
+    .flow-step {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      position: relative;
+    }
+
+    .flow-step-bubble {
+      width: clamp(44px, 5vw, 60px);
+      height: clamp(44px, 5vw, 60px);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(16px, 2vw, 22px);
+      background: var(--surface);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .flow-step-bubble.active-step {
+      border-color: var(--cyan);
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+    }
+
+    .flow-step-label {
+      font-family: var(--font-mono);
+      font-size: clamp(8px, 0.9vw, 10px);
+      text-align: center;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      max-width: 70px;
+    }
+
+    .flow-connector {
+      height: 1px;
+      flex: 0.6;
+      background: linear-gradient(90deg, rgba(0, 212, 255, 0.4), rgba(0, 212, 255, 0.1));
+      flex-shrink: 1;
+      min-width: 8px;
+      margin-bottom: 26px;
+    }
+
+    .flow-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: clamp(8px, 1vw, 14px);
+      margin-top: clamp(14px, 2vh, 22px);
+    }
+
+    .flow-detail-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: clamp(10px, 1.5vw, 16px);
+    }
+
+    .flow-detail-title {
+      font-size: clamp(10px, 1.1vw, 13px);
+      font-weight: 600;
+      color: var(--cyan);
+      margin-bottom: 4px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.05em;
+    }
+
+    .flow-detail-text {
+      font-size: clamp(10px, 1.1vw, 12px);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ===== SLIDE 5: STATE MACHINE ===== */
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: clamp(6px, 0.8vw, 10px);
+      width: 100%;
+      margin-top: clamp(12px, 2vh, 20px);
+    }
+
+    .state-node {
+      padding: clamp(6px, 0.8vw, 10px) clamp(8px, 1vw, 14px);
+      border-radius: 8px;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: clamp(9px, 0.85vw, 11px);
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      line-height: 1.3;
+    }
+
+    .state-happy {
+      background: rgba(0, 212, 255, 0.08);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      color: var(--cyan);
+    }
+
+    .state-fail {
+      background: rgba(255, 68, 68, 0.08);
+      border: 1px solid rgba(255, 68, 68, 0.2);
+      color: var(--red);
+    }
+
+    .state-terminal-good {
+      background: rgba(0, 255, 136, 0.08);
+      border: 1px solid rgba(0, 255, 136, 0.25);
+      color: var(--green);
+    }
+
+    .state-terminal-bad {
+      background: rgba(255, 0, 128, 0.08);
+      border: 1px solid rgba(255, 0, 128, 0.25);
+      color: var(--magenta);
+    }
+
+    .state-connector-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin: 4px 0;
+    }
+
+    .arrow-right {
+      color: var(--cyan);
+      font-size: 12px;
+      opacity: 0.6;
+    }
+
+    .state-law-callout {
+      margin-top: clamp(12px, 1.8vh, 20px);
+      padding: clamp(10px, 1.5vw, 16px) clamp(14px, 2vw, 22px);
+      background: rgba(0, 212, 255, 0.05);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      border-left: 3px solid var(--cyan);
+      border-radius: 8px;
+      font-size: clamp(11px, 1.2vw, 13px);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .state-flow-linear {
+      display: flex;
+      align-items: center;
+      gap: clamp(4px, 0.5vw, 6px);
+      flex-wrap: nowrap;
+      overflow: hidden;
+      margin-top: clamp(10px, 1.5vh, 16px);
+    }
+
+    .state-pill {
+      padding: clamp(5px, 0.7vw, 8px) clamp(8px, 1vw, 14px);
+      border-radius: 100px;
+      font-family: var(--font-mono);
+      font-size: clamp(9px, 0.9vw, 11px);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .arr {
+      color: var(--muted);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .state-failures {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: clamp(6px, 0.8vw, 10px);
+      margin-top: clamp(10px, 1.5vh, 16px);
+    }
+
+    /* ===== SLIDE 6: AI PIPELINE ===== */
+    .ai-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: clamp(10px, 1.5vw, 18px);
+      margin-top: clamp(16px, 2.5vh, 28px);
+      width: 100%;
+    }
+
+    .ai-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: clamp(14px, 2vw, 22px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      height: 100%;
+    }
+
+    .ai-icon {
+      font-size: clamp(22px, 3vw, 32px);
+    }
+
+    .ai-card-title {
+      font-family: var(--font-head);
+      font-size: clamp(14px, 1.8vw, 20px);
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .ai-card-sub {
+      font-size: clamp(10px, 1.1vw, 12px);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      letter-spacing: 0.05em;
+      margin-top: 2px;
+    }
+
+    .ai-list {
+      list-style: none;
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .ai-list li {
+      font-size: clamp(11px, 1.2vw, 13px);
+      color: var(--muted);
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      line-height: 1.4;
+    }
+
+    .ai-list li::before {
+      content: '▸';
+      color: var(--cyan);
+      flex-shrink: 0;
+      font-size: 10px;
+      margin-top: 2px;
+    }
+
+    /* ===== SLIDE 7: ACTION REGISTRY ===== */
+    .registry-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: clamp(14px, 2vh, 22px);
+    }
+
+    .registry-table th {
+      text-align: left;
+      font-family: var(--font-mono);
+      font-size: clamp(9px, 0.9vw, 11px);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: clamp(6px, 0.8vw, 10px) clamp(8px, 1vw, 12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .registry-table td {
+      padding: clamp(5px, 0.7vw, 8px) clamp(8px, 1vw, 12px);
+      font-size: clamp(10px, 1.1vw, 13px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      font-family: var(--font-mono);
+      vertical-align: middle;
+    }
+
+    .registry-table tr:hover td {
+      background: rgba(0, 212, 255, 0.03);
+    }
+
+    .action-name {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* ===== SLIDE 8: SECURITY ===== */
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: clamp(10px, 1.5vw, 16px);
+      margin-top: clamp(16px, 2.5vh, 28px);
+      width: 100%;
+    }
+
+    .sec-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: clamp(14px, 2vw, 22px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      height: 100%;
+    }
+
+    .sec-title {
+      font-family: var(--font-head);
+      font-size: clamp(14px, 1.8vw, 18px);
+      font-weight: 600;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-top: 4px;
+    }
+
+    .sec-list li {
+      font-size: clamp(11px, 1.2vw, 13px);
+      color: var(--muted);
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      line-height: 1.4;
+    }
+
+    .sec-list li::before {
+      content: '✓';
+      color: var(--green);
+      flex-shrink: 0;
+      font-weight: 700;
+    }
+
+    /* ===== SLIDE 9: TECH STACK ===== */
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: clamp(10px, 1.5vw, 16px);
+      margin-top: clamp(16px, 2.5vh, 28px);
+      width: 100%;
+    }
+
+    .stack-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: clamp(14px, 2vw, 22px);
+    }
+
+    .stack-label {
+      font-family: var(--font-mono);
+      font-size: clamp(9px, 0.9vw, 11px);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .stack-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .stack-tag {
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: clamp(10px, 1vw, 12px);
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: var(--font-mono);
+    }
+
+    /* ===== SLIDE 10: NUMBERS ===== */
+    .numbers-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: clamp(10px, 1.5vw, 16px);
+      margin-top: clamp(20px, 3vh, 32px);
+      width: 100%;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: clamp(14px, 2vw, 22px);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      text-align: center;
+    }
+
+    .stat-num {
+      font-family: var(--font-head);
+      font-size: clamp(32px, 4.5vw, 56px);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat-label {
+      font-size: clamp(10px, 1.1vw, 13px);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      letter-spacing: 0.05em;
+    }
+
+    /* ===== SLIDE 11: CLOSING ===== */
+    #slide-11 {
+      align-items: center;
+      text-align: center;
+    }
+
+    .closing-tagline {
+      font-family: var(--font-head);
+      font-size: clamp(28px, 4.5vw, 56px);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: #fff;
+      max-width: 700px;
+    }
+
+    .closing-url {
+      font-family: var(--font-mono);
+      font-size: clamp(14px, 2vw, 22px);
+      color: var(--cyan);
+      margin-top: clamp(16px, 2.5vh, 28px);
+      letter-spacing: 0.06em;
+    }
+
+    .closing-sub {
+      font-size: clamp(12px, 1.4vw, 16px);
+      color: var(--muted);
+      margin-top: clamp(8px, 1.2vh, 14px);
+    }
+
+    .closing-stack-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: clamp(20px, 3vh, 32px);
+    }
+
+    /* ===== REDUCED MOTION ===== */
+    @media (prefers-reduced-motion: reduce) {
+
+      .slide,
+      .reveal {
+        transition: opacity 0.2s;
+        transform: none !important;
+      }
+
+      .orb {
+        display: none;
+      }
+    }
+
+    /* ===== KEYBOARD HINT ===== */
+    .key-hint {
+      position: fixed;
+      bottom: 20px;
+      left: 24px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      opacity: 0.5;
+      z-index: 100;
+      letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Background layers -->
+  <div class="grid-bg"></div>
+  <div class="scanlines"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <!-- Progress bar -->
+  <div class="progress-bar" id="progress"></div>
+
+  <!-- Nav dots -->
+  <div class="nav-dots" id="navDots"></div>
+
+  <!-- Slide counter -->
+  <div class="slide-counter" id="counter">01 / 11</div>
+
+  <!-- Keyboard hint -->
+  <div class="key-hint">← → / scroll / space</div>
+
+  <main class="deck" id="deck">
+
+    <!-- ===== SLIDE 1: TITLE ===== -->
+    <section class="slide" id="slide-1">
+      <div class="slide-content">
+        <div class="title-deco" aria-hidden="true">AIREX</div>
+        <div class="eyebrow reveal">Autonomous SRE Platform</div>
+        <div class="title-wordmark reveal reveal-d1">AIREX</div>
+        <p class="title-tagline reveal reveal-d2">AI-Powered Incident Response — From Alert to Resolution</p>
+        <div class="divider reveal reveal-d3"></div>
+        <div class="title-badges reveal reveal-d4">
+          <span class="badge badge-cyan">Autonomous</span>
+          <span class="badge badge-magenta">Safety-Critical</span>
+          <span class="badge badge-violet">Production-Ready</span>
+          <span class="badge badge-green">ECS Fargate</span>
+          <span class="badge badge-amber">Gemini 2.0</span>
+        </div>
+        <div class="title-url reveal reveal-d5">airex.ankercloud.com</div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 2: PROBLEM ===== -->
+    <section class="slide" id="slide-2">
+      <div class="slide-content">
+        <div class="eyebrow reveal">The Problem</div>
+        <h2 class="reveal reveal-d1">SREs are <span class="text-magenta glow-magenta">woken at 3am</span><br>for alerts
+          that could fix themselves.</h2>
+        <div class="divider reveal reveal-d2"></div>
+        <div class="problem-grid reveal reveal-d3">
+          <div class="problem-item">
+            <span class="problem-icon">⏱</span>
+            <span class="problem-text"><strong style="color:#fff">Slow MTTD/MTTR</strong> — Human triage takes 20–40 min
+              for known incident patterns</span>
+          </div>
+          <div class="problem-item">
+            <span class="problem-icon">🧠</span>
+            <span class="problem-text"><strong style="color:#fff">Knowledge silos</strong> — Remediation steps live in
+              runbooks no one reads at 3am</span>
+          </div>
+          <div class="problem-item">
+            <span class="problem-icon">🔁</span>
+            <span class="problem-text"><strong style="color:#fff">Alert fatigue</strong> — Same recurring incidents
+              drain oncall engineers every week</span>
+          </div>
+          <div class="problem-item">
+            <span class="problem-icon">📝</span>
+            <span class="problem-text"><strong style="color:#fff">No audit trail</strong> — Manual fixes leave no
+              tamper-proof record of what happened and why</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 3: SOLUTION ===== -->
+    <section class="slide" id="slide-3">
+      <div class="slide-content">
+        <div class="eyebrow reveal">How AIREX Solves It</div>
+        <h2 class="reveal reveal-d1">Four stages. <span class="text-cyan glow-cyan">Fully autonomous.</span></h2>
+        <div class="solution-flow reveal reveal-d2">
+          <div class="flow-card card-cyan">
+            <div class="flow-number">01</div>
+            <div class="flow-title">Ingest</div>
+            <div class="flow-desc">HMAC-verified webhooks from Site24x7 or any alerting source. Idempotency-keyed,
+              rate-limited.</div>
+          </div>
+          <div class="flow-card card-violet">
+            <div class="flow-number">02</div>
+            <div class="flow-title">Investigate</div>
+            <div class="flow-desc">SSH/SSM onto real servers. Runs typed investigation plugins. Collects structured
+              evidence.</div>
+          </div>
+          <div class="flow-card card-magenta">
+            <div class="flow-number">03</div>
+            <div class="flow-title">Recommend</div>
+            <div class="flow-desc">Gemini 2.0 Flash + RAG context from past incidents. Action from whitelisted registry
+              only.</div>
+          </div>
+          <div class="flow-card card-green">
+            <div class="flow-number">04</div>
+            <div class="flow-title">Execute</div>
+            <div class="flow-desc">Policy-gated with confidence scoring. SSM RunShellScript on target hosts. Auto-verify
+              resolution.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 4: REQUEST FLOW ===== -->
+    <section class="slide" id="slide-4">
+      <div class="slide-content">
+        <div class="eyebrow reveal">Request Lifecycle</div>
+        <h2 class="reveal reveal-d1">Webhook to <span class="text-green">RESOLVED</span> — zero human touch</h2>
+        <div class="flow-steps reveal reveal-d2" style="margin-top: clamp(18px,2.5vh,28px)">
+          <div class="flow-step">
+            <div class="flow-step-bubble active-step">🔔</div>
+            <div class="flow-step-label">Alert<br>Webhook</div>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-step">
+            <div class="flow-step-bubble">🔐</div>
+            <div class="flow-step-label">HMAC<br>Verify</div>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-step">
+            <div class="flow-step-bubble">📋</div>
+            <div class="flow-step-label">Create<br>Incident</div>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-step">
+            <div class="flow-step-bubble">🔬</div>
+            <div class="flow-step-label">Investigate<br>(SSH/SSM)</div>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-step">
+            <div class="flow-step-bubble">🤖</div>
+            <div class="flow-step-label">AI Recommend<br>+ RAG</div>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-step">
+            <div class="flow-step-bubble">⚖️</div>
+            <div class="flow-step-label">Policy<br>Gate</div>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-step">
+            <div class="flow-step-bubble">⚡</div>
+            <div class="flow-step-label">SSM<br>Execute</div>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-step">
+            <div class="flow-step-bubble active-step">✅</div>
+            <div class="flow-step-label" style="color:var(--green)">RESOLVED</div>
+          </div>
+        </div>
+        <div class="flow-detail-grid reveal reveal-d3">
+          <div class="flow-detail-card">
+            <div class="flow-detail-title">Investigation Plugins</div>
+            <div class="flow-detail-text">Typed plugins per alert type. Structured evidence stored with SHA-256 hash
+              chain for audit.</div>
+          </div>
+          <div class="flow-detail-card">
+            <div class="flow-detail-title">AI + RAG Context</div>
+            <div class="flow-detail-text">Gemini 2.0 Flash primary, Flash Lite fallback. pgvector similarity on past
+              resolved incidents.</div>
+          </div>
+          <div class="flow-detail-card">
+            <div class="flow-detail-title">Confidence Gating</div>
+            <div class="flow-detail-text">Auto-approve if confidence ≥ threshold and action risk ≤ policy max. Else
+              AWAITING_APPROVAL.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 5: STATE MACHINE ===== -->
+    <section class="slide" id="slide-5">
+      <div class="slide-content">
+        <div class="eyebrow reveal">The State Machine</div>
+        <h2 class="reveal reveal-d1"><span class="text-cyan">11 states.</span> Every transition is law.</h2>
+        <div class="state-flow-linear reveal reveal-d2">
+          <span class="state-pill state-happy">RECEIVED</span>
+          <span class="arr">→</span>
+          <span class="state-pill state-happy">INVESTIGATING</span>
+          <span class="arr">→</span>
+          <span class="state-pill state-happy">RECOMMENDATION_READY</span>
+          <span class="arr">→</span>
+          <span class="state-pill state-happy">AWAITING_APPROVAL</span>
+          <span class="arr">→</span>
+          <span class="state-pill state-happy">EXECUTING</span>
+          <span class="arr">→</span>
+          <span class="state-pill state-happy">VERIFYING</span>
+          <span class="arr">→</span>
+          <span class="state-pill state-terminal-good">RESOLVED</span>
+        </div>
+        <div class="state-failures reveal reveal-d3">
+          <div class="state-node state-fail">FAILED_ANALYSIS<br><span
+              style="font-size:9px;color:var(--muted);font-weight:400">max 3 retries</span></div>
+          <div class="state-node state-fail">FAILED_EXECUTION<br><span
+              style="font-size:9px;color:var(--muted);font-weight:400">terminal</span></div>
+          <div class="state-node state-fail">FAILED_VERIFICATION<br><span
+              style="font-size:9px;color:var(--muted);font-weight:400">max 3 retries</span></div>
+          <div class="state-node state-terminal-bad">REJECTED<br><span
+              style="font-size:9px;color:var(--muted);font-weight:400">operator-only</span></div>
+        </div>
+        <div class="state-law-callout reveal reveal-d4">
+          <span style="color:var(--cyan);font-size:16px">⚡</span>
+          <span>All transitions go through <code
+              style="color:var(--cyan);font-family:var(--font-mono);font-size:12px">transition_state()</code> —
+            immutable SHA-256 hash-chained audit records, SSE events, and Prometheus metrics on every change. Direct
+            <code style="color:var(--magenta);font-family:var(--font-mono);font-size:12px">incident.state =</code> is
+            strictly banned.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 6: AI PIPELINE ===== -->
+    <section class="slide" id="slide-6">
+      <div class="slide-content">
+        <div class="eyebrow reveal">AI & Investigation Pipeline</div>
+        <h2 class="reveal reveal-d1">Structured evidence. <span class="text-violet">Grounded recommendations.</span>
+        </h2>
+        <div class="ai-grid reveal reveal-d2">
+          <div class="ai-card card-cyan">
+            <div class="ai-icon">🔍</div>
+            <div class="ai-card-title">Investigate</div>
+            <div class="ai-card-sub">Phase 1 · 60s timeout</div>
+            <ul class="ai-list">
+              <li>Typed plugin per alert_type</li>
+              <li>SSH via EC2 Instance Connect or SSM</li>
+              <li>GCP: OS Login + asyncssh</li>
+              <li>Structured Evidence model stored to DB</li>
+              <li>Redis-cached instance discovery</li>
+            </ul>
+          </div>
+          <div class="ai-card card-violet">
+            <div class="ai-icon">🤖</div>
+            <div class="ai-card-title">Recommend</div>
+            <div class="ai-card-sub">Phase 2 · LiteLLM proxy · 15s / 30s retry</div>
+            <ul class="ai-list">
+              <li>Gemini 2.0 Flash primary model</li>
+              <li>Flash Lite fallback via circuit breaker</li>
+              <li>RAG: pgvector similarity on past incidents</li>
+              <li>Knowledge Base + Runbook context injection</li>
+              <li>Output validated against ACTION_REGISTRY</li>
+              <li>Langfuse tracing on every LLM call</li>
+            </ul>
+          </div>
+          <div class="ai-card card-green">
+            <div class="ai-icon">⚡</div>
+            <div class="ai-card-title">Execute + Verify</div>
+            <div class="ai-card-sub">Phase 3–4 · 20s / 30s timeouts</div>
+            <ul class="ai-list">
+              <li>Distributed Redis lock prevents double-execution</li>
+              <li>SSM RunShellScript (preferred) or SSH</li>
+              <li>Simulation fallback for staging</li>
+              <li>Verification retries up to 3×</li>
+              <li>On 3× fail: alternative action fallback</li>
+              <li>Auto-generate runbook + postmortem on RESOLVED</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 7: ACTION REGISTRY ===== -->
+    <section class="slide" id="slide-7">
+      <div class="slide-content">
+        <div class="eyebrow reveal">Action Registry</div>
+        <h2 class="reveal reveal-d1">LLM can <span class="text-magenta">never</span> invent actions.<br>Only whitelisted
+          templates execute.</h2>
+        <table class="registry-table reveal reveal-d2">
+          <thead>
+            <tr>
+              <th>Action</th>
+              <th>Auto-Approve</th>
+              <th>Senior Required</th>
+              <th>Max Risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="action-name">restart_service</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-muted">No</span></td>
+              <td><span class="badge badge-red">HIGH</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">clear_logs</td>
+              <td><span class="badge badge-green">Yes</span></td>
+              <td><span class="badge badge-muted">No</span></td>
+              <td><span class="badge badge-amber">MED</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">scale_instances</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-amber">Yes</span></td>
+              <td><span class="badge badge-red">HIGH</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">kill_process</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-muted">No</span></td>
+              <td><span class="badge badge-amber">MED</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">flush_cache</td>
+              <td><span class="badge badge-green">Yes</span></td>
+              <td><span class="badge badge-muted">No</span></td>
+              <td><span class="badge badge-cyan">LOW</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">rotate_credentials</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-amber">Yes</span></td>
+              <td><span class="badge badge-red">HIGH</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">rollback_deployment</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-amber">Yes</span></td>
+              <td><span class="badge badge-red">HIGH</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">drain_node</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-amber">Yes</span></td>
+              <td><span class="badge badge-red">HIGH</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">toggle_feature_flag</td>
+              <td><span class="badge badge-green">Yes</span></td>
+              <td><span class="badge badge-muted">No</span></td>
+              <td><span class="badge badge-cyan">LOW</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">restart_container</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-muted">No</span></td>
+              <td><span class="badge badge-amber">MED</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">block_ip</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-amber">Yes</span></td>
+              <td><span class="badge badge-red">HIGH</span></td>
+            </tr>
+            <tr>
+              <td class="action-name">resize_disk</td>
+              <td><span class="badge badge-red">No</span></td>
+              <td><span class="badge badge-muted">No</span></td>
+              <td><span class="badge badge-amber">MED</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 8: SECURITY ===== -->
+    <section class="slide" id="slide-8">
+      <div class="slide-content">
+        <div class="eyebrow reveal">Security Architecture</div>
+        <h2 class="reveal reveal-d1">Safety-critical from <span class="text-cyan">day one.</span></h2>
+        <div class="security-grid reveal reveal-d2">
+          <div class="sec-card">
+            <div class="sec-title"><span>🔐</span> RBAC + Permissions</div>
+            <ul class="sec-list">
+              <li>3 roles: VIEWER &lt; OPERATOR &lt; ADMIN</li>
+              <li>Granular permissions: incident:approve, incident:senior_approve, user:* …</li>
+              <li>require_permission() on every route — no role string checks</li>
+              <li>Senior approval required for HIGH-risk actions</li>
+            </ul>
+          </div>
+          <div class="sec-card">
+            <div class="sec-title"><span>🛡️</span> Database & RLS</div>
+            <ul class="sec-list">
+              <li>PostgreSQL Row-Level Security on all tables</li>
+              <li>Composite PKs: (tenant_id, id) everywhere</li>
+              <li>nullable=True on tenant_id is banned</li>
+              <li>Parameterized queries only — no raw SQL</li>
+            </ul>
+          </div>
+          <div class="sec-card">
+            <div class="sec-title"><span>🔗</span> Immutable Audit Chain</div>
+            <ul class="sec-list">
+              <li>state_transitions table: never UPDATE or DELETE</li>
+              <li>SHA-256 hash chain across every transition record</li>
+              <li>Structlog on every log line with correlation_id + tenant_id</li>
+              <li>Langfuse trace on every LLM call</li>
+            </ul>
+          </div>
+          <div class="sec-card">
+            <div class="sec-title"><span>⚡</span> Request Hardening</div>
+            <ul class="sec-list">
+              <li>HMAC-SHA256 webhook signature verification</li>
+              <li>Idempotency keys prevent duplicate incident creation</li>
+              <li>Rate limiting on all public endpoints</li>
+              <li>LLM-generated shell commands strictly prohibited</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 9: TECH STACK ===== -->
+    <section class="slide" id="slide-9">
+      <div class="slide-content">
+        <div class="eyebrow reveal">Technology Stack</div>
+        <h2 class="reveal reveal-d1">Production-grade. <span class="text-violet">Modern all the way down.</span></h2>
+        <div class="stack-grid reveal reveal-d2">
+          <div class="stack-card">
+            <div class="stack-label text-cyan">Backend &amp; Worker</div>
+            <div class="stack-tags">
+              <span class="stack-tag">FastAPI</span>
+              <span class="stack-tag">SQLAlchemy 2.0</span>
+              <span class="stack-tag">ARQ</span>
+              <span class="stack-tag">PostgreSQL 15</span>
+              <span class="stack-tag">Redis 7</span>
+              <span class="stack-tag">Alembic</span>
+              <span class="stack-tag">asyncpg</span>
+              <span class="stack-tag">structlog</span>
+              <span class="stack-tag">pgvector</span>
+            </div>
+          </div>
+          <div class="stack-card">
+            <div class="stack-label text-magenta">Frontend</div>
+            <div class="stack-tags">
+              <span class="stack-tag">React 19</span>
+              <span class="stack-tag">Vite 7</span>
+              <span class="stack-tag">Tailwind v4</span>
+              <span class="stack-tag">Axios</span>
+              <span class="stack-tag">Recharts</span>
+              <span class="stack-tag">Vitest</span>
+              <span class="stack-tag">SSE / EventSource</span>
+              <span class="stack-tag">Playwright</span>
+            </div>
+          </div>
+          <div class="stack-card">
+            <div class="stack-label text-violet">AI &amp; LLM</div>
+            <div class="stack-tags">
+              <span class="stack-tag">LiteLLM Proxy</span>
+              <span class="stack-tag">Gemini 2.0 Flash</span>
+              <span class="stack-tag">Flash Lite fallback</span>
+              <span class="stack-tag">Langfuse tracing</span>
+              <span class="stack-tag">pgvector RAG</span>
+              <span class="stack-tag">Circuit Breaker</span>
+            </div>
+          </div>
+          <div class="stack-card">
+            <div class="stack-label text-green">Infrastructure</div>
+            <div class="stack-tags">
+              <span class="stack-tag">ECS Fargate</span>
+              <span class="stack-tag">Terraform</span>
+              <span class="stack-tag">CloudFront + S3</span>
+              <span class="stack-tag">RDS PostgreSQL</span>
+              <span class="stack-tag">ElastiCache Redis</span>
+              <span class="stack-tag">Secrets Manager</span>
+              <span class="stack-tag">AWS SSM</span>
+              <span class="stack-tag">EC2 Instance Connect</span>
+              <span class="stack-tag">CodeBuild CI</span>
+              <span class="stack-tag">Prometheus + Grafana</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 10: NUMBERS ===== -->
+    <section class="slide" id="slide-10">
+      <div class="slide-content">
+        <div class="eyebrow reveal">By the Numbers</div>
+        <h2 class="reveal reveal-d1">Everything <span class="text-cyan">measured.</span> Everything <span
+            class="text-green">tested.</span></h2>
+        <div class="numbers-grid reveal reveal-d2">
+          <div class="stat-card">
+            <div class="stat-num">525</div>
+            <div class="stat-label">Backend Tests</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">170</div>
+            <div class="stat-label">Frontend Tests</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">11</div>
+            <div class="stat-label">Incident States</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">12</div>
+            <div class="stat-label">Action Types</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">8</div>
+            <div class="stat-label">DB Migrations</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">4</div>
+            <div class="stat-label">ECS Services</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">2</div>
+            <div class="stat-label">Cloud Providers</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">6</div>
+            <div class="stat-label">CI/CD Jobs</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SLIDE 11: CLOSING ===== -->
+    <section class="slide" id="slide-11">
+      <div class="slide-content" style="display:flex;flex-direction:column;align-items:center;text-align:center">
+        <div class="eyebrow reveal">AIREX</div>
+        <div class="closing-tagline reveal reveal-d1">
+          Built for SREs<br>who'd rather <span class="text-cyan glow-cyan">sleep.</span>
+        </div>
+        <div class="divider reveal reveal-d2" style="margin: clamp(12px,2vh,20px) auto;"></div>
+        <div class="closing-url reveal reveal-d3">airex.ankercloud.com</div>
+        <div class="closing-sub reveal reveal-d4">Autonomous investigation &amp; remediation · AWS + GCP · Gemini 2.0
+          Flash</div>
+        <div class="closing-stack-row reveal reveal-d5">
+          <span class="badge badge-cyan">FastAPI</span>
+          <span class="badge badge-violet">React 19</span>
+          <span class="badge badge-magenta">LiteLLM</span>
+          <span class="badge badge-green">ECS Fargate</span>
+          <span class="badge badge-amber">pgvector RAG</span>
+          <span class="badge badge-muted">Open for demo</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const TOTAL = 11;
+      let current = 0;
+      let isAnimating = false;
+
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      const progress = document.getElementById('progress');
+      const counter = document.getElementById('counter');
+      const dotsContainer = document.getElementById('navDots');
+
+      // Create nav dots
+      for (let i = 0; i < TOTAL; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'nav-dot' + (i === 0 ? ' active' : '');
+        btn.setAttribute('aria-label', 'Slide ' + (i + 1));
+        btn.addEventListener('click', () => goTo(i));
+        dotsContainer.appendChild(btn);
+      }
+
+      function updateUI() {
+        const pct = ((current + 1) / TOTAL) * 100;
+        progress.style.width = pct + '%';
+        counter.textContent = String(current + 1).padStart(2, '0') + ' / ' + String(TOTAL).padStart(2, '0');
+        const dots = dotsContainer.querySelectorAll('.nav-dot');
+        dots.forEach((d, i) => d.classList.toggle('active', i === current));
+      }
+
+      function triggerReveals(slideEl) {
+        const reveals = slideEl.querySelectorAll('.reveal');
+        // reset first
+        reveals.forEach(el => el.classList.remove('visible'));
+        // stagger reveal
+        requestAnimationFrame(() => {
+          reveals.forEach(el => el.classList.add('visible'));
+        });
+      }
+
+      function goTo(index) {
+        if (index === current || isAnimating) return;
+        isAnimating = true;
+
+        const prev = slides[current];
+        const next = slides[index];
+
+        prev.classList.add('exit');
+        prev.classList.remove('active');
+
+        next.classList.add('active');
+
+        triggerReveals(next);
+        current = index;
+        updateUI();
+
+        setTimeout(() => {
+          prev.classList.remove('exit');
+          isAnimating = false;
+        }, 500);
+      }
+
+      function next() { if (current < TOTAL - 1) goTo(current + 1); }
+      function prev() { if (current > 0) goTo(current - 1); }
+
+      // Keyboard
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); next(); }
+        else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prev(); }
+      });
+
+      // Mouse wheel (debounced)
+      let wheelTimeout = null;
+      document.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (wheelTimeout) return;
+        if (e.deltaY > 0) next(); else prev();
+        wheelTimeout = setTimeout(() => { wheelTimeout = null; }, 700);
+      }, { passive: false });
+
+      // Touch
+      let touchStartX = 0;
+      let touchStartY = 0;
+      document.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }, { passive: true });
+      document.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 40) {
+          if (dy < 0) next(); else prev();
+        } else if (Math.abs(dx) > 40) {
+          if (dx < 0) next(); else prev();
+        }
+      }, { passive: true });
+
+      // Initialize first slide
+      slides[0].classList.add('active');
+      triggerReveals(slides[0]);
+      updateUI();
+    })();
+  </script>
+</body>
+
+</html>

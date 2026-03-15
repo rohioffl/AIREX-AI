@@ -261,7 +261,7 @@ export default function RunbooksPage() {
     } finally {
       setLoading(false)
     }
-  }, [filterActive])
+  }, [filterActive, addToast])
 
   useEffect(() => { load() }, [load])
 

@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { MessageSquare, Send, User } from 'lucide-react'
 import { fetchComments, createComment } from '../../services/api'
 import { formatRelativeTime } from '../../utils/formatters'
-import { useAuth } from '../../context/AuthContext'
 
 export default function CommentsPanel({ incident }) {
   const [comments, setComments] = useState([])
@@ -10,11 +9,7 @@ export default function CommentsPanel({ incident }) {
   const [newComment, setNewComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    loadComments()
-  }, [incident?.id])
-
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     if (!incident?.id) return
     setLoading(true)
     try {
@@ -25,7 +20,11 @@ export default function CommentsPanel({ incident }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [incident?.id])
+
+  useEffect(() => {
+    loadComments()
+  }, [loadComments])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
