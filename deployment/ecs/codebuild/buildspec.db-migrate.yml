@@ -10,4 +10,4 @@ phases:
   build:
     commands:
       - cd database
-      - alembic upgrade head
+      - alembic upgrade heads
