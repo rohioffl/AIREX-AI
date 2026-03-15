@@ -93,7 +93,8 @@ services:
     build:
       context: .
       dockerfile: services/airex-api/Dockerfile
-    command: bash -c "alembic -c /database/alembic.ini upgrade head"
+    working_dir: /database
+    command: bash -c "alembic upgrade head"
     volumes:
       - ./services/airex-api/app:/app/app
       - ./services/airex-core:/app/airex-core

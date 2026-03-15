@@ -30,6 +30,8 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="operator")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    totp_secret_enc: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     invitation_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     invitation_expires_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
