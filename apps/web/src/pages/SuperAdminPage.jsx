@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
 import {
   fetchUsers, createUser, updateUser, deleteUser,
-  fetchTenants,
+  fetchTenants, fetchTenantDetail, createTenant, updateTenant, deleteTenant, reloadTenants,
   fetchSettings, updateSettings, fetchBackendHealth,
   fetchMetrics,
 } from '../services/api'
@@ -439,11 +439,51 @@ function UserModal({ user, onClose, onSaved }) {
 
 // ── Tenants Tab ───────────────────────────────────────────────────────────────
 
+const AWS_AUTH_METHODS = [
+  { value: 'role_assume', label: 'Cross-Account Role Assumption', desc: 'Recommended — uses IAM trust policy' },
+  { value: 'role_arn',    label: 'Explicit Role ARN',              desc: 'Paste the full role ARN' },
+  { value: 'access_keys', label: 'Access Key + Secret Key',       desc: 'Static credentials' },
+  { value: 'creds_file',  label: 'Credentials File (on server)',  desc: 'Path to credentials file' },
+  { value: 'instance',    label: 'Instance Role',                  desc: 'No config needed — uses EC2 metadata' },
+]
+
+const GCP_AUTH_METHODS = [
+  { value: 'sa_key',  label: 'Service Account Key File', desc: 'Path to JSON key on server' },
+  { value: 'adc',     label: 'Application Default Credentials', desc: 'Uses gcloud auth' },
+  { value: 'auto',    label: 'Automatic (GCE/GKE)',      desc: 'Uses instance metadata' },
+]
+
+function CloudBadge({ cloud }) {
+  const isGcp = cloud === 'gcp'
+  return (
+    <span style={{
+      background: isGcp ? 'rgba(52,211,153,0.12)' : 'rgba(251,191,36,0.12)',
+      color: isGcp ? 'var(--neon-green)' : 'var(--color-accent-amber)',
+      borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+    }}>
+      {cloud || 'unknown'}
+    </span>
+  )
+}
+
+function CredBadge({ status }) {
+  const ok = status === 'configured'
+  return (
+    <span className="flex items-center gap-1" style={{ fontSize: 11, color: ok ? 'var(--neon-green)' : 'var(--color-accent-amber)' }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: ok ? 'var(--neon-green)' : 'var(--color-accent-amber)', display: 'inline-block' }} />
+      {ok ? 'Credentials OK' : 'Missing creds'}
+    </span>
+  )
+}
+
 function TenantsTab() {
   const { addToast } = useToasts()
-  const [tenants, setTenants]     = useState([])
-  const [loading, setLoading]     = useState(true)
+  const [tenants, setTenants] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [showOnboard, setShowOnboard] = useState(false)
+  const [editingTenant, setEditingTenant] = useState(null)
+  const [deletingTenant, setDeletingTenant] = useState(null)
 
   const toast = (msg, type = 'success') =>
     addToast({ title: type === 'error' ? 'Error' : 'Success', message: msg, severity: type === 'error' ? 'CRITICAL' : 'LOW' })
@@ -462,19 +502,53 @@ function TenantsTab() {
 
   useEffect(() => { load() }, [load])
 
+  const filtered = useMemo(() => {
+    if (!search) return tenants
+    const q = search.toLowerCase()
+    return tenants.filter(t => t.name?.toLowerCase().includes(q) || t.display_name?.toLowerCase().includes(q) || t.cloud?.toLowerCase().includes(q))
+  }, [tenants, search])
+
+  const handleReload = async () => {
+    try {
+      const res = await reloadTenants()
+      toast(`Config reloaded from ${res.source || 'db'} — ${res.tenant_count} tenant(s)`)
+      load()
+    } catch (err) { toast(extractErrorMessage(err) || 'Reload failed', 'error') }
+  }
+
+  const handleDelete = async () => {
+    if (!deletingTenant) return
+    try {
+      await deleteTenant(deletingTenant.name)
+      toast(`Tenant "${deletingTenant.display_name}" deleted`)
+      setDeletingTenant(null)
+      load()
+    } catch (err) { toast(extractErrorMessage(err) || 'Delete failed', 'error') }
+  }
+
+  const openEdit = async (t) => {
+    try {
+      const detail = await fetchTenantDetail(t.name)
+      setEditingTenant(detail)
+    } catch { toast('Failed to load tenant detail', 'error') }
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard label="Total Tenants"   value={tenants.length}                                         color="var(--neon-indigo)" icon={Building2} />
+        <StatCard label="Total Tenants" value={tenants.length} color="var(--neon-indigo)" icon={Building2} />
         <StatCard label="Cloud Providers" value={[...new Set(tenants.map(t => t.cloud))].filter(Boolean).length} color="var(--neon-cyan)" icon={Globe} />
-        <StatCard label="Total Servers"   value={tenants.reduce((s, t) => s + (t.server_count || 0), 0)} color="var(--neon-green)" icon={Server} />
+        <StatCard label="Total Servers" value={tenants.reduce((s, t) => s + (t.server_count || 0), 0)} color="var(--neon-green)" icon={Server} />
       </div>
 
-      <div className="flex justify-between items-center">
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Configured Tenants</span>
+      <div className="flex justify-between items-center gap-3 flex-wrap">
+        <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 320 }}>
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tenants…" style={{ ...inputCls, paddingLeft: 34 }} />
+        </div>
         <div className="flex items-center gap-2">
-          <button onClick={load} className="p-2 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-            <RefreshCcw size={14} style={{ color: 'var(--text-muted)' }} />
+          <button onClick={handleReload} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+            <RefreshCcw size={14} /> Reload Config
           </button>
           <button onClick={() => setShowOnboard(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: 'var(--gradient-primary)' }}>
             <Plus size={14} /> Onboard Tenant
@@ -484,11 +558,11 @@ function TenantsTab() {
 
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="glass rounded-xl h-16 skeleton" />)}</div>
-      ) : tenants.length === 0 ? (
-        <div className="glass rounded-xl py-12 text-center" style={{ color: 'var(--text-muted)', fontSize: 14 }}>No tenants configured</div>
+      ) : filtered.length === 0 ? (
+        <div className="glass rounded-xl py-12 text-center" style={{ color: 'var(--text-muted)', fontSize: 14 }}>{search ? 'No tenants match your search' : 'No tenants configured'}</div>
       ) : (
         <div className="space-y-3">
-          {tenants.map(t => (
+          {filtered.map(t => (
             <div key={t.name} className="glass rounded-xl p-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--glow-indigo)' }}>
@@ -496,24 +570,27 @@ function TenantsTab() {
                 </div>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>{t.display_name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  <div className="flex items-center gap-2" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                     <span style={{ fontFamily: 'var(--font-mono)' }}>{t.name}</span>
-                    {t.escalation_email && ` · ${t.escalation_email}`}
+                    {t.escalation_email && <span>· {t.escalation_email}</span>}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
+                <CredBadge status={t.credential_status} />
                 <div className="text-right">
                   <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--neon-cyan)', fontFamily: 'var(--font-mono)' }}>{t.server_count ?? 0}</div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>servers</div>
                 </div>
-                <span style={{
-                  background: t.cloud === 'gcp' ? 'rgba(52,211,153,0.12)' : 'rgba(251,191,36,0.12)',
-                  color: t.cloud === 'gcp' ? 'var(--neon-green)' : 'var(--color-accent-amber)',
-                  borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-                }}>
-                  {t.cloud || 'unknown'}
-                </span>
+                <CloudBadge cloud={t.cloud} />
+                <div className="flex items-center gap-1">
+                  <button onClick={() => openEdit(t)} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Edit">
+                    <Edit size={14} style={{ color: 'var(--text-muted)' }} />
+                  </button>
+                  <button onClick={() => setDeletingTenant(t)} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Delete">
+                    <Trash2 size={14} style={{ color: 'var(--color-accent-amber)' }} />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -521,83 +598,307 @@ function TenantsTab() {
       )}
 
       {showOnboard && <TenantOnboardModal onClose={() => setShowOnboard(false)} onSaved={() => { setShowOnboard(false); load() }} />}
+      {editingTenant && <TenantEditDrawer tenant={editingTenant} onClose={() => setEditingTenant(null)} onSaved={() => { setEditingTenant(null); load() }} />}
+      {deletingTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setDeletingTenant(null)} />
+          <div className="relative glass rounded-2xl p-6 max-w-sm mx-4 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>Delete Tenant</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              Are you sure you want to delete <strong>{deletingTenant.display_name}</strong>? This will deactivate the tenant configuration.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeletingTenant(null)} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+              <button onClick={handleDelete} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: 'var(--color-danger, #ef4444)' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function TenantOnboardModal({ onClose, onSaved }) {
+// ── Tenant Edit Drawer ──────────────────────────────────────────────────────
+
+function TenantEditDrawer({ tenant, onClose, onSaved }) {
   const { addToast } = useToasts()
-  const [form, setForm] = useState({ display_name: '', name: '', cloud: 'aws', escalation_email: '', server_count: '' })
+  const [form, setForm] = useState({ ...tenant })
   const [saving, setSaving] = useState(false)
 
   const toast = (msg, type = 'success') =>
     addToast({ title: type === 'error' ? 'Error' : 'Success', message: msg, severity: type === 'error' ? 'CRITICAL' : 'LOW' })
 
   const handleSave = async () => {
-    if (!form.display_name || !form.name) { toast('Display name and slug are required', 'error'); return }
     setSaving(true)
     try {
-      // Tenant creation is config-driven in current backend.
-      // This form generates the config snippet needed.
-      toast('Tenant config snippet generated. Add it to config/tenants.yaml and redeploy.')
-      setTimeout(onSaved, 800)
-    } catch (err) {
-      toast(extractErrorMessage(err) || 'Failed', 'error')
-    } finally {
-      setSaving(false)
-    }
+      await updateTenant(tenant.name, {
+        display_name: form.display_name,
+        cloud: form.cloud,
+        escalation_email: form.escalation_email,
+        slack_channel: form.slack_channel,
+        ssh_user: form.ssh_user,
+        aws_config: form.aws_config,
+        gcp_config: form.gcp_config,
+      })
+      toast('Tenant updated successfully')
+      onSaved()
+    } catch (err) { toast(extractErrorMessage(err) || 'Update failed', 'error') } finally { setSaving(false) }
   }
 
-  const configSnippet = form.name ? `# Add to config/tenants.yaml\n- name: ${form.name}\n  display_name: "${form.display_name}"\n  cloud: ${form.cloud}\n  escalation_email: ${form.escalation_email || 'ops@example.com'}\n  server_count: ${form.server_count || 0}` : ''
+  const upd = (key, val) => setForm(f => ({ ...f, [key]: val }))
+  const updAws = (key, val) => setForm(f => ({ ...f, aws_config: { ...f.aws_config, [key]: val } }))
+  const updGcp = (key, val) => setForm(f => ({ ...f, gcp_config: { ...f.gcp_config, [key]: val } }))
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="relative w-full max-w-lg glass p-6 space-y-4 overflow-y-auto" style={{ maxHeight: '100vh' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>Edit: {tenant.display_name}</h3>
+          <button onClick={onClose}><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+        </div>
+        <div className="space-y-3">
+          <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Display Name</label>
+            <input value={form.display_name || ''} onChange={e => upd('display_name', e.target.value)} style={inputCls} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cloud</label>
+              <select value={form.cloud || 'aws'} onChange={e => upd('cloud', e.target.value)} style={inputCls}><option value="aws">AWS</option><option value="gcp">GCP</option></select></div>
+            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>SSH User</label>
+              <input value={form.ssh_user || ''} onChange={e => upd('ssh_user', e.target.value)} style={inputCls} /></div>
+          </div>
+          <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Escalation Email</label>
+            <input value={form.escalation_email || ''} onChange={e => upd('escalation_email', e.target.value)} style={inputCls} /></div>
+          <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slack Channel</label>
+            <input value={form.slack_channel || ''} onChange={e => upd('slack_channel', e.target.value)} style={inputCls} /></div>
+
+          {form.cloud === 'aws' && (
+            <div className="space-y-2 p-3 rounded-xl" style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-accent-amber)' }}>AWS Config</span>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Account ID</label><input value={form.aws_config?.account_id || ''} onChange={e => updAws('account_id', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
+                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Role Name</label><input value={form.aws_config?.role_name || ''} onChange={e => updAws('role_name', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
+                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>External ID</label><input value={form.aws_config?.external_id || ''} onChange={e => updAws('external_id', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
+                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Region</label><input value={form.aws_config?.region || ''} onChange={e => updAws('region', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
+              </div>
+            </div>
+          )}
+          {form.cloud === 'gcp' && (
+            <div className="space-y-2 p-3 rounded-xl" style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.15)' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--neon-green)' }}>GCP Config</span>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Project ID</label><input value={form.gcp_config?.project_id || ''} onChange={e => updGcp('project_id', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
+                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>SA Key Path</label><input value={form.gcp_config?.service_account_key || ''} onChange={e => updGcp('service_account_key', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Tenant Onboard Wizard (4 steps) ─────────────────────────────────────────
+
+function TenantOnboardModal({ onClose, onSaved }) {
+  const { addToast } = useToasts()
+  const [step, setStep] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [awsAuth, setAwsAuth] = useState('role_assume')
+  const [gcpAuth, setGcpAuth] = useState('sa_key')
+
+  const [form, setForm] = useState({
+    display_name: '', name: '', cloud: 'aws', escalation_email: '', slack_channel: '',
+    ssh_user: 'ubuntu',
+    aws_config: { account_id: '', role_name: '', role_arn: '', external_id: '', access_key_id: '', secret_access_key: '', credentials_file: '', region: '' },
+    gcp_config: { project_id: '', service_account_key: '' },
+  })
+
+  const toast = (msg, type = 'success') =>
+    addToast({ title: type === 'error' ? 'Error' : 'Success', message: msg, severity: type === 'error' ? 'CRITICAL' : 'LOW' })
+
+  const upd = (key, val) => setForm(f => ({ ...f, [key]: val }))
+  const updAws = (key, val) => setForm(f => ({ ...f, aws_config: { ...f.aws_config, [key]: val } }))
+  const updGcp = (key, val) => setForm(f => ({ ...f, gcp_config: { ...f.gcp_config, [key]: val } }))
+
+  const steps = ['Basic Info', 'Cloud Credentials', 'SSH & Defaults', 'Review']
+
+  const canNext = () => {
+    if (step === 0) return form.display_name && form.name
+    return true
+  }
+
+  const handleCreate = async () => {
+    setSaving(true)
+    try {
+      await createTenant(form)
+      toast(`Tenant "${form.display_name}" created successfully`)
+      onSaved()
+    } catch (err) { toast(extractErrorMessage(err) || 'Create failed', 'error') } finally { setSaving(false) }
+  }
+
+  const autoSlug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
-      <div className="relative w-full max-w-lg mx-4 glass rounded-2xl p-6 space-y-4 overflow-y-auto" style={{ maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
+      <div className="relative w-full max-w-lg mx-4 glass rounded-2xl p-6 space-y-5 overflow-y-auto" style={{ maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
         <div className="flex items-center justify-between">
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>Onboard New Tenant</h3>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>Onboard New Tenant</h3>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Step {step + 1} of {steps.length}</span>
+          </div>
           <button onClick={onClose}><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Display Name *</label>
-            <input value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} placeholder="Acme Corp" style={inputCls} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug (unique ID) *</label>
-            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value.toLowerCase().replace(/\s+/g,'-') }))} placeholder="acme-corp" style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} />
-          </div>
+
+        {/* Progress */}
+        <div className="flex items-center gap-1">
+          {steps.map((s, i) => (
+            <div key={s} className="flex items-center gap-1" style={{ flex: 1 }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%', fontSize: 11, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: i <= step ? 'var(--neon-indigo)' : 'var(--bg-input)', color: i <= step ? '#fff' : 'var(--text-muted)',
+              }}>{i < step ? '✓' : i + 1}</div>
+              <span style={{ fontSize: 10, color: i <= step ? 'var(--text-heading)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>{s}</span>
+              {i < steps.length - 1 && <div style={{ flex: 1, height: 1, background: i < step ? 'var(--neon-indigo)' : 'var(--border)', margin: '0 4px' }} />}
+            </div>
+          ))}
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cloud Provider</label>
-            <select value={form.cloud} onChange={e => setForm(f => ({ ...f, cloud: e.target.value }))} style={inputCls}>
-              <option value="aws">AWS</option>
-              <option value="gcp">GCP</option>
-            </select>
-          </div>
-          <div>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Server Count</label>
-            <input value={form.server_count} onChange={e => setForm(f => ({ ...f, server_count: e.target.value }))} type="number" min="0" placeholder="0" style={inputCls} />
-          </div>
-        </div>
-        <div>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Escalation Email</label>
-          <input value={form.escalation_email} onChange={e => setForm(f => ({ ...f, escalation_email: e.target.value }))} placeholder="ops@acme.com" type="email" style={inputCls} />
-        </div>
-        {configSnippet && (
-          <div>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Config Snippet (add to tenants.yaml)</label>
-            <pre style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--neon-green)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-              {configSnippet}
-            </pre>
+
+        {/* Step 0: Basic Info */}
+        {step === 0 && (
+          <div className="space-y-3">
+            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Display Name *</label>
+              <input value={form.display_name} onChange={e => { upd('display_name', e.target.value); if (!form.name || form.name === autoSlug(form.display_name)) upd('name', autoSlug(e.target.value)) }} placeholder="Acme Corporation" style={inputCls} /></div>
+            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug (URL-safe identifier) *</label>
+              <input value={form.name} onChange={e => upd('name', autoSlug(e.target.value))} placeholder="acme-corp" style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} /></div>
+            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cloud Provider *</label>
+              <select value={form.cloud} onChange={e => upd('cloud', e.target.value)} style={inputCls}><option value="aws">AWS</option><option value="gcp">GCP</option></select></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Escalation Email</label>
+                <input value={form.escalation_email} onChange={e => upd('escalation_email', e.target.value)} placeholder="sre@acme.com" style={inputCls} /></div>
+              <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slack Channel</label>
+                <input value={form.slack_channel} onChange={e => upd('slack_channel', e.target.value)} placeholder="#acme-alerts" style={inputCls} /></div>
+            </div>
           </div>
         )}
+
+        {/* Step 1: Cloud Credentials */}
+        {step === 1 && form.cloud === 'aws' && (
+          <div className="space-y-3">
+            {AWS_AUTH_METHODS.map(m => (
+              <div key={m.value} className="rounded-xl p-3" style={{ background: awsAuth === m.value ? 'rgba(251,191,36,0.06)' : 'transparent', border: awsAuth === m.value ? '1px solid rgba(251,191,36,0.2)' : '1px solid var(--border)', cursor: 'pointer' }} onClick={() => setAwsAuth(m.value)}>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="radio" checked={awsAuth === m.value} onChange={() => setAwsAuth(m.value)} style={{ marginTop: 3, accentColor: 'var(--color-accent-amber)' }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{m.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.desc}</div>
+                  </div>
+                </label>
+                {awsAuth === m.value && m.value === 'role_assume' && (
+                  <div className="grid grid-cols-2 gap-2 mt-3 ml-6">
+                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Account ID *</label><input value={form.aws_config.account_id} onChange={e => updAws('account_id', e.target.value)} placeholder="123456789012" style={{ ...inputCls, fontSize: 12 }} /></div>
+                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Role Name *</label><input value={form.aws_config.role_name} onChange={e => updAws('role_name', e.target.value)} placeholder="AirexReadOnly" style={{ ...inputCls, fontSize: 12 }} /></div>
+                    <div className="col-span-2"><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>External ID <span style={{ opacity: 0.6 }}>(optional)</span></label><input value={form.aws_config.external_id} onChange={e => updAws('external_id', e.target.value)} placeholder="airex-trust-xyz" style={{ ...inputCls, fontSize: 12 }} /></div>
+                  </div>
+                )}
+                {awsAuth === m.value && m.value === 'role_arn' && (
+                  <div className="mt-3 ml-6"><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Role ARN *</label><input value={form.aws_config.role_arn} onChange={e => updAws('role_arn', e.target.value)} placeholder="arn:aws:iam::123456789012:role/AirexRole" style={{ ...inputCls, fontSize: 12 }} /></div>
+                )}
+                {awsAuth === m.value && m.value === 'access_keys' && (
+                  <div className="space-y-2 mt-3 ml-6">
+                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Access Key ID *</label><input value={form.aws_config.access_key_id} onChange={e => updAws('access_key_id', e.target.value)} placeholder="AKIAIOSFODNN7EXAMPLE" style={{ ...inputCls, fontSize: 12, fontFamily: 'var(--font-mono)' }} /></div>
+                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Secret Access Key *</label><input type="password" value={form.aws_config.secret_access_key} onChange={e => updAws('secret_access_key', e.target.value)} placeholder="••••••••" style={{ ...inputCls, fontSize: 12, fontFamily: 'var(--font-mono)' }} /></div>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(251,191,36,0.08)', fontSize: 11, color: 'var(--color-accent-amber)' }}>
+                      <AlertTriangle size={13} /> Keys stored in DB. Use Role Assumption for production.
+                    </div>
+                  </div>
+                )}
+                {awsAuth === m.value && m.value === 'creds_file' && (
+                  <div className="mt-3 ml-6"><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>File Path on Server *</label><input value={form.aws_config.credentials_file} onChange={e => updAws('credentials_file', e.target.value)} placeholder="/etc/airex/aws-creds.json" style={{ ...inputCls, fontSize: 12, fontFamily: 'var(--font-mono)' }} /></div>
+                )}
+                {awsAuth === m.value && m.value === 'instance' && (
+                  <div className="mt-3 ml-6 px-3 py-2 rounded-lg" style={{ background: 'rgba(52,211,153,0.08)', fontSize: 11, color: 'var(--neon-green)' }}>
+                    <CheckCircle size={13} style={{ display: 'inline', marginRight: 4 }} /> No credentials needed — AIREX will use the EC2 instance role.
+                  </div>
+                )}
+              </div>
+            ))}
+            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>AWS Region</label>
+              <input value={form.aws_config.region} onChange={e => updAws('region', e.target.value)} placeholder="Leave empty for auto-discover" style={inputCls} /></div>
+          </div>
+        )}
+
+        {step === 1 && form.cloud === 'gcp' && (
+          <div className="space-y-3">
+            {GCP_AUTH_METHODS.map(m => (
+              <div key={m.value} className="rounded-xl p-3" style={{ background: gcpAuth === m.value ? 'rgba(52,211,153,0.06)' : 'transparent', border: gcpAuth === m.value ? '1px solid rgba(52,211,153,0.2)' : '1px solid var(--border)', cursor: 'pointer' }} onClick={() => setGcpAuth(m.value)}>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="radio" checked={gcpAuth === m.value} onChange={() => setGcpAuth(m.value)} style={{ marginTop: 3, accentColor: 'var(--neon-green)' }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{m.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.desc}</div>
+                  </div>
+                </label>
+                {gcpAuth === m.value && m.value === 'sa_key' && (
+                  <div className="grid grid-cols-2 gap-2 mt-3 ml-6">
+                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Project ID *</label><input value={form.gcp_config.project_id} onChange={e => updGcp('project_id', e.target.value)} placeholder="my-project-123" style={{ ...inputCls, fontSize: 12 }} /></div>
+                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Key File Path *</label><input value={form.gcp_config.service_account_key} onChange={e => updGcp('service_account_key', e.target.value)} placeholder="/etc/airex/sa.json" style={{ ...inputCls, fontSize: 12, fontFamily: 'var(--font-mono)' }} /></div>
+                  </div>
+                )}
+                {gcpAuth === m.value && (m.value === 'adc' || m.value === 'auto') && (
+                  <div className="mt-3 ml-6"><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Project ID *</label><input value={form.gcp_config.project_id} onChange={e => updGcp('project_id', e.target.value)} placeholder="my-project-123" style={{ ...inputCls, fontSize: 12 }} /></div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Step 2: SSH */}
+        {step === 2 && (
+          <div className="space-y-3">
+            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Default SSH User</label>
+              <input value={form.ssh_user} onChange={e => upd('ssh_user', e.target.value)} placeholder="ubuntu" style={inputCls} /></div>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-server SSH overrides can be configured after tenant creation by editing the server list.</p>
+          </div>
+        )}
+
+        {/* Step 3: Review */}
+        {step === 3 && (
+          <div className="space-y-3">
+            <div className="glass rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Name</span><span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{form.display_name}</span></div>
+              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Slug</span><span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-heading)' }}>{form.name}</span></div>
+              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cloud</span><CloudBadge cloud={form.cloud} /></div>
+              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Auth Method</span><span style={{ fontSize: 12, color: 'var(--text-heading)' }}>{form.cloud === 'aws' ? (AWS_AUTH_METHODS.find(m => m.value === awsAuth)?.label || awsAuth) : (GCP_AUTH_METHODS.find(m => m.value === gcpAuth)?.label || gcpAuth)}</span></div>
+              {form.escalation_email && <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Email</span><span style={{ fontSize: 12, color: 'var(--text-heading)' }}>{form.escalation_email}</span></div>}
+              {form.slack_channel && <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Slack</span><span style={{ fontSize: 12, color: 'var(--text-heading)' }}>{form.slack_channel}</span></div>}
+              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>SSH User</span><span style={{ fontSize: 12, color: 'var(--text-heading)' }}>{form.ssh_user}</span></div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
         <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
-            {saving ? 'Generating…' : 'Generate Config'}
-          </button>
+          {step > 0 ? (
+            <button onClick={() => setStep(s => s - 1)} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Back</button>
+          ) : (
+            <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+          )}
+          {step < steps.length - 1 ? (
+            <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>Next</button>
+          ) : (
+            <button onClick={handleCreate} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+              {saving ? 'Creating…' : 'Create Tenant'}
+            </button>
+          )}
         </div>
       </div>
     </div>

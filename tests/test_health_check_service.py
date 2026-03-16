@@ -188,6 +188,7 @@ class TestCheckSite24x7Monitors:
     @pytest.mark.asyncio
     async def test_processes_monitor_data(self):
         session = AsyncMock()
+        session.add = MagicMock()
         redis = AsyncMock()
 
         mock_client_instance = AsyncMock()
@@ -230,6 +231,7 @@ class TestCheckSite24x7Monitors:
     @pytest.mark.asyncio
     async def test_handles_monitor_error_gracefully(self):
         session = AsyncMock()
+        session.add = MagicMock()
 
         mock_client_instance = AsyncMock()
         mock_client_instance.list_monitors.return_value = [

@@ -1,30 +1,21 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell,
   AlertOctagon,
   CheckCircle,
   Clock,
-  Repeat,
   LayoutGrid,
   List as ListIcon,
-  Activity,
-  AlertTriangle,
-  GaugeCircle,
-  Radio,
-  ArrowUpRight,
-  ChevronRight,
   Search,
 } from 'lucide-react'
 import useIncidents from '../hooks/useIncidents'
 import IncidentCard from '../components/incident/IncidentCard'
+import IncidentListRow from '../components/incident/IncidentListRow'
 import MetricCard from '../components/common/MetricCard'
 import SystemGraph from '../components/common/SystemGraph'
 import ConnectionBanner from '../components/common/ConnectionBanner'
-import StateBadge from '../components/common/StateBadge'
-import SeverityBadge from '../components/common/SeverityBadge'
-import { formatTimestamp, truncateId, formatDuration } from '../utils/formatters'
+import CustomSelect from '../components/common/CustomSelect'
 
 const STATES = [
   'RECEIVED', 'INVESTIGATING', 'RECOMMENDATION_READY', 'AWAITING_APPROVAL',
@@ -152,9 +143,9 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
               }}
             />
           </div>
-          <Select value={filters.alertType || ''} onChange={(v) => setFilters(f => ({ ...f, alertType: v || null }))} options={ALERT_TYPES} placeholder="All Alert Types" />
-          <Select value={filters.state || ''} onChange={(v) => setFilters(f => ({ ...f, state: v || null }))} options={STATES} placeholder="All States" />
-          <Select value={filters.severity || ''} onChange={(v) => setFilters(f => ({ ...f, severity: v || null }))} options={SEVERITIES} placeholder="All Severities" />
+          <CustomSelect value={filters.alertType || ''} onChange={(v) => setFilters(f => ({ ...f, alertType: v || null }))} options={ALERT_TYPES} placeholder="All Alert Types" />
+          <CustomSelect value={filters.state || ''} onChange={(v) => setFilters(f => ({ ...f, state: v || null }))} options={STATES} placeholder="All States" />
+          <CustomSelect value={filters.severity || ''} onChange={(v) => setFilters(f => ({ ...f, severity: v || null }))} options={SEVERITIES} placeholder="All Severities" />
         </div>
         <div className="flex rounded-lg p-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
           {[
@@ -259,120 +250,4 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
   )
 }
 
-function Select({ value, onChange, options, placeholder }) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="appearance-none pl-3 pr-7 py-1.5 rounded-lg outline-none transition-all"
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--text-secondary)',
-          background: 'var(--bg-input)',
-          border: '1px solid var(--border)',
-        }}
-      >
-        <option value="">{placeholder}</option>
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2" style={{ color: 'var(--text-muted)' }}>
-        <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
-      </div>
-    </div>
-  )
-}
 
-const SEVERITY_SHADES = {
-  CRITICAL: 'var(--color-accent-red)',
-  HIGH: 'var(--brand-orange)',
-  MEDIUM: 'var(--color-accent-amber)',
-  LOW: 'var(--color-accent-green)',
-}
-
-function IncidentListRow({ incident }) {
-  const meta = incident.meta || {}
-  const alertCount = meta._alert_count != null ? Number(meta._alert_count) : 1
-  const durationSec = meta._alert_duration_seconds != null ? Number(meta._alert_duration_seconds) : null
-  const unstable = Boolean(meta._unstable)
-  const cloud = meta._cloud || meta.cloud
-  const tenant = meta._tenant_name || meta.tenant
-  const manualReason = typeof meta._manual_review_reason === 'string' ? meta._manual_review_reason.trim() : ''
-  const manualReview = Boolean(meta._manual_review_required || manualReason)
-  const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
-  const accent = manualReview ? 'var(--color-accent-red)' : (SEVERITY_SHADES[incident.severity] || 'var(--brand-orange)')
-
-  return (
-    <Link
-      to={`/incidents/${incident.id}`}
-      className="block rounded-2xl relative overflow-hidden glass backdrop-blur-sm transition-all hover:bg-white/5"
-      style={{ border: '1px solid rgba(255,255,255,0.05)' }}
-    >
-      <div
-        className="absolute inset-y-3 left-3 w-[3px] rounded-full"
-        style={{ background: accent, opacity: 0.85 }}
-      />
-      <div className="pl-6 pr-4 py-3 flex items-center gap-4">
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-            <span>{truncateId(incident.id)}</span>
-            <span>• {formatTimestamp(incident.created_at)}</span>
-            {tenant && <span>• tenant {tenant}</span>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <SeverityBadge severity={incident.severity} />
-            <StateBadge state={incident.state} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{incident.alert_type}</span>
-            {cloud && (
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <Radio size={11} /> {cloud}
-              </span>
-            )}
-            {manualReview && (
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: 'var(--color-accent-red)', background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.25)' }}>
-                Manual Review
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2" style={{ color: 'var(--text-heading)', fontWeight: 600, fontSize: 15 }}>
-            {incident.title}
-            <ArrowUpRight size={16} />
-          </div>
-          <div className="flex flex-wrap gap-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-            <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-              <Repeat size={10} /> {alertCount}x
-            </span>
-            {durationSec && (
-              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                <Clock size={10} /> {formatDuration(durationSec)}
-              </span>
-            )}
-            {unstable && (
-              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: 'var(--color-accent-amber)' }}>
-                <AlertTriangle size={10} /> flapping
-              </span>
-            )}
-            {meta.recommendation?.confidence && (
-              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'var(--glow-sky)', border: '1px solid rgba(56,189,248,0.2)', color: 'var(--neon-cyan)' }}>
-                <GaugeCircle size={10} /> {Math.round(meta.recommendation.confidence * 100)}% AI
-              </span>
-            )}
-            {meta.recommendation?.proposed_action && (
-              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: 'var(--color-accent-red)' }}>
-                <Activity size={10} /> {meta.recommendation.proposed_action}
-              </span>
-            )}
-          </div>
-          {manualReason && (
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              <span style={{ color: 'var(--color-accent-red)', fontWeight: 600 }}>Operator note:</span> {manualReason}
-              {manualAt && <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>({manualAt})</span>}
-            </p>
-          )}
-        </div>
-        <ChevronRight size={18} style={{ color: 'var(--text-muted)' }} />
-      </div>
-    </Link>
-  )
-}

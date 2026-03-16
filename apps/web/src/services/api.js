@@ -154,6 +154,31 @@ export async function fetchTenants() {
   return res.data
 }
 
+export async function fetchTenantDetail(name) {
+  const res = await api.get(`/tenants/${encodeURIComponent(name)}`)
+  return res.data
+}
+
+export async function createTenant(data) {
+  const res = await api.post('/tenants/', data)
+  return res.data
+}
+
+export async function updateTenant(name, data) {
+  const res = await api.put(`/tenants/${encodeURIComponent(name)}`, data)
+  return res.data
+}
+
+export async function deleteTenant(name) {
+  const res = await api.delete(`/tenants/${encodeURIComponent(name)}`)
+  return res.data
+}
+
+export async function reloadTenants() {
+  const res = await api.post('/tenants/reload')
+  return res.data
+}
+
 // DLQ (admin only)
 export async function fetchDLQ({ limit = 100, offset = 0 } = {}) {
   const res = await api.get('/dlq/', { params: { limit, offset } })

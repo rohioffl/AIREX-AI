@@ -14,9 +14,13 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+
+
+pytestmark = pytest.mark.asyncio
 
 
 TENANT_ID = "00000000-0000-0000-0000-000000000000"
@@ -45,7 +49,7 @@ def mock_session():
     return session
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client(mock_redis, mock_session):
     """httpx AsyncClient with mocked dependencies."""
     from app.api.dependencies import get_db_session, get_redis

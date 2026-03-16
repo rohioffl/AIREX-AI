@@ -3,15 +3,16 @@ import { useLocation, Link, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle, Bell,
   ShieldAlert, AlertOctagon, Radio, Zap, Server, Plus,
-  RefreshCw, Download, Filter, ArrowUpDown, ChevronLeft, ChevronRight,
-  X, Calendar, Search
+  RefreshCw, Download, Filter, ChevronLeft, ChevronRight,
+  X, Search
 } from 'lucide-react'
+import CustomSelect from '../components/common/CustomSelect'
 import useIncidents from '../hooks/useIncidents'
 import ConnectionBanner from '../components/common/ConnectionBanner'
 import AlertRow from '../components/alert/AlertRow'
-import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
 import CreateIncidentModal from '../components/incident/CreateIncidentModal'
 import { exportIncidents, bulkApprove, bulkReject } from '../services/api'
+import { extractErrorMessage } from '../utils/errorHandler'
 
 const ACTION_STATES = ['RECOMMENDATION_READY', 'AWAITING_APPROVAL']
 const INVESTIGATING_STATES = ['RECEIVED', 'INVESTIGATING']
@@ -43,7 +44,7 @@ export default function AlertsPage() {
     host_key: hostFilter || null
   })
   const [alertFilter, setAlertFilter] = useState('all')
-  const [, setShowCreateModal] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const [sortBy, setSortBy] = useState('created_desc')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState({
@@ -57,6 +58,10 @@ export default function AlertsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedIncidents, setSelectedIncidents] = useState(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [bulkError, setBulkError] = useState(null)
+  const [exportError, setExportError] = useState(null)
+  const [showRejectInput, setShowRejectInput] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
   const searchInputRef = useRef(null)
   const navigate = useNavigate()
 
@@ -92,6 +97,7 @@ export default function AlertsPage() {
   }
 
   const handleExport = async () => {
+    setExportError(null)
     try {
       const filters = {}
       if (advancedFilters.alertType) filters.alert_type = advancedFilters.alertType
@@ -112,32 +118,53 @@ export default function AlertsPage() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      console.error('Export failed:', err)
-      alert('Failed to export incidents: ' + (err.message || 'Unknown error'))
+      setExportError(extractErrorMessage(err))
     }
   }
 
   const handleBulkApprove = async () => {
     setBulkActionLoading(true)
+    setBulkError(null)
     try {
-      await bulkApprove(Array.from(selectedIncidents))
+      const result = await bulkApprove(Array.from(selectedIncidents))
+      if (result?.errors?.length > 0 && result.approved_count === 0) {
+        setBulkError(`All failed: ${result.errors[0]}`)
+      } else if (result?.errors?.length > 0) {
+        setBulkError(`${result.approved_count} approved, ${result.errors.length} failed`)
+      }
       setSelectedIncidents(new Set())
       await reload()
     } catch (err) {
-      alert('Bulk approve failed: ' + (err.response?.data?.detail || err.message || 'Unknown error'))
+      setBulkError(extractErrorMessage(err))
     } finally {
       setBulkActionLoading(false)
     }
   }
 
   const handleBulkReject = async () => {
+    if (!rejectReason.trim()) {
+      setBulkError('Rejection reason is required')
+      return
+    }
     setBulkActionLoading(true)
+    setBulkError(null)
     try {
-      await bulkReject(Array.from(selectedIncidents))
+      const result = await bulkReject(Array.from(selectedIncidents), rejectReason.trim())
+      if (result?.errors?.length > 0 && result.rejected_count === 0) {
+        setBulkError(`All failed: ${result.errors[0]}`)
+      } else if (result?.errors?.length > 0) {
+        setBulkError(`${result.rejected_count} rejected, ${result.errors.length} failed`)
+      }
       setSelectedIncidents(new Set())
-      await reload()
+      setShowRejectInput(false)
+      setRejectReason('')
+      if (result?.rejected_count > 0) {
+        navigate('/rejected')
+      } else {
+        await reload()
+      }
     } catch (err) {
-      alert('Bulk reject failed: ' + (err.response?.data?.detail || err.message || 'Unknown error'))
+      setBulkError(extractErrorMessage(err))
     } finally {
       setBulkActionLoading(false)
     }
@@ -277,29 +304,30 @@ export default function AlertsPage() {
       <ConnectionBanner connected={connected} reconnecting={reconnecting} onRetry={reload} />
 
       {hostFilter && (
-        <div className="glass rounded-xl p-4 flex items-center justify-between" style={{ borderLeft: '3px solid rgba(99,102,241,0.4)' }}>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 rounded-lg text-white flex items-center gap-2 transition-colors ml-auto"
-          style={{ background: 'var(--neon-green)', fontSize: 13 }}
-        >
-          <Plus size={16} />
-          Create Incident
-        </button>
-
+        <div className="glass rounded-xl p-4 flex items-center justify-between gap-3" style={{ borderLeft: '3px solid rgba(99,102,241,0.4)' }}>
           <div className="flex items-center gap-2">
             <Server size={14} style={{ color: 'var(--neon-indigo)' }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               Showing alerts for server: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{hostFilter}</span>
             </span>
           </div>
-          <Link
-            to="/alerts"
-            className="text-sm transition-colors"
-            style={{ color: 'var(--neon-indigo)', fontWeight: 500 }}
-          >
-            Clear filter
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/alerts"
+              className="text-sm transition-colors"
+              style={{ color: 'var(--neon-indigo)', fontWeight: 500 }}
+            >
+              Clear filter
+            </Link>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors"
+              style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', color: 'var(--neon-green)', fontSize: 13, fontWeight: 600 }}
+            >
+              <Plus size={14} />
+              Create Incident
+            </button>
+          </div>
         </div>
       )}
 
@@ -423,28 +451,13 @@ export default function AlertsPage() {
           ))}
           
           {/* Sort Dropdown */}
-          <div className="relative ml-auto">
-            <select
+          <div className="ml-auto">
+            <CustomSelect
               value={sortBy}
-              onChange={(e) => {
-                setSortBy(e.target.value)
-                setPage(1)
-              }}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all appearance-none cursor-pointer"
-              style={{
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-secondary)',
-                fontSize: 13,
-                fontWeight: 600,
-                paddingRight: 32,
-              }}
-            >
-              {SORT_OPTIONS.map(opt => (
-                <option key={opt.key} value={opt.key}>{opt.label}</option>
-              ))}
-            </select>
-            <ArrowUpDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
+              onChange={(v) => { setSortBy(v || 'created_desc'); setPage(1) }}
+              options={SORT_OPTIONS.map(o => ({ value: o.key, label: o.label }))}
+              placeholder="Sort by…"
+            />
           </div>
 
           {/* Advanced Filters Toggle */}
@@ -487,48 +500,28 @@ export default function AlertsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Alert Type</label>
-                <select
+                <CustomSelect
                   value={advancedFilters.alertType}
-                  onChange={(e) => {
-                    setAdvancedFilters({ ...advancedFilters, alertType: e.target.value })
-                    setPage(1)
-                  }}
-                  className="w-full px-3 py-2 rounded-lg"
-                  style={{
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                  }}
-                >
-                  <option value="">All Types</option>
-                  {uniqueAlertTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
+                  onChange={(v) => { setAdvancedFilters({ ...advancedFilters, alertType: v }); setPage(1) }}
+                  options={uniqueAlertTypes}
+                  placeholder="All Types"
+                  style={{ width: '100%' }}
+                />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Severity</label>
-                <select
+                <CustomSelect
                   value={advancedFilters.severity}
-                  onChange={(e) => {
-                    setAdvancedFilters({ ...advancedFilters, severity: e.target.value })
-                    setPage(1)
-                  }}
-                  className="w-full px-3 py-2 rounded-lg"
-                  style={{
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                  }}
-                >
-                  <option value="">All Severities</option>
-                  <option value="CRITICAL">Critical</option>
-                  <option value="HIGH">High</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="LOW">Low</option>
-                </select>
+                  onChange={(v) => { setAdvancedFilters({ ...advancedFilters, severity: v }); setPage(1) }}
+                  options={[
+                    { value: 'CRITICAL', label: 'Critical' },
+                    { value: 'HIGH', label: 'High' },
+                    { value: 'MEDIUM', label: 'Medium' },
+                    { value: 'LOW', label: 'Low' },
+                  ]}
+                  placeholder="All Severities"
+                  style={{ width: '100%' }}
+                />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>From Date</label>
@@ -585,56 +578,12 @@ export default function AlertsPage() {
         </div>
       )}
 
-      {/* Bulk Actions Bar */}
-      {selectedIncidents.size > 0 && (
-        <div className="glass rounded-xl p-4 flex items-center justify-between" style={{ border: '2px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.05)' }}>
-          <div className="flex items-center gap-3">
-            <span className="font-semibold" style={{ color: 'var(--text-heading)' }}>
-              {selectedIncidents.size} incident(s) selected
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleBulkApprove}
-              disabled={bulkActionLoading}
-              className="px-4 py-2 rounded-lg transition-all disabled:opacity-50"
-              style={{ 
-                background: 'linear-gradient(135deg, var(--color-accent-green), var(--neon-green))',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 600
-              }}
-            >
-              Approve Selected
-            </button>
-            <button
-              onClick={handleBulkReject}
-              disabled={bulkActionLoading}
-              className="px-4 py-2 rounded-lg transition-all disabled:opacity-50"
-              style={{ 
-                background: 'var(--glow-rose)', 
-                border: '1px solid rgba(244,63,94,0.3)',
-                color: 'var(--color-accent-red)',
-                fontSize: 13,
-                fontWeight: 600
-              }}
-            >
-              Reject Selected
-            </button>
-            <button
-              onClick={() => setSelectedIncidents(new Set())}
-              className="px-3 py-2 rounded-lg transition-all"
-              style={{ 
-                background: 'var(--bg-input)', 
-                border: '1px solid var(--border)',
-                color: 'var(--text-secondary)',
-                fontSize: 13,
-                fontWeight: 600
-              }}
-            >
-              Clear
-            </button>
-          </div>
+      {/* Export error */}
+      {exportError && (
+        <div className="rounded-lg px-4 py-2.5 flex items-center justify-between gap-3"
+          style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', fontSize: 13, color: 'var(--color-accent-red)' }}>
+          <span><span style={{ fontWeight: 700 }}>Export failed:</span> {exportError}</span>
+          <button onClick={() => setExportError(null)} style={{ opacity: 0.7, lineHeight: 1 }}><X size={14} /></button>
         </div>
       )}
 
@@ -650,18 +599,130 @@ export default function AlertsPage() {
           </div>
         ) : (
           <>
-            {/* Select All Checkbox */}
-            <div className="flex items-center gap-2 px-4 py-2 glass rounded-lg mb-2">
-              <input
-                type="checkbox"
-                checked={selectedIncidents.size === visibleAlerts.length && visibleAlerts.length > 0}
-                onChange={toggleSelectAll}
-                className="w-4 h-4 rounded cursor-pointer"
-                style={{ accentColor: 'var(--neon-indigo)' }}
-              />
-              <span className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>
-                Select All ({selectedIncidents.size} selected)
-              </span>
+            {/* Selection Toolbar */}
+            <div
+              className="rounded-xl px-4 py-2.5 flex items-center gap-3 transition-all"
+              style={{
+                background: selectedIncidents.size > 0 ? 'rgba(99,102,241,0.06)' : 'var(--bg-elevated)',
+                border: selectedIncidents.size > 0 ? '1px solid rgba(99,102,241,0.3)' : '1px solid var(--border)',
+              }}
+            >
+              {/* Select All checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer select-none" style={{ flexShrink: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIncidents.size === visibleAlerts.length && visibleAlerts.length > 0}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded cursor-pointer"
+                  style={{ accentColor: 'var(--neon-indigo)' }}
+                />
+                <span style={{ fontSize: 12, fontWeight: 600, color: selectedIncidents.size > 0 ? 'var(--neon-indigo)' : 'var(--text-secondary)' }}>
+                  {selectedIncidents.size > 0 ? `${selectedIncidents.size} selected` : 'Select all'}
+                </span>
+              </label>
+
+              {/* Bulk actions — only visible when something is selected */}
+              {selectedIncidents.size > 0 && (
+                <>
+                  <div style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
+                  {/* Approve only for "Needs Action" mode where approval is meaningful */}
+                  {alertFilter === 'action' && (
+                    <button
+                      onClick={handleBulkApprove}
+                      disabled={bulkActionLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                      style={{
+                        background: 'rgba(16,185,129,0.1)',
+                        border: '1px solid rgba(16,185,129,0.25)',
+                        color: 'var(--neon-green)',
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      <Zap size={12} />
+                      Approve
+                    </button>
+                  )}
+                  {!showRejectInput ? (
+                    <button
+                      onClick={() => { setShowRejectInput(true); setBulkError(null) }}
+                      disabled={bulkActionLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                      style={{
+                        background: 'rgba(248,113,113,0.08)',
+                        border: '1px solid rgba(248,113,113,0.2)',
+                        color: 'var(--color-accent-red)',
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      <X size={12} />
+                      Reject
+                    </button>
+                  ) : (
+                    <>
+                      <div style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Reason for rejection…"
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleBulkReject()
+                          if (e.key === 'Escape') { setShowRejectInput(false); setRejectReason(''); setBulkError(null) }
+                        }}
+                        className="px-3 py-1.5 rounded-lg outline-none"
+                        style={{
+                          background: 'var(--bg-input)',
+                          border: '1px solid rgba(248,113,113,0.4)',
+                          color: 'var(--text-primary)',
+                          fontSize: 12,
+                          width: 220,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <button
+                        onClick={handleBulkReject}
+                        disabled={bulkActionLoading || !rejectReason.trim()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                        style={{
+                          background: 'rgba(248,113,113,0.12)',
+                          border: '1px solid rgba(248,113,113,0.3)',
+                          color: 'var(--color-accent-red)',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {bulkActionLoading ? '…' : 'Confirm'}
+                      </button>
+                      <button
+                        onClick={() => { setShowRejectInput(false); setRejectReason(''); setBulkError(null) }}
+                        className="flex items-center gap-1 px-2 py-1.5 rounded-lg transition-all"
+                        style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, background: 'var(--bg-input)', border: '1px solid var(--border)', flexShrink: 0 }}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                  {!showRejectInput && (
+                    <button
+                      onClick={() => { setSelectedIncidents(new Set()); setShowRejectInput(false); setRejectReason(''); setBulkError(null) }}
+                      className="flex items-center gap-1 transition-all"
+                      style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginLeft: 'auto' }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                  {/* Inline bulk error */}
+                  {bulkError && (
+                    <span style={{ fontSize: 11, color: 'var(--color-accent-red)', marginLeft: showRejectInput ? 0 : 4 }}>
+                      {bulkError}
+                    </span>
+                  )}
+                </>
+              )}
             </div>
             <div className="space-y-1.5" style={{ width: '100%', maxWidth: '100%' }}>
               {visibleAlerts.map(alert => {
@@ -753,6 +814,16 @@ export default function AlertsPage() {
             )}
           </>
         )
+      )}
+
+      {showCreateModal && (
+        <CreateIncidentModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => {
+            setShowCreateModal(false)
+            reload()
+          }}
+        />
       )}
     </div>
   )

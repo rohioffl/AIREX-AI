@@ -108,6 +108,7 @@ class TestTransitionState:
         incident.state = IncidentState.RECEIVED
 
         session = AsyncMock()
+        session.add = MagicMock()
         # No previous transitions
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
@@ -197,6 +198,7 @@ class TestTransitionState:
         prev_transition.hash = "abc123"
 
         session = AsyncMock()
+        session.add = MagicMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = prev_transition
         session.execute.return_value = mock_result

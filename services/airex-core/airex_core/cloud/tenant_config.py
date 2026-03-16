@@ -1,8 +1,11 @@
 """
 Tenant configuration loader.
 
-Reads services/airex-core/config/tenants.yaml to provide per-tenant cloud credentials,
-SSH keys, server inventories, and investigation preferences.
+Reads tenant data from **PostgreSQL** (primary) or falls back to
+``config/tenants.yaml`` when the DB is unavailable.  The public API and
+dataclass contracts are identical regardless of source, so the 30+
+downstream consumers (actions, probes, cloud auth, SSH resolution, etc.)
+require zero changes.
 
 Usage:
     from airex_core.cloud.tenant_config import get_tenant_config, get_server_by_name
@@ -19,9 +22,11 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+import threading
 from typing import Any
 
 import structlog
@@ -29,23 +34,24 @@ import yaml  # type: ignore[import-untyped]
 
 logger = structlog.get_logger()
 
-# ── Config file path ─────────────────────────────────────────────
-# Resolve to airex-core/config: from airex_core/cloud/tenant_config.py
-# go up 3 levels to reach airex-core/, then into config/
+# ── Config file path (YAML fallback) ─────────────────────────────
 _CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config"
-# Fallback: if not found, try /app/airex-core/config (Docker container path)
 if not _CONFIG_DIR.exists():
     _CONFIG_DIR = Path("/app/airex-core/config")
 _DEFAULT_CONFIG_PATH = _CONFIG_DIR / "tenants.yaml"
 
-# Cache
+# Unified cache — works for both DB and YAML sources
 _config_cache: dict[str, Any] = {}
 _cache_timestamp: float = 0.0
 _CACHE_TTL = 60.0  # seconds
+_SOURCE: str = "none"  # "db" or "yaml" — tracks current source
+_CACHE_LOCK = threading.Lock()
+_DB_CONNECT_TIMEOUT_SECONDS = 1.0
+_DB_FETCH_TIMEOUT_SECONDS = 1.5
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Data classes
+#  Data classes  (unchanged — exact same contract for all consumers)
 # ═══════════════════════════════════════════════════════════════════
 
 
@@ -139,7 +145,142 @@ class TenantConfig:
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Loader
+#  DB Reader — converts Tenant model rows → same dict shape as YAML
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _run_async_sync(awaitable_factory: Any, *args: Any) -> Any:
+    """Run an async callable from sync code, even if an event loop is active."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(
+            asyncio.wait_for(
+                awaitable_factory(*args),
+                timeout=_DB_FETCH_TIMEOUT_SECONDS,
+            )
+        )
+
+    result: dict[str, Any] = {}
+    error: dict[str, BaseException] = {}
+
+    def _runner() -> None:
+        try:
+            result["value"] = asyncio.run(awaitable_factory(*args))
+        except BaseException as exc:  # pragma: no cover - thread handoff
+            error["exc"] = exc
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join(timeout=_DB_FETCH_TIMEOUT_SECONDS)
+
+    if thread.is_alive():
+        raise TimeoutError("Tenant DB fetch timed out")
+
+    if "exc" in error:
+        raise error["exc"]
+    return result.get("value")
+
+
+async def _fetch_active_tenants(sync_url: str) -> list[Any]:
+    """Fetch active tenants using asyncpg without requiring psycopg2."""
+    import asyncpg
+
+    conn = await asyncpg.connect(
+        sync_url,
+        timeout=_DB_CONNECT_TIMEOUT_SECONDS,
+        command_timeout=_DB_CONNECT_TIMEOUT_SECONDS,
+    )
+    try:
+        return await conn.fetch(
+            """
+            SELECT id, name, display_name, cloud, is_active,
+                   escalation_email, slack_channel, ssh_user,
+                   aws_config, gcp_config, servers
+            FROM tenants
+            WHERE is_active = true
+            ORDER BY name
+            """
+        )
+    finally:
+        await conn.close()
+
+
+def _load_tenants_from_db() -> dict | None:
+    """
+    Load all active tenants from PostgreSQL synchronously.
+
+    Returns a dict shaped like the YAML file:
+        {"defaults": {}, "tenants": {"name": {...}, ...}}
+    Returns None if DB is unavailable (caller falls back to YAML).
+    """
+    try:
+        import asyncpg
+        from airex_core.core.config import settings
+
+        sync_url = settings.DATABASE_URL.replace(
+            "postgresql+asyncpg://", "postgresql://"
+        )
+        rows = _run_async_sync(_fetch_active_tenants, sync_url)
+
+        if not rows:
+            return None
+
+        tenants: dict[str, dict] = {}
+        for row in rows:
+            tenant_id = row["id"]
+            name = row["name"]
+            display_name = row["display_name"]
+            cloud = row["cloud"]
+            escalation_email = row["escalation_email"]
+            slack_channel = row["slack_channel"]
+            ssh_user = row["ssh_user"]
+            aws_config = row["aws_config"]
+            gcp_config = row["gcp_config"]
+            servers_json = row["servers"]
+
+            tenant_dict: dict[str, Any] = {
+                "tenant_id": str(tenant_id),
+                "display_name": display_name or name,
+                "cloud": cloud or "aws",
+                "escalation_email": escalation_email or "",
+                "slack_channel": slack_channel or "",
+                "ssh_user": ssh_user or "ubuntu",
+            }
+
+            # AWS config (JSONB → dict)
+            if aws_config and isinstance(aws_config, dict):
+                tenant_dict["aws"] = aws_config
+
+            # GCP config (JSONB → dict)
+            if gcp_config and isinstance(gcp_config, dict):
+                tenant_dict["gcp"] = gcp_config
+
+            # Servers (JSONB → list of dicts)
+            if servers_json and isinstance(servers_json, list):
+                tenant_dict["servers"] = servers_json
+
+            tenants[name] = tenant_dict
+
+        logger.info(
+            "tenant_config_loaded_from_db",
+            tenant_count=len(tenants),
+        )
+        return {"defaults": {}, "tenants": tenants}
+    except (ImportError, ModuleNotFoundError):
+        logger.exception("tenant_config_db_driver_missing")
+        raise
+    except (asyncpg.PostgresError, OSError, ConnectionError, TimeoutError) as exc:
+        logger.warning(
+            "tenant_config_db_unavailable",
+            error=str(exc),
+            msg="falling back to YAML",
+        )
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  YAML Loader (fallback)
 # ═══════════════════════════════════════════════════════════════════
 
 
@@ -165,25 +306,66 @@ def _load_raw_config(config_path: str | Path = "") -> dict:
         return {}
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  Unified Cache — tries DB first, falls back to YAML
+# ═══════════════════════════════════════════════════════════════════
+
+
 def _get_cached_config(config_path: str = "") -> dict:
-    """Get config with TTL caching."""
-    global _config_cache, _cache_timestamp
+    """Get config with TTL caching.  DB is primary, YAML is fallback."""
+    global _config_cache, _cache_timestamp, _SOURCE
 
     now = time.monotonic()
-    if _config_cache and (now - _cache_timestamp) < _CACHE_TTL:
-        return _config_cache
+    with _CACHE_LOCK:
+        if _config_cache and (now - _cache_timestamp) < _CACHE_TTL:
+            return _config_cache
 
-    _config_cache = _load_raw_config(config_path)
-    _cache_timestamp = now
-    return _config_cache
+    # Try DB first (unless caller forced a specific YAML path)
+    source = "yaml"
+    if not config_path:
+        db_data = _load_tenants_from_db()
+        if db_data and db_data.get("tenants"):
+            source = "db"
+            new_cache = db_data
+        else:
+            new_cache = _load_raw_config(config_path)
+    else:
+        new_cache = _load_raw_config(config_path)
+
+    with _CACHE_LOCK:
+        _config_cache = new_cache
+        _cache_timestamp = now
+        _SOURCE = source
+        return _config_cache
 
 
 def reload_config(config_path: str = "") -> None:
     """Force reload the config (e.g. on SIGHUP or API call)."""
-    global _config_cache, _cache_timestamp
-    _config_cache = _load_raw_config(config_path)
-    _cache_timestamp = time.monotonic()
-    logger.info("tenant_config_reloaded")
+    global _config_cache, _cache_timestamp, _SOURCE
+
+    # Try DB first
+    if not config_path:
+        db_data = _load_tenants_from_db()
+        if db_data and db_data.get("tenants"):
+            with _CACHE_LOCK:
+                _config_cache = db_data
+                _cache_timestamp = time.monotonic()
+                _SOURCE = "db"
+            logger.info("tenant_config_reloaded", source="db")
+            return
+
+    # Fallback to YAML
+    with _CACHE_LOCK:
+        _config_cache = _load_raw_config(config_path)
+        _cache_timestamp = time.monotonic()
+        _SOURCE = "yaml"
+    logger.info("tenant_config_reloaded", source="yaml")
+
+
+def get_config_source() -> str:
+    """Return current config source: 'db', 'yaml', or 'none'."""
+    with _CACHE_LOCK:
+        return _SOURCE
 
 
 def _parse_tenant(name: str, raw: dict, defaults: dict) -> TenantConfig:
@@ -269,13 +451,13 @@ def _parse_tenant(name: str, raw: dict, defaults: dict) -> TenantConfig:
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Public API
+#  Public API  (unchanged signatures — safe for all 30+ consumers)
 # ═══════════════════════════════════════════════════════════════════
 
 
 def get_tenant_config(tenant_name: str, config_path: str = "") -> TenantConfig | None:
     """
-    Look up a tenant by name from the config file.
+    Look up a tenant by name from DB (primary) or YAML (fallback).
 
     Returns None if the tenant is not found.
     The tenant_name is matched case-insensitively.
@@ -298,7 +480,7 @@ def get_tenant_config(tenant_name: str, config_path: str = "") -> TenantConfig |
 
 
 def list_tenants(config_path: str = "") -> list[str]:
-    """Return all tenant names from the config."""
+    """Return all tenant names from DB (primary) or YAML (fallback)."""
     data = _get_cached_config(config_path)
     return list(data.get("tenants", {}).keys())
 
@@ -341,7 +523,7 @@ def get_ssh_user_for_host(
     Resolve the SSH user for a specific host within a tenant.
 
     Resolution order:
-      1. Per-server ssh_user (from servers[] in tenants.yaml)
+      1. Per-server ssh_user (from servers[] or DB)
       2. Per-tenant ssh_user (top-level or ssh.user)
       3. Empty string (caller should use auto-detection or global fallback)
 
@@ -376,8 +558,8 @@ def resolve_tenant_id_by_name(tenant_name: str, config_path: str = "") -> str:
     """
     Resolve a tenant name (from Site24x7 tags) to a database tenant_id UUID.
 
-    Returns the tenant_id string from tenants.yaml, or empty string if
-    the tenant is not found or has no tenant_id configured.
+    Returns the tenant_id string, or empty string if the tenant is not
+    found or has no tenant_id configured.
 
     This enables Site24x7 webhooks to automatically resolve the correct
     database tenant without needing an X-Tenant-Id header.

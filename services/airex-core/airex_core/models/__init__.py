@@ -16,6 +16,7 @@ from airex_core.models.report_template import ReportTemplate
 from airex_core.models.runbook import Runbook
 from airex_core.models.runbook_chunk import RunbookChunk
 from airex_core.models.state_transition import StateTransition
+from airex_core.models.tenant import Tenant
 from airex_core.models.tenant_limit import TenantLimit
 from airex_core.models.user import User
 
@@ -41,6 +42,7 @@ __all__ = [
     "RunbookChunk",
     "SeverityLevel",
     "StateTransition",
+    "Tenant",
     "TenantLimit",
     "User",
 ]
