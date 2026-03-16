@@ -2,6 +2,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
@@ -32,7 +33,7 @@ def mock_session():
     return session
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client(mock_redis, mock_session):
     from app.api.dependencies import get_db_session, get_redis
 

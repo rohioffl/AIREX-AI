@@ -164,6 +164,7 @@ class TestStoreRunbook:
         incident = _make_incident()
         content = "# Runbook\n\nSome content here that is long enough to chunk."
         session = AsyncMock()
+        session.add = MagicMock()
 
         with patch("airex_core.services.runbook_generator.EmbeddingsClient") as MockEmbed:
             mock_embed_instance = MagicMock()
@@ -183,6 +184,7 @@ class TestStoreRunbook:
         incident = _make_incident()
         content = "# Runbook content"
         session = AsyncMock()
+        session.add = MagicMock()
 
         with patch("airex_core.services.runbook_generator.EmbeddingsClient") as MockEmbed:
             mock_embed_instance = MagicMock()

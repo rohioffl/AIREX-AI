@@ -18,6 +18,7 @@ from airex_core.models.state_transition import StateTransition
 ALLOWED_TRANSITIONS: dict[IncidentState, list[IncidentState]] = {
     IncidentState.RECEIVED: [
         IncidentState.INVESTIGATING,
+        IncidentState.REJECTED,
     ],
     IncidentState.INVESTIGATING: [
         IncidentState.RECOMMENDATION_READY,

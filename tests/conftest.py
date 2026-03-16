@@ -9,9 +9,9 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 for service_dir in (
-    "services/airex-api",
-    "services/airex-worker",
     "services/airex-core",
+    "services/airex-worker",
+    "services/airex-api",
 ):
     service_path = str(REPO_ROOT / service_dir)
     if service_path not in sys.path:

@@ -368,7 +368,7 @@ async def list_incidents(
 # ── Get Incident ──────────────────────────────────────────────────
 
 
-@router.get("/{incident_id}", response_model=IncidentDetail)
+@router.get("/{incident_id:uuid}", response_model=IncidentDetail)
 async def get_incident(
     incident_id: uuid.UUID,
     tenant_id: TenantId,
@@ -566,7 +566,7 @@ async def get_incident(
 
 
 @router.post(
-    "/{incident_id}/approve",
+    "/{incident_id:uuid}/approve",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
     dependencies=[Depends(approval_rate_limit)],
@@ -701,7 +701,7 @@ async def approve_incident(
 
 
 @router.post(
-    "/{incident_id}/reject",
+    "/{incident_id:uuid}/reject",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
 )
@@ -779,7 +779,7 @@ async def reject_incident(
 # ── Acknowledge ───────────────────────────────────────────────────
 
 
-@router.post("/{incident_id}/acknowledge", status_code=status.HTTP_200_OK)
+@router.post("/{incident_id:uuid}/acknowledge", status_code=status.HTTP_200_OK)
 async def acknowledge_incident(
     incident_id: uuid.UUID,
     tenant_id: TenantId,
@@ -820,7 +820,7 @@ async def acknowledge_incident(
 
 
 @router.post(
-    "/{incident_id}/feedback",
+    "/{incident_id:uuid}/feedback",
     status_code=status.HTTP_200_OK,
     response_model=FeedbackResponse,
 )
@@ -880,7 +880,7 @@ async def submit_feedback(
 # ── Soft Delete ────────────────────────────────────────────────────
 
 
-@router.delete("/{incident_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{incident_id:uuid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_incident(
     incident_id: uuid.UUID,
     tenant_id: TenantId,
@@ -939,7 +939,7 @@ async def delete_incident(
 # ── Restore ────────────────────────────────────────────────────────
 
 
-@router.post("/{incident_id}/restore", status_code=status.HTTP_200_OK)
+@router.post("/{incident_id:uuid}/restore", status_code=status.HTTP_200_OK)
 async def restore_incident(
     incident_id: uuid.UUID,
     tenant_id: TenantId,
@@ -1007,11 +1007,14 @@ async def bulk_approve(
     Only processes incidents in AWAITING_APPROVAL state.
     Returns count of successfully approved incidents.
     """
+    actor_email = current_user.sub if current_user else "system"
+    actor_user_id = str(current_user.user_id) if current_user else "system"
+
     logger.info(
         "bulk_approval_requested",
         tenant_id=str(tenant_id),
         count=len(body.incident_ids),
-        user_id=str(current_user.user_id),
+        user_id=actor_user_id,
     )
 
     if not body.incident_ids:
@@ -1055,13 +1058,13 @@ async def bulk_approve(
                 continue
 
             # Transition to EXECUTING
-            reason = body.reason or f"Bulk approved by {current_user.sub}"
+            reason = body.reason or f"Bulk approved by {actor_email}"
             await transition_state(
                 session,
                 incident,
                 IncidentState.EXECUTING,
                 reason=reason,
-                actor=current_user.sub,
+                actor=actor_email,
             )
 
             # Enqueue execution
@@ -1115,11 +1118,14 @@ async def bulk_reject(
     Only processes incidents in non-terminal states.
     Returns count of successfully rejected incidents.
     """
+    actor_email = current_user.sub if current_user else "system"
+    actor_user_id = str(current_user.user_id) if current_user else "system"
+
     logger.info(
         "bulk_rejection_requested",
         tenant_id=str(tenant_id),
         count=len(body.incident_ids),
-        user_id=str(current_user.user_id),
+        user_id=actor_user_id,
     )
 
     if not body.incident_ids:
@@ -1164,7 +1170,7 @@ async def bulk_reject(
                 incident,
                 IncidentState.REJECTED,
                 reason=body.reason,
-                actor=current_user.sub,
+                actor=actor_email,
             )
 
             rejected_count += 1
@@ -1188,7 +1194,7 @@ async def bulk_reject(
 # ── Comments ────────────────────────────────────────────────────────
 
 
-@router.get("/{incident_id}/comments", response_model=list[CommentResponse])
+@router.get("/{incident_id:uuid}/comments", response_model=list[CommentResponse])
 async def list_comments(
     incident_id: uuid.UUID,
     tenant_id: TenantId,
@@ -1224,7 +1230,7 @@ async def list_comments(
 
 
 @router.post(
-    "/{incident_id}/comments",
+    "/{incident_id:uuid}/comments",
     status_code=status.HTTP_201_CREATED,
     response_model=CommentResponse,
 )
@@ -1293,7 +1299,7 @@ async def create_comment(
 # ── Assignment ──────────────────────────────────────────────────────
 
 
-@router.post("/{incident_id}/assign", status_code=status.HTTP_200_OK)
+@router.post("/{incident_id:uuid}/assign", status_code=status.HTTP_200_OK)
 async def assign_incident(
     incident_id: uuid.UUID,
     body: AssignRequest,
@@ -1378,7 +1384,7 @@ async def assign_incident(
 async def export_incidents(
     tenant_id: TenantId,
     session: TenantSession,
-    format: str = Query(default="json", regex="^(json|csv)$"),
+    format: str = Query(default="json", pattern="^(json|csv)$"),
     state: IncidentState | None = None,
     severity: SeverityLevel | None = None,
     date_from: datetime | None = None,
@@ -1492,7 +1498,7 @@ class RelatedIncidentResponse(BaseModel):
     related_incident: RelatedIncidentItem
 
 
-@router.get("/{incident_id}/related", response_model=list[RelatedIncidentResponse])
+@router.get("/{incident_id:uuid}/related", response_model=list[RelatedIncidentResponse])
 async def list_related_incidents(
     incident_id: uuid.UUID,
     tenant_id: TenantId,
@@ -1535,7 +1541,7 @@ async def list_related_incidents(
 
 
 @router.post(
-    "/{incident_id}/related",
+    "/{incident_id:uuid}/related",
     status_code=status.HTTP_201_CREATED,
     response_model=RelatedIncidentResponse,
 )
@@ -1633,7 +1639,7 @@ async def link_incident(
 
 
 @router.delete(
-    "/{incident_id}/related/{related_incident_id}",
+    "/{incident_id:uuid}/related/{related_incident_id:uuid}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def unlink_incident(

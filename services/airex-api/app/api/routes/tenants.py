@@ -1,26 +1,60 @@
 """
-Tenant configuration API.
+Tenant configuration API — full CRUD.
 
-Provides read access to the tenant config and a reload endpoint
-for operators to refresh the config without restarting the server.
+Provides:
+  - GET  /tenants/              — list all active tenants
+  - GET  /tenants/{name}        — tenant detail (with credential status)
+  - POST /tenants/              — create tenant (admin)
+  - PUT  /tenants/{name}        — update tenant (admin)
+  - DELETE /tenants/{name}      — soft-delete tenant (admin)
+  - POST /tenants/reload        — force-refresh config cache (admin)
+  - GET  /tenants/{name}/servers/{srv} — server lookup (unchanged)
+
+Reads/writes go to the ``tenants`` PostgreSQL table.  The runtime config
+layer (``tenant_config.py``) is notified on every write so the 60-second
+cache is always fresh.
 """
+
+import json
+import uuid
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from importlib import import_module
-from functools import lru_cache
-from typing import Any, Callable, cast
+from pydantic import BaseModel, Field
+from sqlalchemy import bindparam, column, func, table, text as sa_text, update
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.api.dependencies import require_role
+from airex_core.cloud.tenant_config import (
+    get_config_source,
+    get_server_by_name,
+    list_tenants,
+    reload_config,
+)
+from airex_core.core.database import engine as async_engine
 
 logger = structlog.get_logger()
 router = APIRouter()
+TENANTS_TABLE = table(
+    "tenants",
+    column("name"),
+    column("display_name"),
+    column("cloud"),
+    column("is_active"),
+    column("escalation_email"),
+    column("slack_channel"),
+    column("ssh_user"),
+    column("aws_config"),
+    column("gcp_config"),
+    column("servers"),
+    column("updated_at"),
+)
 
 
-@lru_cache(maxsize=1)
-def _tenant_config_module() -> Any:
-    return import_module("airex_core.cloud.tenant_config")
+# ═══════════════════════════════════════════════════════════════════
+#  Schemas
+# ═══════════════════════════════════════════════════════════════════
 
 
 class TenantSummary(BaseModel):
@@ -29,90 +63,327 @@ class TenantSummary(BaseModel):
     cloud: str
     server_count: int
     escalation_email: str
+    is_active: bool = True
+    credential_status: str = "unknown"  # "configured" | "missing" | "unknown"
 
 
 class TenantDetailResponse(BaseModel):
+    id: str
     name: str
     display_name: str
     cloud: str
-    gcp_project: str
-    aws_region: str
+    is_active: bool
     escalation_email: str
     slack_channel: str
+    ssh_user: str
+    aws_config: dict = {}
+    gcp_config: dict = {}
+    servers: list = []
+    credential_status: str = "unknown"
+    config_source: str = "db"
 
 
-@router.get("/", response_model=list[TenantSummary])
+class TenantCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    display_name: str = Field(..., min_length=2, max_length=255)
+    cloud: str = Field(..., pattern=r"^(aws|gcp)$")
+    escalation_email: str = ""
+    slack_channel: str = ""
+    ssh_user: str = "ubuntu"
+    aws_config: dict = {}
+    gcp_config: dict = {}
+    servers: list = []
+
+
+class TenantUpdateRequest(BaseModel):
+    display_name: str | None = None
+    cloud: str | None = Field(None, pattern=r"^(aws|gcp)$")
+    escalation_email: str | None = None
+    slack_channel: str | None = None
+    ssh_user: str | None = None
+    aws_config: dict | None = None
+    gcp_config: dict | None = None
+    servers: list | None = None
+    is_active: bool | None = None
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Helpers
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _credential_status(cloud: str, aws_config: dict, gcp_config: dict) -> str:
+    """Determine whether credentials are configured for the tenant."""
+    if cloud == "aws":
+        c = aws_config or {}
+        has_role = bool(c.get("account_id") and c.get("role_name")) or bool(c.get("role_arn"))
+        has_keys = bool(c.get("access_key_id") and c.get("secret_access_key"))
+        has_file = bool(c.get("credentials_file"))
+        return "configured" if (has_role or has_keys or has_file) else "missing"
+    elif cloud == "gcp":
+        c = gcp_config or {}
+        has_key = bool(c.get("service_account_key"))
+        has_project = bool(c.get("project_id"))
+        return "configured" if (has_key or has_project) else "missing"
+    return "unknown"
+
+
+def _invalidate_cache() -> None:
+    """Force tenant_config.py to reload from DB on next access."""
+    try:
+        reload_config()
+    except Exception as exc:
+        logger.warning("cache_invalidation_failed", error=str(exc))
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Routes
+# ═══════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/",
+    response_model=list[TenantSummary],
+    dependencies=[Depends(require_role("viewer", "operator", "admin"))],
+)
 async def list_all_tenants() -> list[TenantSummary]:
-    """List all configured tenants."""
-    list_tenants = cast(Callable[[], list[str]], _tenant_config_module().list_tenants)
-    get_tenant_config = cast(
-        Callable[[str], Any],
-        _tenant_config_module().get_tenant_config,
-    )
-
-    names = list_tenants()
+    """List all active tenants from the database."""
     result: list[TenantSummary] = []
-    for name in names:
-        config = get_tenant_config(name)
-        if config:
+    async with async_engine.connect() as conn:
+        rows = await conn.execute(
+            sa_text(
+                """
+                SELECT name, display_name, cloud, is_active,
+                       escalation_email, aws_config, gcp_config, servers
+                FROM tenants
+                WHERE is_active = true
+                ORDER BY name
+                """
+            )
+        )
+        for row in rows:
+            name, display_name, cloud, is_active, email, aws_cfg, gcp_cfg, servers = row
             result.append(
                 TenantSummary(
-                    name=config.tenant_name,
-                    display_name=config.display_name,
-                    cloud=config.cloud,
-                    server_count=len(config.servers),
-                    escalation_email=config.escalation_email,
+                    name=name,
+                    display_name=display_name,
+                    cloud=cloud,
+                    server_count=len(servers) if isinstance(servers, list) else 0,
+                    escalation_email=email or "",
+                    is_active=is_active,
+                    credential_status=_credential_status(cloud, aws_cfg or {}, gcp_cfg or {}),
                 )
             )
     return result
 
 
-@router.get("/{tenant_name}", response_model=TenantDetailResponse)
+@router.get(
+    "/{tenant_name}",
+    response_model=TenantDetailResponse,
+    dependencies=[Depends(require_role("viewer", "operator", "admin"))],
+)
 async def get_tenant_detail(tenant_name: str) -> TenantDetailResponse:
     """Get detailed configuration for a specific tenant."""
-    get_tenant_config = cast(
-        Callable[[str], Any],
-        _tenant_config_module().get_tenant_config,
-    )
-    config = get_tenant_config(tenant_name)
-    if config is None:
-        raise HTTPException(
-            status_code=404, detail=f"Tenant '{tenant_name}' not found in config"
-        )
+    async with async_engine.connect() as conn:
+        row = (
+            await conn.execute(
+                sa_text(
+                    """
+                    SELECT id, name, display_name, cloud, is_active,
+                           escalation_email, slack_channel, ssh_user,
+                           aws_config, gcp_config, servers
+                    FROM tenants
+                    WHERE lower(name) = :name
+                    """
+                ),
+                {"name": tenant_name.lower().strip()},
+            )
+        ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Tenant '{tenant_name}' not found")
+
+    tid, name, display_name, cloud, is_active, email, slack, ssh_user, aws_cfg, gcp_cfg, servers = row
+
+    # Redact sensitive fields for the response
+    safe_aws: dict[str, Any] = dict(aws_cfg) if aws_cfg else {}
+    if safe_aws.get("secret_access_key"):
+        safe_aws["secret_access_key"] = "••••••••"
 
     return TenantDetailResponse(
-        name=config.tenant_name,
-        display_name=config.display_name,
-        cloud=config.cloud,
-        gcp_project=config.gcp.project_id,
-        aws_region=config.aws.region,
-        escalation_email=config.escalation_email,
-        slack_channel=config.slack_channel,
+        id=str(tid),
+        name=name,
+        display_name=display_name,
+        cloud=cloud,
+        is_active=is_active,
+        escalation_email=email or "",
+        slack_channel=slack or "",
+        ssh_user=ssh_user or "ubuntu",
+        aws_config=safe_aws,
+        gcp_config=dict(gcp_cfg) if gcp_cfg else {},
+        servers=list(servers) if servers else [],
+        credential_status=_credential_status(cloud, aws_cfg or {}, gcp_cfg or {}),
+        config_source=get_config_source(),
     )
+
+
+@router.post("/", dependencies=[Depends(require_role("admin"))], status_code=201)
+async def create_tenant(req: TenantCreateRequest) -> dict:
+    """Create a new tenant (admin only)."""
+    tenant_id = uuid.uuid4()
+
+    async with async_engine.begin() as conn:
+        # Check for duplicate name
+        existing = (
+            await conn.execute(
+                sa_text("SELECT 1 FROM tenants WHERE lower(name) = :name"),
+                {"name": req.name.lower()},
+            )
+        ).first()
+
+        if existing:
+            raise HTTPException(
+                status_code=409, detail=f"Tenant '{req.name}' already exists"
+            )
+
+        await conn.execute(
+            sa_text(
+                """
+                INSERT INTO tenants (id, name, display_name, cloud,
+                                     escalation_email, slack_channel, ssh_user,
+                                     aws_config, gcp_config, servers)
+                VALUES (:id, :name, :display_name, :cloud,
+                        :escalation_email, :slack_channel, :ssh_user,
+                        CAST(:aws_config AS jsonb),
+                        CAST(:gcp_config AS jsonb),
+                        CAST(:servers AS jsonb))
+                """
+            ),
+            {
+                "id": str(tenant_id),
+                "name": req.name.lower(),
+                "display_name": req.display_name,
+                "cloud": req.cloud,
+                "escalation_email": req.escalation_email,
+                "slack_channel": req.slack_channel,
+                "ssh_user": req.ssh_user,
+                "aws_config": json.dumps(req.aws_config),
+                "gcp_config": json.dumps(req.gcp_config),
+                "servers": json.dumps(req.servers),
+            },
+        )
+
+    _invalidate_cache()
+    logger.info("tenant_created", name=req.name, id=str(tenant_id))
+    return {"status": "created", "name": req.name, "id": str(tenant_id)}
+
+
+@router.put("/{tenant_name}", dependencies=[Depends(require_role("admin"))])
+async def update_tenant(tenant_name: str, req: TenantUpdateRequest) -> dict:
+    """Update an existing tenant (admin only). Only provided fields are updated."""
+    scalar_updates: dict[str, Any] = {}
+    if req.display_name is not None:
+        scalar_updates["display_name"] = req.display_name
+    if req.cloud is not None:
+        scalar_updates["cloud"] = req.cloud
+    if req.escalation_email is not None:
+        scalar_updates["escalation_email"] = req.escalation_email
+    if req.slack_channel is not None:
+        scalar_updates["slack_channel"] = req.slack_channel
+    if req.ssh_user is not None:
+        scalar_updates["ssh_user"] = req.ssh_user
+    if req.is_active is not None:
+        scalar_updates["is_active"] = req.is_active
+
+    jsonb_updates: dict[str, Any] = {}
+    if req.aws_config is not None:
+        jsonb_updates["aws_config"] = req.aws_config
+    if req.gcp_config is not None:
+        jsonb_updates["gcp_config"] = req.gcp_config
+    if req.servers is not None:
+        jsonb_updates["servers"] = req.servers
+
+    if not scalar_updates and not jsonb_updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    params: dict[str, Any] = {"tenant_name": tenant_name.lower().strip()}
+    update_values: dict[str, Any] = {"updated_at": func.current_timestamp()}
+    for col, val in scalar_updates.items():
+        params[col] = val
+    for col, val in jsonb_updates.items():
+        params[col] = val
+        update_values[col] = bindparam(col, type_=JSONB)
+    update_values.update(scalar_updates)
+    stmt = (
+        update(TENANTS_TABLE)
+        .where(func.lower(TENANTS_TABLE.c.name) == bindparam("tenant_name"))
+        .values(**update_values)
+    )
+
+    async with async_engine.begin() as conn:
+        result = await conn.execute(stmt, params)
+
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=404, detail=f"Tenant '{tenant_name}' not found"
+            )
+
+    _invalidate_cache()
+    logger.info(
+        "tenant_updated",
+        name=tenant_name,
+        fields=list(scalar_updates.keys()) + list(jsonb_updates.keys()),
+    )
+    return {"status": "updated", "name": tenant_name}
+
+
+@router.delete("/{tenant_name}", dependencies=[Depends(require_role("admin"))])
+async def delete_tenant(tenant_name: str) -> dict:
+    """Soft-delete a tenant by setting is_active=false (admin only)."""
+    async with async_engine.begin() as conn:
+        result = await conn.execute(
+            sa_text(
+                """
+                UPDATE tenants
+                SET is_active = false, updated_at = CURRENT_TIMESTAMP
+                WHERE lower(name) = :name AND is_active = true
+                """
+            ),
+            {"name": tenant_name.lower().strip()},
+        )
+
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Tenant '{tenant_name}' not found or already deleted",
+            )
+
+    _invalidate_cache()
+    logger.info("tenant_deleted", name=tenant_name)
+    return {"status": "deleted", "name": tenant_name}
 
 
 @router.post("/reload", dependencies=[Depends(require_role("admin"))])
-async def reload_tenant_config() -> dict[str, int | str | list[str]]:
-    """Reload tenant config from disk without restarting the server (admin only)."""
-    reload_config = cast(Callable[[], None], _tenant_config_module().reload_config)
-    list_tenants = cast(Callable[[], list[str]], _tenant_config_module().list_tenants)
-
-    reload_config()
+async def reload_tenant_config() -> dict:
+    """Reload tenant config cache (admin only)."""
+    _invalidate_cache()
     names = list_tenants()
-    logger.info("tenant_config_reloaded_via_api", count=len(names))
-    return {"status": "reloaded", "tenant_count": len(names), "tenants": names}
+
+    return {
+        "status": "reloaded",
+        "source": get_config_source(),
+        "tenant_count": len(names),
+        "tenants": names,
+    }
 
 
-@router.get("/{tenant_name}/servers/{server_name}")
-async def get_server_detail(
-    tenant_name: str,
-    server_name: str,
-) -> dict[str, str]:
+@router.get(
+    "/{tenant_name}/servers/{server_name}",
+    dependencies=[Depends(require_role("viewer", "operator", "admin"))],
+)
+async def get_server_detail(tenant_name: str, server_name: str) -> dict[str, str]:
     """Look up a specific server within a tenant."""
-    get_server_by_name = cast(
-        Callable[[str, str], Any],
-        _tenant_config_module().get_server_by_name,
-    )
+
     server = get_server_by_name(tenant_name, server_name)
     if server is None:
         raise HTTPException(

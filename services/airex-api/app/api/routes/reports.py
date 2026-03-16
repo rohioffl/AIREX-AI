@@ -334,7 +334,7 @@ async def generate_report(
         "report_generated",
         tenant_id=str(tenant_id),
         template_id=str(template_id),
-        user_id=str(current_user.user_id),
+        user_id=str(current_user.user_id) if current_user else None,
     )
 
     return {

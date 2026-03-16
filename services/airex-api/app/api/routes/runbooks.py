@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast, List
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from app.api.dependencies import CurrentUser, TenantId, TenantSession, require_permission
@@ -51,6 +51,8 @@ class RunbookUpdate(BaseModel):
     is_active: bool | None = None
 
 class RunbookResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     tenant_id: str
     id: str
     name: str
@@ -65,10 +67,6 @@ class RunbookResponse(BaseModel):
     updated_by: str | None
     created_at: str
     updated_at: str
-
-    class Config:
-        from_attributes = True
-
 
 def _to_response(rb: Runbook) -> RunbookResponse:
     steps = rb.steps if isinstance(rb.steps, list) else (rb.steps or {}).get("steps", [])
@@ -133,11 +131,11 @@ async def create_runbook(
         alert_type=body.alert_type,
         severity=body.severity,
         is_active=body.is_active,
-        steps=[s.model_dump() for s in body.steps],
+        steps=[s.model_dump() for s in cast(List[RunbookStep], body.steps)],
         tags=body.tags or [],
         version=1,
-        created_by=current_user.user_id,
-        updated_by=current_user.user_id,
+        created_by=current_user.user_id if current_user else None,
+        updated_by=current_user.user_id if current_user else None,
     )
     session.add(runbook)
     await session.flush()
@@ -193,7 +191,7 @@ async def update_runbook(
         setattr(runbook, field, value)
 
     runbook.version += 1
-    runbook.updated_by = current_user.user_id
+    runbook.updated_by = current_user.user_id if current_user else None
     runbook.updated_at = datetime.now(timezone.utc)
 
     logger.info("runbook_updated", runbook_id=str(runbook.id), version=runbook.version)
@@ -253,8 +251,8 @@ async def duplicate_runbook(
         steps=original.steps,
         tags=original.tags,
         version=1,
-        created_by=current_user.user_id,
-        updated_by=current_user.user_id,
+        created_by=current_user.user_id if current_user else None,
+        updated_by=current_user.user_id if current_user else None,
     )
     session.add(duplicate)
     await session.flush()
