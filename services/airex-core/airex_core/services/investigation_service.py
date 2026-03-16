@@ -82,6 +82,18 @@ async def run_investigation(
     tenant_id = str(incident.tenant_id)
     incident_id = str(incident.id)
 
+    # ── Transition RECEIVED → INVESTIGATING ──────────────────────
+    # The state machine requires RECEIVED → INVESTIGATING before any probe
+    # can run. Retry attempts come in as FAILED_ANALYSIS which transitions
+    # directly to RECOMMENDATION_READY or FAILED_ANALYSIS — both valid.
+    if incident.state == IncidentState.RECEIVED:
+        await transition_state(
+            session,
+            incident,
+            IncidentState.INVESTIGATING,
+            reason="Investigation started",
+        )
+
     # ── Resolve primary probe ────────────────────────────────────
     use_cloud = _should_use_cloud_investigation(meta)
 
