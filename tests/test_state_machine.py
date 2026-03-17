@@ -23,7 +23,8 @@ class TestAllowedTransitions:
 
     def test_received_only_goes_to_investigating(self):
         assert ALLOWED_TRANSITIONS[IncidentState.RECEIVED] == [
-            IncidentState.INVESTIGATING
+            IncidentState.INVESTIGATING,
+            IncidentState.REJECTED,
         ]
 
     def test_investigating_transitions(self):

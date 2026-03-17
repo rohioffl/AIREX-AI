@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, AlertOctagon, Bell, X, Clock } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion as Motion, AnimatePresence } from 'framer-motion'
 import { useToasts } from '../../context/ToastContext'
 
 const STATUS_MAP = {
@@ -34,7 +34,7 @@ function Toast({ toast, onDismiss }) {
   }
 
   return (
-    <motion.div
+    <Motion.div
       layout
       initial={{ opacity: 0, x: 60, scale: 0.92 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -61,7 +61,7 @@ function Toast({ toast, onDismiss }) {
       <div className="toast-progress">
         <div className="toast-progress-bar" style={{ width: `${progress}%`, background: color }} />
       </div>
-    </motion.div>
+    </Motion.div>
   )
 }
 

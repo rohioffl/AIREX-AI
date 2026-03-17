@@ -1,3 +1,8 @@
+import { useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+
+const MotionDiv = motion.div
+
 export default function ConfirmationModal({
   open,
   title,
@@ -8,7 +13,17 @@ export default function ConfirmationModal({
   confirmTone = 'primary',
   loading = false,
 }) {
-  if (!open) return null
+  const modalRef = useRef(null)
+  const previousFocusRef = useRef(null)
+
+  useEffect(() => {
+    if (open) {
+      previousFocusRef.current = document.activeElement
+      modalRef.current?.focus()
+    } else {
+      previousFocusRef.current?.focus()
+    }
+  }, [open])
 
   const confirmStyles = confirmTone === 'danger'
     ? {
@@ -25,29 +40,57 @@ export default function ConfirmationModal({
     : <div style={{ marginTop: 12 }}>{message}</div>
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : 'Confirmation dialog'}>
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onCancel} />
-      <div className="relative w-full max-w-md mx-4 glass rounded-2xl p-6 animate-slide-up glow-indigo">
-        <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}>{title}</h3>
-        {renderMessage}
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            onClick={onCancel}
-            className="rounded-lg px-4 py-2 text-sm font-medium transition-all"
-            style={{ color: 'var(--text-secondary)' }}
+    <AnimatePresence>
+      {open && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog" 
+          aria-modal="true" 
+          aria-label={typeof title === 'string' ? title : 'Confirmation dialog'}
+          ref={modalRef}
+          tabIndex={-1}
+          onKeyDown={e => {
+            if (e.key === 'Escape' && !loading) onCancel()
+          }}
+        >
+          <MotionDiv
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} 
+            onClick={() => { if (!loading) onCancel() }} 
+          />
+          <MotionDiv
+            className="relative w-full max-w-md glass rounded-2xl p-6 glow-indigo"
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
           >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="rounded-lg px-5 py-2 text-sm font-semibold text-white transition-all disabled:opacity-60"
-            style={confirmStyles}
-          >
-            {loading ? 'Processing…' : confirmLabel}
-          </button>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}>{title}</h3>
+            {renderMessage}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={onCancel}
+                disabled={loading}
+                className="rounded-lg px-4 py-2 text-sm font-medium transition-all hover:bg-white/5"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onConfirm}
+                disabled={loading}
+                className="rounded-lg px-5 py-2 text-sm font-semibold text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:brightness-110 active:scale-95"
+                style={confirmStyles}
+              >
+                {loading ? 'Processing…' : confirmLabel}
+              </button>
+            </div>
+          </MotionDiv>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   )
 }

@@ -1,9 +1,14 @@
 """Tests for authentication: security module, JWT, password hashing."""
 
 import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from fastapi import HTTPException
+
+from app.api.dependencies import resolve_active_tenant_id
 from airex_core.core.security import (
     create_access_token,
     create_refresh_token,
@@ -64,6 +69,91 @@ class TestJWT:
         refresh = create_refresh_token(tid, "user@test.com")
         data = decode_access_token(refresh)
         assert data.tenant_id == tid
+
+    def test_token_data_exposes_user_email_alias(self):
+        tid = uuid.uuid4()
+        uid = uuid.uuid4()
+        token = create_access_token(tid, "user@test.com", user_id=uid, role="org_admin")
+        data = decode_access_token(token)
+        assert data.user_email == "user@test.com"
+        assert data.user_id == uid
+        assert data.role == "org_admin"
+
+
+class TestTenantAccessResolution:
+    @pytest.mark.asyncio
+    async def test_org_user_can_switch_to_any_tenant_in_org(self):
+        home_tenant_id = uuid.uuid4()
+        target_tenant_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        session = AsyncMock()
+
+        target_tenant = SimpleNamespace(
+            id=target_tenant_id,
+            organization_id=uuid.uuid4(),
+            is_active=True,
+        )
+        tenant_lookup = MagicMock()
+        tenant_lookup.scalar_one_or_none = MagicMock(return_value=target_tenant)
+
+        org_membership_lookup = MagicMock()
+        org_membership_lookup.scalar_one_or_none = MagicMock(
+            return_value=SimpleNamespace(role="org_admin")
+        )
+
+        session.execute = AsyncMock(side_effect=[tenant_lookup, org_membership_lookup])
+
+        token = decode_access_token(
+            create_access_token(home_tenant_id, "org@example.com", user_id=user_id, role="org_admin")
+        )
+
+        resolved = await resolve_active_tenant_id(
+            session=session,
+            current_user=token,
+            active_tenant_id=str(target_tenant_id),
+        )
+
+        assert resolved == target_tenant_id
+
+    @pytest.mark.asyncio
+    async def test_tenant_switch_rejects_unauthorized_target(self):
+        home_tenant_id = uuid.uuid4()
+        target_tenant_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        session = AsyncMock()
+
+        target_tenant = SimpleNamespace(
+            id=target_tenant_id,
+            organization_id=uuid.uuid4(),
+            is_active=True,
+        )
+        tenant_lookup = MagicMock()
+        tenant_lookup.scalar_one_or_none = MagicMock(return_value=target_tenant)
+
+        org_membership_lookup = MagicMock()
+        org_membership_lookup.scalar_one_or_none = MagicMock(return_value=None)
+
+        tenant_membership_lookup = MagicMock()
+        tenant_membership_lookup.scalar_one_or_none = MagicMock(return_value=None)
+
+        session.execute = AsyncMock(
+            side_effect=[tenant_lookup, org_membership_lookup, tenant_membership_lookup]
+        )
+
+        token = decode_access_token(
+            create_access_token(
+                home_tenant_id, "tenant@example.com", user_id=user_id, role="tenant_viewer"
+            )
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await resolve_active_tenant_id(
+                session=session,
+                current_user=token,
+                active_tenant_id=str(target_tenant_id),
+            )
+
+        assert exc.value.status_code == 403
 
 
 class TestRateLimiter:

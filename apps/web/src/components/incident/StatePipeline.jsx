@@ -1,6 +1,6 @@
+import { motion as Motion } from 'framer-motion'
 import { useMemo } from 'react'
 import { Check } from 'lucide-react'
-import { motion } from 'framer-motion'
 
 const STATE_ORDER = [
   { id: 'RECEIVED',             label: 'Received',      icon: '01' },
@@ -53,7 +53,7 @@ export default function StatePipeline({ currentState }) {
               <div className="flex flex-col items-center gap-1.5 relative z-10">
                 <div className="relative">
                   {active && (
-                    <motion.div
+                    <Motion.div
                       className="absolute inset-0 rounded-full"
                       style={{ background: palette.active }}
                       animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}
@@ -121,7 +121,7 @@ export default function StatePipeline({ currentState }) {
               <div className="flex items-center gap-3 relative z-10 w-full">
                 <div className="relative shrink-0">
                   {active && (
-                    <motion.div
+                    <Motion.div
                       className="absolute inset-0 rounded-full"
                       style={{ background: palette.active }}
                       animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}

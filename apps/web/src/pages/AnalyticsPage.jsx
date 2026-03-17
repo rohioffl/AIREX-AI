@@ -1,16 +1,23 @@
 import { useState, useEffect } from 'react'
-import { TrendingUp, BarChart3, Activity } from 'lucide-react'
+import { TrendingUp, BarChart3, Activity, Building2, Users, Server } from 'lucide-react'
 import {
   LineChart, Line, BarChart, Bar, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { fetchAnalyticsTrends } from '../services/api'
+import { fetchAnalyticsTrends, fetchOrganizationAnalytics } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 import { formatDuration } from '../utils/formatters'
 
 export default function AnalyticsPage() {
+  const { organizations, activeOrganization } = useAuth()
   const [days, setDays] = useState(30)
+  const [scope, setScope] = useState('tenant')
   const [trends, setTrends] = useState(null)
+  const [orgStats, setOrgStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+
+  const activeOrg = activeOrganization || organizations?.[0] || null
+  const hasOrgAccess = !!activeOrg
 
   useEffect(() => {
     const loadTrends = async () => {
@@ -26,6 +33,19 @@ export default function AnalyticsPage() {
     }
     loadTrends()
   }, [days])
+
+  useEffect(() => {
+    if (scope !== 'org' || !activeOrg) return
+    const loadOrgStats = async () => {
+      try {
+        const data = await fetchOrganizationAnalytics(activeOrg.id)
+        setOrgStats(data)
+      } catch (err) {
+        console.error('Failed to load org analytics:', err)
+      }
+    }
+    loadOrgStats()
+  }, [scope, activeOrg])
 
   if (isLoading) {
     return (
@@ -44,23 +64,78 @@ export default function AnalyticsPage() {
             Analytics Dashboard
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
-            Incident trends, resolution rates, and AI performance metrics
+            {scope === 'org' && activeOrg
+              ? `Organization-wide view · ${activeOrg.name}`
+              : 'Incident trends, resolution rates, and AI performance metrics'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Period:</label>
-          <select
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value))}
-            className="px-3 py-2 rounded-lg border border-border bg-input text-text-primary"
-            style={{ fontSize: 13 }}
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={90}>Last 90 days</option>
-          </select>
+        <div className="flex items-center gap-3">
+          {hasOrgAccess && (
+            <div className="flex rounded-lg overflow-hidden border border-border" style={{ fontSize: 12 }}>
+              <button
+                onClick={() => setScope('tenant')}
+                style={{
+                  padding: '6px 14px',
+                  background: scope === 'tenant' ? 'var(--neon-cyan)' : 'transparent',
+                  color: scope === 'tenant' ? '#000' : 'var(--text-secondary)',
+                  fontWeight: scope === 'tenant' ? 700 : 400,
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                This Tenant
+              </button>
+              <button
+                onClick={() => setScope('org')}
+                style={{
+                  padding: '6px 14px',
+                  background: scope === 'org' ? 'var(--neon-indigo)' : 'transparent',
+                  color: scope === 'org' ? '#fff' : 'var(--text-secondary)',
+                  fontWeight: scope === 'org' ? 700 : 400,
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                All Org Tenants
+              </button>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Period:</label>
+            <select
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value))}
+              className="px-3 py-2 rounded-lg border border-border bg-input text-text-primary"
+              style={{ fontSize: 13 }}
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
+          </div>
         </div>
       </div>
+
+      {/* Org-scope summary cards */}
+      {scope === 'org' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {[
+            { icon: Building2, label: 'Total Tenants', value: orgStats?.tenant_count ?? '—', color: 'var(--neon-cyan)' },
+            { icon: Server,    label: 'Active Tenants', value: orgStats?.active_tenant_count ?? '—', color: 'var(--neon-green)' },
+            { icon: Users,     label: 'Org Members', value: orgStats?.member_count ?? '—', color: 'var(--neon-indigo)' },
+          ].map(({ icon: Icon, label, value, color }) => (
+            <div key={label} className="glass rounded-xl p-5 flex items-center gap-4">
+              <div style={{ background: `${color}22`, borderRadius: 10, padding: 10 }}>
+                <Icon size={22} style={{ color }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-heading)', lineHeight: 1 }}>{value}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* MTTR Trends */}
       <div className="glass rounded-xl p-6">

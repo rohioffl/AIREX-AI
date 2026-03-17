@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion as Motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, AlertTriangle, Settings,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
   X, ChevronRight, Clock, Zap, Ban, HeartPulse, TrendingUp, BookOpen,
-  Terminal, Layers, BarChart3, ShieldCheck, ClipboardList
+  Terminal, Layers, BarChart3, ShieldCheck, ClipboardList, Building2, Check
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
@@ -13,6 +13,13 @@ import { fetchIncidents } from '../../services/api'
 import { createSSEConnection } from '../../services/sse'
 import ToastContainer from '../common/ToastContainer'
 import LeadApprovalPanel from './LeadApprovalPanel'
+
+function normalizeRole(role) {
+  const normalized = (role || 'operator').toLowerCase()
+  if (normalized.startsWith('org_')) return normalized.replace(/^org_/, '')
+  if (normalized.startsWith('tenant_')) return normalized.replace(/^tenant_/, '')
+  return normalized
+}
 
 const ACTIVE_STATES = [
   'RECEIVED', 'INVESTIGATING', 'RECOMMENDATION_READY',
@@ -30,7 +37,7 @@ const NAV_ITEMS = [
   { label: 'Proactive', path: '/patterns', icon: Layers, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin', 'operator'] },
   { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
-  { label: 'Admin', path: '/admin', icon: ShieldCheck, roles: ['admin'] },
+  { label: 'Platform Admin', path: '/admin', icon: ShieldCheck, roles: ['platform_admin'] },
 ]
 
 const ROUTE_TITLES = {
@@ -46,7 +53,11 @@ const ROUTE_TITLES = {
   '/patterns':               { label: 'Proactive',        parent: null },
   '/reports':                { label: 'Reports',          parent: null },
   '/settings':               { label: 'Settings',         parent: null },
-  '/admin':                  { label: 'Super Admin',      parent: null },
+  '/admin/legacy':           { label: 'System Admin',     parent: null },
+  '/admin':                  { label: 'Platform Admin',   parent: null },
+  '/admin/organizations':    { label: 'Organizations',    parent: 'System Admin' },
+  '/admin/workspaces':       { label: 'Tenant Workspaces', parent: 'System Admin' },
+  '/admin/integrations':     { label: 'Integrations',     parent: 'System Admin' },
   '/profile':               { label: 'Profile',           parent: 'Account' },
 }
 
@@ -54,7 +65,7 @@ export default function Layout({ children }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { isDark, toggle } = useTheme()
-  const { user, logout } = useAuth()
+  const { user, logout, tenants, activeTenant, activeOrganization, switchTenant, organizations } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [activeAlertIds, setActiveAlertIds] = useState(new Set())
@@ -209,14 +220,27 @@ export default function Layout({ children }) {
     <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
       {/* Sidebar */}
       <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'open' : ''}`}>
-        {/* Brand */}
-        <div className="sidebar-brand">
+        {/* AIREX Brand */}
+        <div className="sidebar-brand" style={{ padding: collapsed ? '20px 0' : '20px 20px', justifyContent: collapsed ? 'center' : 'flex-start' }}>
           <div className="sidebar-brand-logo">A</div>
-          <div className="sidebar-brand-text">
-            <span className="sidebar-brand-name">AIREX</span>
-            <span className="sidebar-brand-sub">autonomous sre</span>
-          </div>
+          {!collapsed && (
+            <div className="sidebar-brand-text">
+              <span className="sidebar-brand-name">AIREX</span>
+              <span className="sidebar-brand-sub">Cloud SRE Platform</span>
+            </div>
+          )}
         </div>
+
+        {/* Workspace / Org Switcher */}
+        <SidebarWorkspaceSwitcher 
+          organizations={organizations}
+          activeOrganization={activeOrganization}
+          tenants={tenants}
+          activeTenant={activeTenant}
+          switchTenant={switchTenant}
+          navigate={navigate}
+          collapsed={collapsed}
+        />
 
         {/* Nav */}
         <nav className="sidebar-nav">
@@ -226,7 +250,7 @@ export default function Layout({ children }) {
           {NAV_ITEMS.filter(item => {
             // Filter by role if roles are specified
             if (item.roles && user) {
-              const userRole = (user.role || 'operator').toLowerCase()
+              const userRole = normalizeRole(user.role || 'operator')
               return item.roles.map(r => r.toLowerCase()).includes(userRole)
             }
             // Show all items if no role filter or no user (dev mode)
@@ -270,6 +294,11 @@ export default function Layout({ children }) {
               <div className="sidebar-avatar">{initials}</div>
               <div className="sidebar-footer-text">
                 <span className="sidebar-user-name">{displayName}</span>
+                {normalizeRole(user?.role) === 'platform_admin' && (
+                  <span style={{ background: 'rgba(99,102,241,0.15)', color: 'var(--neon-indigo)', borderRadius: 999, padding: '1px 7px', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', display: 'inline-block', marginTop: 1 }}>
+                    PLATFORM ADMIN
+                  </span>
+                )}
                 <span className="sidebar-user-role" style={{ opacity: 0.65 }}>{user?.email || 'dev mode'}</span>
               </div>
             </Link>
@@ -373,7 +402,7 @@ export default function Layout({ children }) {
 
           <div className="topbar-right">
             {/* Lead Approval - admin only */}
-            {(user?.role || '').toLowerCase() === 'admin' && (
+            {normalizeRole(user?.role || '') === 'admin' && (
               <button
                 onClick={() => setShowLeadApproval(true)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all hover-lift"
@@ -390,6 +419,8 @@ export default function Layout({ children }) {
               <span className="status-dot status-dot-green" />
               <span>NOMINAL</span>
             </div>
+
+
 
             {/* Theme Toggle */}
             <div className="theme-toggle" onClick={toggle} role="button" tabIndex={0} aria-label="Toggle theme">
@@ -424,7 +455,7 @@ export default function Layout({ children }) {
               {/* Notification Dropdown */}
               <AnimatePresence>
                 {showNotifications && (
-                  <motion.div
+                  <Motion.div
                     initial={{ opacity: 0, scale: 0.95, y: -6 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: -6 }}
@@ -446,7 +477,7 @@ export default function Layout({ children }) {
                         })
                       }}
                     />
-                  </motion.div>
+                  </Motion.div>
                 )}
               </AnimatePresence>
             </div>
@@ -457,7 +488,7 @@ export default function Layout({ children }) {
         <main className="flex-1 p-6 overflow-auto">
           <div className="w-full">
             <AnimatePresence mode="wait" initial={false}>
-              <motion.div
+              <Motion.div
                 key={location.pathname}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -465,7 +496,7 @@ export default function Layout({ children }) {
                 transition={{ duration: 0.18, ease: 'easeInOut' }}
               >
                 {children}
-              </motion.div>
+              </Motion.div>
             </AnimatePresence>
           </div>
         </main>
@@ -492,7 +523,7 @@ export default function Layout({ children }) {
       {/* Mobile overlay */}
       <AnimatePresence>
         {mobileOpen && (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -500,6 +531,142 @@ export default function Layout({ children }) {
             className="fixed inset-0 bg-black/50 z-30 md:hidden"
             onClick={() => setMobileOpen(false)}
           />
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+
+function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, activeTenant, switchTenant, navigate, collapsed }) {
+  const [open, setOpen] = useState(false)
+  const [switching, setSwitching] = useState(null)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const handleSwitch = async (org) => {
+    if (String(org.id) === String(activeOrganization?.id)) { setOpen(false); return }
+    const match = tenants?.find(t => String(t.organization_id) === String(org.id))
+    if (!match) return
+    setSwitching(org.id)
+    try {
+      await switchTenant(match.id)
+      navigate('/dashboard', { replace: false })
+    } finally {
+      setSwitching(null)
+      setOpen(false)
+    }
+  }
+
+  // Active display name
+  const displayName = activeOrganization?.name || activeOrganization?.slug || 'Select Workspace'
+  const initial = displayName.charAt(0).toUpperCase()
+
+  return (
+    <div className="relative" ref={ref} style={{ padding: collapsed ? '8px 6px' : '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2.5 rounded-lg transition-all"
+        style={{
+          padding: collapsed ? '8px 0' : '8px 10px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          background: open ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
+          border: '1px solid',
+          borderColor: open ? 'rgba(99,102,241,0.25)' : 'var(--border)',
+          cursor: 'pointer',
+          color: 'var(--text-primary)',
+        }}
+      >
+        <div
+          className="flex items-center justify-center flex-shrink-0 rounded-md"
+          style={{
+            width: 28, height: 28,
+            background: 'var(--gradient-cyan)',
+            color: '#fff', fontWeight: 700, fontSize: 12,
+          }}
+        >
+          {initial}
+        </div>
+        {!collapsed && (
+          <>
+            <div className="flex flex-col min-w-0 flex-1 text-left" style={{ gap: 1 }}>
+              <span className="truncate max-w-[130px]" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }} title={displayName}>
+                {displayName}
+              </span>
+              {activeTenant && (
+                <span className="truncate max-w-[130px]" style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--neon-cyan)', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.8 }}>
+                  {activeTenant.display_name || activeTenant.name}
+                </span>
+              )}
+            </div>
+            <ChevronRight size={12} style={{ color: 'var(--text-muted)', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0 }} />
+          </>
+        )}
+      </button>
+
+      <AnimatePresence>
+        {open && !collapsed && (
+          <Motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
+            style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 12, zIndex: 60,
+              width: 'calc(100% - 24px)', transformOrigin: 'top left',
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: '10px 12px 6px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Switch Organization
+              </span>
+            </div>
+            
+            <div style={{ padding: 6, maxHeight: 300, overflowY: 'auto' }}>
+              {organizations?.map(org => {
+                const isActive = String(org.id) === String(activeOrganization?.id)
+                const isSwitching = switching === org.id
+                return (
+                  <button
+                    key={org.id}
+                    onClick={() => handleSwitch(org)}
+                    disabled={isSwitching}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
+                    style={{
+                      background: isActive ? 'rgba(34,211,238,0.06)' : 'transparent',
+                      cursor: isActive ? 'default' : 'pointer',
+                      opacity: isSwitching ? 0.6 : 1,
+                    }}
+                  >
+                    <div
+                      className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0"
+                      style={{ background: isActive ? 'var(--gradient-cyan)' : 'var(--bg-input)', border: '1px solid var(--border)', color: isActive ? '#fff' : 'var(--text-muted)', fontWeight: 700, fontSize: 12 }}
+                    >
+                      {org.name ? org.name.charAt(0).toUpperCase() : <Building2 size={14} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div style={{ fontSize: 13, fontWeight: 600, color: isActive ? 'var(--neon-cyan)' : 'var(--text-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {org.name}
+                      </div>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-sans)', color: 'var(--text-muted)' }}>{org.slug}</div>
+                    </div>
+                    {isActive && <Check size={14} style={{ color: '#22d3ee', flexShrink: 0 }} />}
+                  </button>
+                )
+              })}
+            </div>
+          </Motion.div>
         )}
       </AnimatePresence>
     </div>

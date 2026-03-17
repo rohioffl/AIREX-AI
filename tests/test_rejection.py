@@ -37,11 +37,13 @@ def mock_session():
 async def client(mock_redis, mock_session):
     from app.api.dependencies import get_db_session, get_redis
 
-    app.dependency_overrides[get_redis] = lambda: mock_redis
+    async def override_redis():
+        return mock_redis
 
     async def override_session():
         yield mock_session
 
+    app.dependency_overrides[get_redis] = override_redis
     app.dependency_overrides[get_db_session] = override_session
     app.state.redis = mock_redis
 

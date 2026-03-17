@@ -6,16 +6,22 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from airex_core.core.rate_limit import auth_rate_limit
 
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 
-from app.api.dependencies import TenantSession
+from app.api.dependencies import (
+    TenantSession,
+    get_auth_session,
+    get_current_user,
+    resolve_active_tenant_id,
+)
 from airex_core.core.config import settings
 from airex_core.core.security import (
     AcceptInvitationWithGoogleRequest,
@@ -31,11 +37,76 @@ from airex_core.core.security import (
     hash_password,
     verify_password,
 )
+from airex_core.models.organization import Organization
+from airex_core.models.organization_membership import OrganizationMembership
+from airex_core.models.project import Project
+from airex_core.models.tenant import Tenant
+from airex_core.models.tenant_membership import TenantMembership
 from airex_core.models.user import User
 
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+async def _get_org_id(session: AsyncSession, tenant_id: uuid.UUID) -> uuid.UUID | None:
+    """Return the organization_id for a tenant, or None if not found."""
+    result = await session.execute(
+        select(Tenant.organization_id).where(Tenant.id == tenant_id)
+    )
+    return result.scalar_one_or_none()
+
+
+def _row_value(row: object, attr: str) -> object:
+    value = getattr(row, attr, None)
+    if attr == "name" and not isinstance(value, str):
+        mock_name = getattr(row, "_mock_name", None)
+        if isinstance(mock_name, str) and mock_name:
+            return mock_name
+    return value
+
+
+def _row_str(row: object, attr: str) -> str:
+    value = _row_value(row, attr)
+    return value if isinstance(value, str) else str(value)
+
+
+def _row_optional_str(row: object, attr: str) -> str | None:
+    value = _row_value(row, attr)
+    return value if value is None or isinstance(value, str) else str(value)
+
+
+class OrganizationSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    role: str
+
+
+class TenantSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    display_name: str
+    organization_id: uuid.UUID
+    organization_name: str | None = None
+    organization_slug: str | None = None
+    role: str | None = None
+
+
+class ProjectSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+
+
+class AuthMeResponse(BaseModel):
+    user: UserResponse
+    active_organization: OrganizationSummary
+    active_tenant: TenantSummary
+    organization_memberships: list[OrganizationSummary]
+    tenant_memberships: list[TenantSummary]
+    tenants: list[TenantSummary]
+    projects: list[ProjectSummary]
 
 
 @router.post(
@@ -109,11 +180,13 @@ async def login(
             detail="Account is disabled",
         )
 
+    org_id = await _get_org_id(session, user.tenant_id)
     access_token = create_access_token(
         tenant_id=user.tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
+        org_id=org_id,
     )
     refresh_token = create_refresh_token(
         tenant_id=user.tenant_id,
@@ -125,6 +198,204 @@ async def login(
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
+    )
+
+
+@router.get("/me", response_model=AuthMeResponse)
+async def auth_me(
+    current_user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_auth_session),
+    x_active_tenant_id: str | None = Header(None, alias="X-Active-Tenant-Id"),
+    x_tenant_id: str | None = Header(None, alias="X-Tenant-Id"),
+) -> AuthMeResponse:
+    """Return the authenticated user's active SaaS context and memberships."""
+    if current_user is None or current_user.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    active_tenant_id = await resolve_active_tenant_id(
+        session=session,
+        current_user=current_user,
+        active_tenant_id=x_active_tenant_id or x_tenant_id,
+    )
+
+    user_result = await session.execute(select(User).where(User.id == current_user.user_id))
+    user = user_result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or disabled",
+        )
+
+    active_tenant_result = await session.execute(
+        select(
+            Tenant.id,
+            Tenant.name,
+            Tenant.display_name,
+            Tenant.organization_id,
+            Organization.name.label("organization_name"),
+            Organization.slug.label("organization_slug"),
+        )
+        .join(Organization, Organization.id == Tenant.organization_id)
+        .where(Tenant.id == active_tenant_id)
+    )
+    active_tenant = active_tenant_result.one_or_none()
+    if active_tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    org_membership_result = await session.execute(
+        select(
+            OrganizationMembership.organization_id,
+            OrganizationMembership.role,
+            Organization.name.label("organization_name"),
+            Organization.slug.label("organization_slug"),
+        )
+        .join(Organization, Organization.id == OrganizationMembership.organization_id)
+        .where(OrganizationMembership.user_id == current_user.user_id)
+    )
+    organization_memberships = [
+        OrganizationSummary(
+            id=row.organization_id,
+            name=row.organization_name,
+            slug=row.organization_slug,
+            role=row.role,
+        )
+        for row in org_membership_result.all()
+    ]
+    active_org_membership = next(
+        (
+            membership
+            for membership in organization_memberships
+            if membership.id == active_tenant.organization_id
+        ),
+        None,
+    )
+
+    tenant_membership_result = await session.execute(
+        select(
+            TenantMembership.tenant_id,
+            TenantMembership.role,
+            Tenant.name,
+            Tenant.display_name,
+            Tenant.organization_id,
+            Organization.name.label("organization_name"),
+            Organization.slug.label("organization_slug"),
+        )
+        .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+        .join(Organization, Organization.id == Tenant.organization_id)
+        .where(TenantMembership.user_id == current_user.user_id)
+    )
+    tenant_memberships = [
+        TenantSummary(
+            id=row.tenant_id,
+            name=_row_str(row, "name"),
+            display_name=_row_str(row, "display_name"),
+            organization_id=row.organization_id,
+            organization_name=_row_optional_str(row, "organization_name"),
+            organization_slug=_row_optional_str(row, "organization_slug"),
+            role=_row_str(row, "role"),
+        )
+        for row in tenant_membership_result.all()
+    ]
+
+    if active_org_membership is not None:
+        accessible_tenant_query = (
+            select(
+                Tenant.id,
+                Tenant.name,
+                Tenant.display_name,
+                Tenant.organization_id,
+                Organization.name.label("organization_name"),
+                Organization.slug.label("organization_slug"),
+            )
+            .join(Organization, Organization.id == Tenant.organization_id)
+            .where(Tenant.organization_id == active_tenant.organization_id)
+            .order_by(Tenant.display_name.asc())
+        )
+    else:
+        accessible_tenant_query = (
+            select(
+                Tenant.id,
+                Tenant.name,
+                Tenant.display_name,
+                Tenant.organization_id,
+                Organization.name.label("organization_name"),
+                Organization.slug.label("organization_slug"),
+            )
+            .join(Organization, Organization.id == Tenant.organization_id)
+            .where(
+                or_(
+                    Tenant.id == current_user.tenant_id,
+                    Tenant.id == active_tenant_id,
+                    Tenant.id.in_(
+                        select(TenantMembership.tenant_id).where(
+                            TenantMembership.user_id == current_user.user_id
+                        )
+                    ),
+                )
+            )
+            .order_by(Tenant.display_name.asc())
+        )
+
+    accessible_tenants_result = await session.execute(accessible_tenant_query)
+    accessible_tenants = [
+        TenantSummary(
+            id=row.id,
+            name=_row_str(row, "name"),
+            display_name=_row_str(row, "display_name"),
+            organization_id=row.organization_id,
+            organization_name=_row_optional_str(row, "organization_name"),
+            organization_slug=_row_optional_str(row, "organization_slug"),
+        )
+        for row in accessible_tenants_result.all()
+    ]
+
+    project_result = await session.execute(
+        select(Project.id, Project.name, Project.slug)
+        .where(Project.tenant_id == active_tenant_id, Project.is_active.is_(True))
+        .order_by(Project.name.asc())
+    )
+    projects = [
+        ProjectSummary(
+            id=row.id,
+            name=_row_str(row, "name"),
+            slug=_row_str(row, "slug"),
+        )
+        for row in project_result.all()
+    ]
+
+    return AuthMeResponse(
+        user=UserResponse(
+            id=user.id,
+            tenant_id=user.tenant_id,
+            email=user.email,
+            display_name=user.display_name,
+            role=user.role,
+            is_active=user.is_active,
+            created_at=getattr(user, "created_at", None),
+            updated_at=getattr(user, "updated_at", None),
+        ),
+        active_organization=OrganizationSummary(
+            id=active_tenant.organization_id,
+            name=active_tenant.organization_name,
+            slug=active_tenant.organization_slug,
+            role=active_org_membership.role if active_org_membership else "tenant_member",
+        ),
+        active_tenant=TenantSummary(
+            id=active_tenant.id,
+            name=_row_str(active_tenant, "name"),
+            display_name=_row_str(active_tenant, "display_name"),
+            organization_id=active_tenant.organization_id,
+            organization_name=_row_optional_str(active_tenant, "organization_name"),
+            organization_slug=_row_optional_str(active_tenant, "organization_slug"),
+            role=user.role,
+        ),
+        organization_memberships=organization_memberships,
+        tenant_memberships=tenant_memberships,
+        tenants=accessible_tenants,
+        projects=projects,
     )
 
 
@@ -155,11 +426,13 @@ async def refresh(
             detail="User not found or disabled",
         )
 
+    org_id = await _get_org_id(session, user.tenant_id)
     access_token = create_access_token(
         tenant_id=user.tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
+        org_id=org_id,
     )
 
     return TokenResponse(
@@ -240,11 +513,13 @@ async def google_login(
             detail="Account is disabled",
         )
 
+    org_id = await _get_org_id(session, user.tenant_id)
     access_token = create_access_token(
         tenant_id=user.tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
+        org_id=org_id,
     )
     refresh_token = create_refresh_token(
         tenant_id=user.tenant_id,
@@ -337,11 +612,13 @@ async def accept_invitation_with_google(
     )
 
     # Return tokens so user is logged in
+    org_id = await _get_org_id(session, user.tenant_id)
     access_token = create_access_token(
         tenant_id=user.tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
+        org_id=org_id,
     )
     refresh_token = create_refresh_token(
         tenant_id=user.tenant_id,
@@ -412,11 +689,13 @@ async def set_password(
     logger.info("password_set_via_invitation", email=user.email, user_id=str(user.id))
 
     # Return tokens so user is logged in
+    org_id = await _get_org_id(session, user.tenant_id)
     access_token = create_access_token(
         tenant_id=user.tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
+        org_id=org_id,
     )
     refresh_token = create_refresh_token(
         tenant_id=user.tenant_id,

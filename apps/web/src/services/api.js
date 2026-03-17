@@ -7,6 +7,8 @@ import {
   setTokens,
 } from './tokenStorage'
 
+const ACTIVE_TENANT_KEY = 'airex-active-tenant-id'
+
 const api = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
@@ -31,6 +33,10 @@ api.interceptors.request.use((config) => {
   const csrf = getCsrfToken()
   if (csrf) {
     config.headers['X-CSRF-Token'] = csrf
+  }
+  const activeTenantId = typeof window !== 'undefined' ? localStorage.getItem(ACTIVE_TENANT_KEY) : null
+  if (activeTenantId) {
+    config.headers['X-Active-Tenant-Id'] = activeTenantId
   }
   return config
 })
@@ -75,6 +81,27 @@ export async function fetchIncidents({ state, severity, alertType, search, host_
   if (cursor) params.cursor = cursor
   else if (offset) params.offset = offset
   const res = await api.get('/incidents/', { params })
+  return res.data
+}
+
+export function getActiveTenantId() {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(ACTIVE_TENANT_KEY)
+}
+
+export function setActiveTenantId(tenantId) {
+  if (typeof window === 'undefined') return
+  if (tenantId) localStorage.setItem(ACTIVE_TENANT_KEY, tenantId)
+  else localStorage.removeItem(ACTIVE_TENANT_KEY)
+}
+
+export async function fetchAuthMe(tenantId = null) {
+  const headers = {}
+  const resolvedTenantId = tenantId || getActiveTenantId()
+  if (resolvedTenantId) {
+    headers['X-Active-Tenant-Id'] = resolvedTenantId
+  }
+  const res = await api.get('/auth/me', { headers })
   return res.data
 }
 
@@ -151,6 +178,156 @@ export async function fetchMetrics() {
 // Tenants
 export async function fetchTenants() {
   const res = await api.get('/tenants/')
+  return res.data
+}
+
+export async function fetchOrganizations() {
+  const res = await api.get('/organizations')
+  return res.data
+}
+
+export async function createOrganization(data) {
+  const res = await api.post('/organizations', data)
+  return res.data
+}
+
+export async function updateOrganization(organizationId, data) {
+  const res = await api.put(`/organizations/${organizationId}`, data)
+  return res.data
+}
+
+export async function fetchOrganizationTenants(organizationId) {
+  const res = await api.get(`/organizations/${organizationId}/tenants`)
+  return res.data
+}
+
+export async function fetchOrganizationAnalytics(organizationId) {
+  const res = await api.get(`/organizations/${organizationId}/analytics`)
+  return res.data
+}
+
+// Org member management
+export async function fetchOrgMembers(organizationId) {
+  const res = await api.get(`/organizations/${organizationId}/members`)
+  return res.data
+}
+
+export async function addOrgMember(organizationId, data) {
+  const res = await api.post(`/organizations/${organizationId}/members`, data)
+  return res.data
+}
+
+export async function updateOrgMember(organizationId, userId, data) {
+  const res = await api.patch(`/organizations/${organizationId}/members/${userId}`, data)
+  return res.data
+}
+
+export async function removeOrgMember(organizationId, userId) {
+  await api.delete(`/organizations/${organizationId}/members/${userId}`)
+}
+
+// Tenant member management
+export async function fetchTenantMembers(tenantId) {
+  const res = await api.get(`/tenants/${tenantId}/members`)
+  return res.data
+}
+
+export async function addTenantMember(tenantId, data) {
+  const res = await api.post(`/tenants/${tenantId}/members`, data)
+  return res.data
+}
+
+export async function updateTenantMember(tenantId, userId, data) {
+  const res = await api.patch(`/tenants/${tenantId}/members/${userId}`, data)
+  return res.data
+}
+
+export async function removeTenantMember(tenantId, userId) {
+  await api.delete(`/tenants/${tenantId}/members/${userId}`)
+}
+
+// User accessible tenants
+export async function fetchUserAccessibleTenants(userId) {
+  const res = await api.get(`/users/${userId}/accessible-tenants`)
+  return res.data
+}
+
+export async function createOrganizationTenant(organizationId, data) {
+  const res = await api.post(`/organizations/${organizationId}/tenants`, data)
+  return res.data
+}
+
+export async function fetchProjects(tenantId) {
+  const res = await api.get(`/tenants/${tenantId}/projects`)
+  return res.data
+}
+
+export async function createProject(tenantId, data) {
+  const res = await api.post(`/tenants/${tenantId}/projects`, data)
+  return res.data
+}
+
+export async function updateProject(projectId, data) {
+  const res = await api.put(`/projects/${projectId}`, data)
+  return res.data
+}
+
+export async function deleteProject(projectId) {
+  await api.delete(`/projects/${projectId}`)
+}
+
+export async function fetchIntegrationTypes() {
+  const res = await api.get('/integration-types')
+  return res.data
+}
+
+export async function fetchIntegrations(tenantId) {
+  const res = await api.get(`/tenants/${tenantId}/integrations`)
+  return res.data
+}
+
+export async function createIntegration(tenantId, data) {
+  const res = await api.post(`/tenants/${tenantId}/integrations`, data)
+  return res.data
+}
+
+export async function updateIntegration(integrationId, data) {
+  const res = await api.put(`/integrations/${integrationId}`, data)
+  return res.data
+}
+
+export async function deleteIntegration(integrationId) {
+  const res = await api.delete(`/integrations/${integrationId}`)
+  return res.data
+}
+
+export async function testIntegration(integrationId) {
+  const res = await api.post(`/integrations/${integrationId}/test`)
+  return res.data
+}
+
+export async function syncIntegrationMonitors(integrationId, monitors = []) {
+  const res = await api.post(`/integrations/${integrationId}/sync-monitors`, { monitors })
+  return res.data
+}
+
+export async function fetchExternalMonitors(integrationId) {
+  const res = await api.get(`/integrations/${integrationId}/external-monitors`)
+  return res.data
+}
+
+export async function fetchProjectMonitorBindings(projectId) {
+  const res = await api.get(`/projects/${projectId}/monitor-bindings`)
+  return res.data
+}
+
+export async function createProjectMonitorBinding(projectId, data) {
+  const res = await api.post(`/projects/${projectId}/monitor-bindings`, data)
+  return res.data
+}
+
+export async function deleteProjectMonitorBinding(bindingId) {
+  const res = await api.delete(`/project-monitor-bindings/${bindingId}`)
   return res.data
 }
 
@@ -495,15 +672,6 @@ export async function fetchGrafanaTemplates(category = null) {
   return res.data
 }
 
-export async function exportGrafanaDashboard(templateId, datasource = 'Prometheus') {
-  const res = await api.post(`/grafana-dashboards/templates/${templateId}/export`, null, { params: { datasource } })
-  return res.data
-}
-
-export async function exportAllGrafanaDashboards(datasource = 'Prometheus') {
-  const res = await api.post('/grafana-dashboards/export-all', null, { params: { datasource } })
-  return res.data
-}
 
 // Notification preferences
 export async function fetchNotificationPreferences() {

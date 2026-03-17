@@ -185,7 +185,7 @@ async def update_runbook(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Runbook not found")
 
     update_data = body.model_dump(exclude_unset=True)
-    if "steps" in update_data and update_data["steps"] is not None:
+    if "steps" in update_data and body.steps is not None:
         update_data["steps"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in body.steps]
     for field, value in update_data.items():
         setattr(runbook, field, value)

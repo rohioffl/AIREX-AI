@@ -130,7 +130,7 @@ class TestTenantConfigLoader:
     def test_missing_config_file(self):
         assert _load_raw_config("/nonexistent/path.yaml") == {}
 
-    def test_missing_db_driver_is_not_silently_ignored(self, monkeypatch):
+    def test_missing_db_driver_is_not_silently_ignored(self, monkeypatch, caplog):
         original_import = builtins.__import__
 
         def fake_import(name, *args, **kwargs):
@@ -140,8 +140,11 @@ class TestTenantConfigLoader:
 
         monkeypatch.setattr(builtins, "__import__", fake_import)
 
-        with pytest.raises(ModuleNotFoundError):
-            _tc_mod._load_tenants_from_db()
+        import logging
+        with caplog.at_level(logging.WARNING):
+            result = _tc_mod._load_tenants_from_db()
+            assert result is None
+            assert "falling back to YAML" in caplog.text
 
 
 class TestMinimalConfig:

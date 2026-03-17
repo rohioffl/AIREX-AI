@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FileText, ChevronDown, Copy } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion as Motion, AnimatePresence } from 'framer-motion'
 import { formatTimestamp } from '../../utils/formatters'
 import AnomalyBadge from './AnomalyBadge'
 
@@ -134,7 +134,7 @@ export default function EvidencePanel({ evidence, incident }) {
 
             <AnimatePresence initial={false}>
               {isExpanded && (
-                <motion.div
+                <Motion.div
                   key="expanded"
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
@@ -190,7 +190,7 @@ export default function EvidencePanel({ evidence, incident }) {
                       </pre>
                     </div>
                   </div>
-                </motion.div>
+                </Motion.div>
               )}
             </AnimatePresence>
           </div>

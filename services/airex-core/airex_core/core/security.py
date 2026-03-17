@@ -27,6 +27,12 @@ class TokenData(BaseModel):
     sub: str
     user_id: uuid.UUID | None = None
     role: str = "operator"
+    org_id: uuid.UUID | None = None
+
+    @property
+    def user_email(self) -> str:
+        """Compatibility alias for routes that still reference ``user_email``."""
+        return self.sub
 
 
 class TokenResponse(BaseModel):
@@ -112,6 +118,7 @@ def create_access_token(
     subject: str,
     user_id: uuid.UUID | None = None,
     role: str = "operator",
+    org_id: uuid.UUID | None = None,
 ) -> str:
     """Create a short-lived JWT access token."""
     expire = datetime.now(timezone.utc) + timedelta(
@@ -127,6 +134,8 @@ def create_access_token(
         payload["user_id"] = str(user_id)
     if role:
         payload["role"] = role
+    if org_id:
+        payload["org_id"] = str(org_id)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -156,7 +165,8 @@ def decode_access_token(token: str) -> TokenData:
         subject: str = payload["sub"]
         user_id = uuid.UUID(payload["user_id"]) if "user_id" in payload else None
         role = payload.get("role", "operator")
-        return TokenData(tenant_id=tenant_id, sub=subject, user_id=user_id, role=role)
+        org_id = uuid.UUID(payload["org_id"]) if "org_id" in payload else None
+        return TokenData(tenant_id=tenant_id, sub=subject, user_id=user_id, role=role, org_id=org_id)
     except ExpiredSignatureError as exc:
         logger.debug(
             "auth_access_token_expired",

@@ -20,9 +20,9 @@ router = APIRouter()
 @router.get("/monitors/{monitor_id}/performance")
 async def get_monitor_performance(
     monitor_id: str,
+    tenant_id: TenantId,
+    redis: Redis,
     period: int = Query(default=1, ge=1, le=3, description="1=24h, 2=7d, 3=30d"),
-    tenant_id: TenantId = None,
-    redis: Redis = None,
 ) -> dict:
     """Get performance metrics for a monitor."""
     if not settings.SITE24X7_ENABLED:
@@ -46,9 +46,9 @@ async def get_monitor_performance(
 @router.get("/monitors/{monitor_id}/outages")
 async def get_monitor_outages(
     monitor_id: str,
+    tenant_id: TenantId,
+    redis: Redis,
     period: int = Query(default=3, ge=1, le=3, description="1=24h, 2=7d, 3=30d"),
-    tenant_id: TenantId = None,
-    redis: Redis = None,
 ) -> dict:
     """Get outage history for a monitor."""
     if not settings.SITE24X7_ENABLED:
@@ -72,8 +72,8 @@ async def get_monitor_outages(
 @router.get("/monitors/{monitor_id}/summary")
 async def get_monitor_summary(
     monitor_id: str,
-    tenant_id: TenantId = None,
-    redis: Redis = None,
+    tenant_id: TenantId,
+    redis: Redis,
 ) -> dict:
     """Get combined summary: monitor details + current status + performance."""
     if not settings.SITE24X7_ENABLED:

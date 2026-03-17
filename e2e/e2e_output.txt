@@ -1,0 +1,784 @@
+
+> test
+> npx playwright test
+
+
+Running 37 tests using 1 worker
+
+  ✓   1 [chromium] › tests/admin-workspace.spec.js:134:7 › Admin workspace routes › organizations route renders the dedicated organization workspace (5.5s)
+  ✓   2 [chromium] › tests/admin-workspace.spec.js:141:7 › Admin workspace routes › workspace route shows tenant projects (6.4s)
+  ✓   3 [chromium] › tests/admin-workspace.spec.js:147:7 › Admin workspace routes › integrations route shows webhook path and supports verify/sync (6.3s)
+  ✘   4 [chromium] › tests/approval-flow.spec.js:67:7 › Incident Approval Flow › incident detail page shows state badge (0ms)
+  -   5 [chromium] › tests/approval-flow.spec.js:77:7 › Incident Approval Flow › API: incident transitions through states correctly
+  -   6 [chromium] › tests/approval-flow.spec.js:94:7 › Incident Approval Flow › API: reject transitions incident to REJECTED
+  -   7 [chromium] › tests/approval-flow.spec.js:131:7 › Incident Approval Flow › incidents list page shows incident cards
+  -   8 [chromium] › tests/approval-flow.spec.js:142:7 › Incident Approval Flow › SSE connection is established on incident detail page
+  ✘   9 [chromium] › tests/approval-flow.spec.js:67:7 › Incident Approval Flow › incident detail page shows state badge (retry #1) (1ms)
+  -  10 [chromium] › tests/approval-flow.spec.js:77:7 › Incident Approval Flow › API: incident transitions through states correctly (retry #1)
+  -  11 [chromium] › tests/approval-flow.spec.js:94:7 › Incident Approval Flow › API: reject transitions incident to REJECTED (retry #1)
+  -  12 [chromium] › tests/approval-flow.spec.js:131:7 › Incident Approval Flow › incidents list page shows incident cards (retry #1)
+  -  13 [chromium] › tests/approval-flow.spec.js:142:7 › Incident Approval Flow › SSE connection is established on incident detail page (retry #1)
+  ✓  14 [chromium] › tests/auth.spec.js:33:7 › Authentication Flow › login page renders correctly (3.7s)
+  ✘  15 [chromium] › tests/auth.spec.js:40:7 › Authentication Flow › login with invalid credentials shows error (11.0s)
+  ✘  16 [chromium] › tests/auth.spec.js:40:7 › Authentication Flow › login with invalid credentials shows error (retry #1) (12.9s)
+  ✘  17 [chromium] › tests/auth.spec.js:56:7 › Authentication Flow › login with valid credentials redirects to dashboard (14.9s)
+  ✘  18 [chromium] › tests/auth.spec.js:56:7 › Authentication Flow › login with valid credentials redirects to dashboard (retry #1) (15.5s)
+  ✘  19 [chromium] › tests/auth.spec.js:68:7 › Authentication Flow › authenticated user can access protected pages (16.0s)
+  ✘  20 [chromium] › tests/auth.spec.js:68:7 › Authentication Flow › authenticated user can access protected pages (retry #1) (17.0s)
+  ✓  21 [chromium] › tests/auth.spec.js:82:7 › Authentication Flow › unauthenticated user is redirected to login (2.7s)
+  ✘  22 [chromium] › tests/auth.spec.js:89:7 › Authentication Flow › token refresh keeps session alive (27ms)
+  ✘  23 [chromium] › tests/auth.spec.js:89:7 › Authentication Flow › token refresh keeps session alive (retry #1) (64ms)
+  ✓  24 [chromium] › tests/auth.spec.js:107:7 › Authentication Flow › rate limiting blocks excessive login attempts (67ms)
+  ✓  25 [chromium] › tests/dashboard.spec.js:42:7 › Dashboard & Navigation › dashboard page loads without JS errors (4.7s)
+  ✓  26 [chromium] › tests/dashboard.spec.js:56:7 › Dashboard & Navigation › dashboard has metric cards or incident summary (6.1s)
+  ✓  27 [chromium] › tests/dashboard.spec.js:67:7 › Dashboard & Navigation › sidebar navigation is visible (4.9s)
+  ✘  28 [chromium] › tests/dashboard.spec.js:76:7 › Dashboard & Navigation › incidents page is reachable via navigation (14.9s)
+  ✘  29 [chromium] › tests/dashboard.spec.js:76:7 › Dashboard & Navigation › incidents page is reachable via navigation (retry #1) (19.1s)
+  ✘  30 [chromium] › tests/dashboard.spec.js:93:7 › Dashboard & Navigation › health checks page loads (17.5s)
+  ✘  31 [chromium] › tests/dashboard.spec.js:93:7 › Dashboard & Navigation › health checks page loads (retry #1) (19.3s)
+  ✘  32 [chromium] › tests/dashboard.spec.js:101:7 › Dashboard & Navigation › settings page loads (16.7s)
+  ✘  33 [chromium] › tests/dashboard.spec.js:101:7 › Dashboard & Navigation › settings page loads (retry #1) (20.1s)
+  ✓  34 [chromium] › tests/dashboard.spec.js:109:7 › Dashboard & Navigation › 404 page renders for unknown routes (5.2s)
+  ✘  35 [chromium] › tests/dashboard.spec.js:117:7 › Dashboard & Navigation › API health endpoint responds (3.4s)
+  ✘  36 [chromium] › tests/dashboard.spec.js:117:7 › Dashboard & Navigation › API health endpoint responds (retry #1) (3.5s)
+  ✘  37 [chromium] › tests/dashboard.spec.js:122:7 › Dashboard & Navigation › API metrics endpoint requires auth (3.5s)
+  ✘  38 [chromium] › tests/dashboard.spec.js:122:7 › Dashboard & Navigation › API metrics endpoint requires auth (retry #1) (5.1s)
+  ✘  39 [chromium] › tests/incident-lifecycle.spec.js:74:7 › Incident Lifecycle › should display incidents list page (0ms)
+  -  40 [chromium] › tests/incident-lifecycle.spec.js:83:7 › Incident Lifecycle › should navigate to incident detail
+  -  41 [chromium] › tests/incident-lifecycle.spec.js:91:7 › Incident Lifecycle › should show incident state progression and Recommendation/RAG
+  -  42 [chromium] › tests/incident-lifecycle.spec.js:107:7 › Incident Lifecycle › should approve incident via UI
+  -  43 [chromium] › tests/incident-lifecycle.spec.js:125:7 › Incident Lifecycle › should show live execution logs
+  -  44 [chromium] › tests/incident-lifecycle.spec.js:133:7 › Incident Lifecycle › should show resolved or terminal state
+  ✘  45 [chromium] › tests/incident-lifecycle.spec.js:74:7 › Incident Lifecycle › should display incidents list page (retry #1) (17ms)
+  -  46 [chromium] › tests/incident-lifecycle.spec.js:83:7 › Incident Lifecycle › should navigate to incident detail (retry #1)
+  -  47 [chromium] › tests/incident-lifecycle.spec.js:91:7 › Incident Lifecycle › should show incident state progression and Recommendation/RAG (retry #1)
+  -  48 [chromium] › tests/incident-lifecycle.spec.js:107:7 › Incident Lifecycle › should approve incident via UI (retry #1)
+  -  49 [chromium] › tests/incident-lifecycle.spec.js:125:7 › Incident Lifecycle › should show live execution logs (retry #1)
+  -  50 [chromium] › tests/incident-lifecycle.spec.js:133:7 › Incident Lifecycle › should show resolved or terminal state (retry #1)
+  ✓  51 [chromium] › tests/incident-lifecycle.spec.js:166:7 › Dashboard UI › should render the sidebar and navigation (4.5s)
+  ✓  52 [chromium] › tests/incident-lifecycle.spec.js:176:7 › Dashboard UI › should toggle dark/light mode (4.3s)
+  ✓  53 [chromium] › tests/incident-lifecycle.spec.js:199:7 › Dashboard UI › should navigate between pages (4.9s)
+  ✓  54 [chromium] › tests/incident-lifecycle.spec.js:211:7 › Dashboard UI › should display metrics cards (5.5s)
+  ✓  55 [chromium] › tests/incident-lifecycle.spec.js:222:7 › Authentication Flow › should register a new user (39ms)
+  ✓  56 [chromium] › tests/incident-lifecycle.spec.js:236:7 › Authentication Flow › should login and receive tokens (28ms)
+  ✘  57 [chromium] › tests/incident-lifecycle.spec.js:261:7 › Authentication Flow › should reject invalid credentials (17ms)
+  ✘  58 [chromium] › tests/incident-lifecycle.spec.js:261:7 › Authentication Flow › should reject invalid credentials (retry #1) (204ms)
+
+
+  1) [chromium] › tests/approval-flow.spec.js:67:7 › Incident Approval Flow › incident detail page shows state badge 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m202[39m
+    Received: [31m429[39m
+
+      43 |     },
+      44 |   })
+    > 45 |   expect(res.status()).toBe(202)
+         |                        ^
+      46 |   const body = await res.json()
+      47 |   return body.incident_id
+      48 | }
+        at createTestIncident (/home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/approval-flow.spec.js:45:24)
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/approval-flow.spec.js:56:18
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m202[39m
+    Received: [31m429[39m
+
+      43 |     },
+      44 |   })
+    > 45 |   expect(res.status()).toBe(202)
+         |                        ^
+      46 |   const body = await res.json()
+      47 |   return body.incident_id
+      48 | }
+        at createTestIncident (/home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/approval-flow.spec.js:45:24)
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/approval-flow.spec.js:56:18
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/approval-flow-Incident-App-18a92-tail-page-shows-state-badge-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/approval-flow-Incident-App-18a92-tail-page-shows-state-badge-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/auth.spec.js:40:7 › Authentication Flow › login with invalid credentials shows error 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('[role="alert"], .error, [class*="error"], [class*="Error"]').first()
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('[role="alert"], .error, [class*="error"], [class*="Error"]').first()[22m
+
+
+      51 |     // Error message should be visible
+      52 |     const errorLocator = page.locator('[role="alert"], .error, [class*="error"], [class*="Error"]')
+    > 53 |     await expect(errorLocator.first()).toBeVisible({ timeout: 5000 })
+         |                                        ^
+      54 |   })
+      55 |
+      56 |   test('login with valid credentials redirects to dashboard', async ({ page }) => {
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/auth.spec.js:53:40
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-a8f17-lid-credentials-shows-error-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-a8f17-lid-credentials-shows-error-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/auth-Authentication-Flow-l-a8f17-lid-credentials-shows-error-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('[role="alert"], .error, [class*="error"], [class*="Error"]').first()
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('[role="alert"], .error, [class*="error"], [class*="Error"]').first()[22m
+
+
+      51 |     // Error message should be visible
+      52 |     const errorLocator = page.locator('[role="alert"], .error, [class*="error"], [class*="Error"]')
+    > 53 |     await expect(errorLocator.first()).toBeVisible({ timeout: 5000 })
+         |                                        ^
+      54 |   })
+      55 |
+      56 |   test('login with valid credentials redirects to dashboard', async ({ page }) => {
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/auth.spec.js:53:40
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-a8f17-lid-credentials-shows-error-chromium-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-a8f17-lid-credentials-shows-error-chromium-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/auth-Authentication-Flow-l-a8f17-lid-credentials-shows-error-chromium-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-a8f17-lid-credentials-shows-error-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/auth-Authentication-Flow-l-a8f17-lid-credentials-shows-error-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests/auth.spec.js:56:7 › Authentication Flow › login with valid credentials redirects to dashboard 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      62 |
+      63 |     // Should redirect away from /login
+    > 64 |     await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 })
+         |                ^
+      65 |     await expect(page).not.toHaveURL(/\/login/)
+      66 |   })
+      67 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/auth.spec.js:64:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-cc66f-ials-redirects-to-dashboard-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-cc66f-ials-redirects-to-dashboard-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/auth-Authentication-Flow-l-cc66f-ials-redirects-to-dashboard-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      62 |
+      63 |     // Should redirect away from /login
+    > 64 |     await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 })
+         |                ^
+      65 |     await expect(page).not.toHaveURL(/\/login/)
+      66 |   })
+      67 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/auth.spec.js:64:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-cc66f-ials-redirects-to-dashboard-chromium-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-cc66f-ials-redirects-to-dashboard-chromium-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/auth-Authentication-Flow-l-cc66f-ials-redirects-to-dashboard-chromium-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-l-cc66f-ials-redirects-to-dashboard-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/auth-Authentication-Flow-l-cc66f-ials-redirects-to-dashboard-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › tests/auth.spec.js:68:7 › Authentication Flow › authenticated user can access protected pages 
+
+    Error: [2mexpect([22m[31mpage[39m[2m).not.[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: not [32m/\/login/[39m
+    Received string: [31m"http://localhost:5173[7m/login[27m"[39m
+    Timeout: 10000ms
+
+    Call log:
+    [2m  - Expect "not toHaveURL" with timeout 10000ms[22m
+    [2m    13 × unexpected value "http://localhost:5173/login"[22m
+
+
+      77 |     // Should not redirect to login
+      78 |     await page.waitForTimeout(2000)
+    > 79 |     await expect(page).not.toHaveURL(/\/login/)
+         |                            ^
+      80 |   })
+      81 |
+      82 |   test('unauthenticated user is redirected to login', async ({ page }) => {
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/auth.spec.js:79:28
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-a-25892--can-access-protected-pages-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-a-25892--can-access-protected-pages-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/auth-Authentication-Flow-a-25892--can-access-protected-pages-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mpage[39m[2m).not.[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: not [32m/\/login/[39m
+    Received string: [31m"http://localhost:5173[7m/login[27m"[39m
+    Timeout: 10000ms
+
+    Call log:
+    [2m  - Expect "not toHaveURL" with timeout 10000ms[22m
+    [2m    13 × unexpected value "http://localhost:5173/login"[22m
+
+
+      77 |     // Should not redirect to login
+      78 |     await page.waitForTimeout(2000)
+    > 79 |     await expect(page).not.toHaveURL(/\/login/)
+         |                            ^
+      80 |   })
+      81 |
+      82 |   test('unauthenticated user is redirected to login', async ({ page }) => {
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/auth.spec.js:79:28
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-a-25892--can-access-protected-pages-chromium-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-a-25892--can-access-protected-pages-chromium-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/auth-Authentication-Flow-a-25892--can-access-protected-pages-chromium-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-a-25892--can-access-protected-pages-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/auth-Authentication-Flow-a-25892--can-access-protected-pages-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium] › tests/auth.spec.js:89:7 › Authentication Flow › token refresh keeps session alive 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mundefined[39m
+
+      93 |     })
+      94 |     const body = await res.json()
+    > 95 |     expect(body.refresh_token).toBeTruthy()
+         |                                ^
+      96 |
+      97 |     // Use refresh token to get new access token
+      98 |     const refreshRes = await request.post(`${API}/api/v1/auth/refresh`, {
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/auth.spec.js:95:32
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mundefined[39m
+
+      93 |     })
+      94 |     const body = await res.json()
+    > 95 |     expect(body.refresh_token).toBeTruthy()
+         |                                ^
+      96 |
+      97 |     // Use refresh token to get new access token
+      98 |     const refreshRes = await request.post(`${API}/api/v1/auth/refresh`, {
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/auth.spec.js:95:32
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/auth-Authentication-Flow-token-refresh-keeps-session-alive-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/auth-Authentication-Flow-token-refresh-keeps-session-alive-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium] › tests/dashboard.spec.js:76:7 › Dashboard & Navigation › incidents page is reachable via navigation 
+
+    Error: [2mexpect([22m[31mpage[39m[2m).[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: [32m/incident/[39m
+    Received string:  [31m"http://localhost:5173/login"[39m
+    Timeout: 10000ms
+
+    Call log:
+    [2m  - Expect "toHaveURL" with timeout 10000ms[22m
+    [2m    13 × unexpected value "http://localhost:5173/login"[22m
+
+
+      83 |       await incidentsLink.click()
+      84 |       await page.waitForURL(/incident/, { timeout: 8000 })
+    > 85 |       await expect(page).toHaveURL(/incident/)
+         |                          ^
+      86 |     } else {
+      87 |       // Navigate directly
+      88 |       await page.goto('/incidents')
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:85:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-527e2-is-reachable-via-navigation-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-527e2-is-reachable-via-navigation-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Naviga-527e2-is-reachable-via-navigation-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mpage[39m[2m).[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: [32m/incident/[39m
+    Received string:  [31m"http://localhost:5173/login"[39m
+    Timeout: 10000ms
+
+    Call log:
+    [2m  - Expect "toHaveURL" with timeout 10000ms[22m
+    [2m    13 × unexpected value "http://localhost:5173/login"[22m
+
+
+      83 |       await incidentsLink.click()
+      84 |       await page.waitForURL(/incident/, { timeout: 8000 })
+    > 85 |       await expect(page).toHaveURL(/incident/)
+         |                          ^
+      86 |     } else {
+      87 |       // Navigate directly
+      88 |       await page.goto('/incidents')
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:85:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-527e2-is-reachable-via-navigation-chromium-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-527e2-is-reachable-via-navigation-chromium-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Naviga-527e2-is-reachable-via-navigation-chromium-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-527e2-is-reachable-via-navigation-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/dashboard-Dashboard-Naviga-527e2-is-reachable-via-navigation-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium] › tests/dashboard.spec.js:93:7 › Dashboard & Navigation › health checks page loads ─
+
+    Error: [2mexpect([22m[31mpage[39m[2m).not.[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: not [32m/login/[39m
+    Received string: [31m"http://localhost:5173/[7mlogin[27m"[39m
+    Timeout: 10000ms
+
+    Call log:
+    [2m  - Expect "not toHaveURL" with timeout 10000ms[22m
+    [2m    13 × unexpected value "http://localhost:5173/login"[22m
+
+
+       95 |     await page.waitForLoadState('networkidle')
+       96 |     await page.waitForTimeout(2000)
+    >  97 |     await expect(page).not.toHaveURL(/login/)
+          |                            ^
+       98 |     await expect(page.locator('body')).not.toContainText('500')
+       99 |   })
+      100 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:97:28
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-health-checks-page-loads-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-health-checks-page-loads-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Navigation-health-checks-page-loads-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mpage[39m[2m).not.[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: not [32m/login/[39m
+    Received string: [31m"http://localhost:5173/[7mlogin[27m"[39m
+    Timeout: 10000ms
+
+    Call log:
+    [2m  - Expect "not toHaveURL" with timeout 10000ms[22m
+    [2m    13 × unexpected value "http://localhost:5173/login"[22m
+
+
+       95 |     await page.waitForLoadState('networkidle')
+       96 |     await page.waitForTimeout(2000)
+    >  97 |     await expect(page).not.toHaveURL(/login/)
+          |                            ^
+       98 |     await expect(page.locator('body')).not.toContainText('500')
+       99 |   })
+      100 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:97:28
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-health-checks-page-loads-chromium-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-health-checks-page-loads-chromium-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Navigation-health-checks-page-loads-chromium-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-health-checks-page-loads-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/dashboard-Dashboard-Navigation-health-checks-page-loads-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium] › tests/dashboard.spec.js:101:7 › Dashboard & Navigation › settings page loads ─────
+
+    Error: [2mexpect([22m[31mpage[39m[2m).not.[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: not [32m/login/[39m
+    Received string: [31m"http://localhost:5173/[7mlogin[27m"[39m
+    Timeout: 10000ms
+
+    Call log:
+    [2m  - Expect "not toHaveURL" with timeout 10000ms[22m
+    [2m    13 × unexpected value "http://localhost:5173/login"[22m
+
+
+      103 |     await page.waitForLoadState('networkidle')
+      104 |     await page.waitForTimeout(2000)
+    > 105 |     await expect(page).not.toHaveURL(/login/)
+          |                            ^
+      106 |     await expect(page.locator('body')).not.toContainText('500')
+      107 |   })
+      108 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:105:28
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-settings-page-loads-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-settings-page-loads-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Navigation-settings-page-loads-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mpage[39m[2m).not.[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: not [32m/login/[39m
+    Received string: [31m"http://localhost:5173/[7mlogin[27m"[39m
+    Timeout: 10000ms
+
+    Call log:
+    [2m  - Expect "not toHaveURL" with timeout 10000ms[22m
+    [2m    14 × unexpected value "http://localhost:5173/login"[22m
+
+
+      103 |     await page.waitForLoadState('networkidle')
+      104 |     await page.waitForTimeout(2000)
+    > 105 |     await expect(page).not.toHaveURL(/login/)
+          |                            ^
+      106 |     await expect(page.locator('body')).not.toContainText('500')
+      107 |   })
+      108 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:105:28
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-settings-page-loads-chromium-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-settings-page-loads-chromium-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Navigation-settings-page-loads-chromium-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-settings-page-loads-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/dashboard-Dashboard-Navigation-settings-page-loads-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium] › tests/dashboard.spec.js:117:7 › Dashboard & Navigation › API health endpoint responds 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m404[39m
+    Received array: [31m[200, 204][39m
+
+      117 |   test('API health endpoint responds', async ({ request }) => {
+      118 |     const res = await request.get(`${API}/api/v1/health`)
+    > 119 |     expect([200, 204]).toContain(res.status())
+          |                        ^
+      120 |   })
+      121 |
+      122 |   test('API metrics endpoint requires auth', async ({ request }) => {
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:119:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-API-health-endpoint-responds-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-API-health-endpoint-responds-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Navigation-API-health-endpoint-responds-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m404[39m
+    Received array: [31m[200, 204][39m
+
+      117 |   test('API health endpoint responds', async ({ request }) => {
+      118 |     const res = await request.get(`${API}/api/v1/health`)
+    > 119 |     expect([200, 204]).toContain(res.status())
+          |                        ^
+      120 |   })
+      121 |
+      122 |   test('API metrics endpoint requires auth', async ({ request }) => {
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:119:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-API-health-endpoint-responds-chromium-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-API-health-endpoint-responds-chromium-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Navigation-API-health-endpoint-responds-chromium-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Navigation-API-health-endpoint-responds-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/dashboard-Dashboard-Navigation-API-health-endpoint-responds-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [chromium] › tests/dashboard.spec.js:122:7 › Dashboard & Navigation › API metrics endpoint requires auth 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m404[39m
+    Received array: [31m[401, 403][39m
+
+      123 |     const res = await request.get(`${API}/api/v1/metrics/summary`)
+      124 |     // Should require authentication
+    > 125 |     expect([401, 403]).toContain(res.status())
+          |                        ^
+      126 |   })
+      127 | })
+      128 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:125:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-9f3ea-rics-endpoint-requires-auth-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-9f3ea-rics-endpoint-requires-auth-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Naviga-9f3ea-rics-endpoint-requires-auth-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m404[39m
+    Received array: [31m[401, 403][39m
+
+      123 |     const res = await request.get(`${API}/api/v1/metrics/summary`)
+      124 |     // Should require authentication
+    > 125 |     expect([401, 403]).toContain(res.status())
+          |                        ^
+      126 |   })
+      127 | })
+      128 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/dashboard.spec.js:125:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-9f3ea-rics-endpoint-requires-auth-chromium-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-9f3ea-rics-endpoint-requires-auth-chromium-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Dashboard-Naviga-9f3ea-rics-endpoint-requires-auth-chromium-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/dashboard-Dashboard-Naviga-9f3ea-rics-endpoint-requires-auth-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/dashboard-Dashboard-Naviga-9f3ea-rics-endpoint-requires-auth-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [chromium] › tests/incident-lifecycle.spec.js:74:7 › Incident Lifecycle › should display incidents list page 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m202[39m
+    Received: [31m429[39m
+
+      57 |     })
+      58 |
+    > 59 |     expect(res.status()).toBe(202)
+         |                          ^
+      60 |     const body = await res.json()
+      61 |     incidentId = body.incident_id
+      62 |     expect(incidentId).toBeTruthy()
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/incident-lifecycle.spec.js:59:26
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m202[39m
+    Received: [31m429[39m
+
+      57 |     })
+      58 |
+    > 59 |     expect(res.status()).toBe(202)
+         |                          ^
+      60 |     const body = await res.json()
+      61 |     incidentId = body.incident_id
+      62 |     expect(incidentId).toBeTruthy()
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/incident-lifecycle.spec.js:59:26
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/incident-lifecycle-Inciden-277b1-display-incidents-list-page-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/incident-lifecycle-Inciden-277b1-display-incidents-list-page-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [chromium] › tests/incident-lifecycle.spec.js:261:7 › Authentication Flow › should reject invalid credentials 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m401[39m
+    Received: [31m429[39m
+
+      267 |     })
+      268 |
+    > 269 |     expect(res.status()).toBe(401)
+          |                          ^
+      270 |   })
+      271 | })
+      272 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/incident-lifecycle.spec.js:269:26
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m401[39m
+    Received: [31m429[39m
+
+      267 |     })
+      268 |
+    > 269 |     expect(res.status()).toBe(401)
+          |                          ^
+      270 |   })
+      271 | })
+      272 |
+        at /home/ubuntu/AIREX-AI/AIREX-AI/e2e/tests/incident-lifecycle.spec.js:269:26
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/incident-lifecycle-Authent-a68b7--reject-invalid-credentials-chromium-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/incident-lifecycle-Authent-a68b7--reject-invalid-credentials-chromium-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12 failed
+    [chromium] › tests/approval-flow.spec.js:67:7 › Incident Approval Flow › incident detail page shows state badge 
+    [chromium] › tests/auth.spec.js:40:7 › Authentication Flow › login with invalid credentials shows error 
+    [chromium] › tests/auth.spec.js:56:7 › Authentication Flow › login with valid credentials redirects to dashboard 
+    [chromium] › tests/auth.spec.js:68:7 › Authentication Flow › authenticated user can access protected pages 
+    [chromium] › tests/auth.spec.js:89:7 › Authentication Flow › token refresh keeps session alive ─
+    [chromium] › tests/dashboard.spec.js:76:7 › Dashboard & Navigation › incidents page is reachable via navigation 
+    [chromium] › tests/dashboard.spec.js:93:7 › Dashboard & Navigation › health checks page loads ──
+    [chromium] › tests/dashboard.spec.js:101:7 › Dashboard & Navigation › settings page loads ──────
+    [chromium] › tests/dashboard.spec.js:117:7 › Dashboard & Navigation › API health endpoint responds 
+    [chromium] › tests/dashboard.spec.js:122:7 › Dashboard & Navigation › API metrics endpoint requires auth 
+    [chromium] › tests/incident-lifecycle.spec.js:74:7 › Incident Lifecycle › should display incidents list page 
+    [chromium] › tests/incident-lifecycle.spec.js:261:7 › Authentication Flow › should reject invalid credentials 
+  9 did not run
+  16 passed (6.0m)

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion as Motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle, XCircle, RefreshCcw, X, ChevronRight,
   Server, Zap, Shield, AlertTriangle, Clock, Loader2
@@ -22,7 +22,7 @@ function ConfidenceBar({ value }) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1 rounded-full" style={{ background: 'var(--bg-card)' }}>
-        <motion.div
+        <Motion.div
           className="h-full rounded-full"
           style={{ background: color }}
           initial={{ width: 0 }}
@@ -56,7 +56,7 @@ function IncidentCard({ inc, onApprove, onReject, isActing }) {
   const targetHost = inc.meta?.target_host || inc.source_ip || null
 
   return (
-    <motion.div
+    <Motion.div
       layout
       initial={{ opacity: 0, y: 16, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -150,7 +150,7 @@ function IncidentCard({ inc, onApprove, onReject, isActing }) {
         {/* Rejection reason input (inline) */}
         <AnimatePresence>
           {showReject && (
-            <motion.div
+            <Motion.div
               key="reject-form"
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
@@ -203,14 +203,14 @@ function IncidentCard({ inc, onApprove, onReject, isActing }) {
                   </button>
                 </div>
               </div>
-            </motion.div>
+            </Motion.div>
           )}
         </AnimatePresence>
 
         {/* Action buttons */}
         {!showReject && (
           <div className="flex gap-2 pt-1">
-            <motion.button
+            <Motion.button
               onClick={() => onApprove(inc.id)}
               disabled={isActing}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all"
@@ -224,8 +224,8 @@ function IncidentCard({ inc, onApprove, onReject, isActing }) {
             >
               {isActing ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
               Approve
-            </motion.button>
-            <motion.button
+            </Motion.button>
+            <Motion.button
               onClick={() => setShowReject(true)}
               disabled={isActing}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all"
@@ -239,11 +239,11 @@ function IncidentCard({ inc, onApprove, onReject, isActing }) {
             >
               <XCircle size={13} />
               Reject
-            </motion.button>
+            </Motion.button>
           </div>
         )}
       </div>
-    </motion.div>
+    </Motion.div>
   )
 }
 
@@ -300,7 +300,7 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
       {isOpen && (
         <>
           {/* Backdrop */}
-          <motion.div
+          <Motion.div
             key="backdrop"
             className="fixed inset-0 z-40"
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}
@@ -312,7 +312,7 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
           />
 
           {/* Panel */}
-          <motion.div
+          <Motion.div
             key="panel"
             className="fixed top-0 right-0 h-full z-50 flex flex-col"
             style={{
@@ -348,7 +348,7 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
                 </p>
               </div>
               <div className="flex items-center gap-1">
-                <motion.button
+                <Motion.button
                   onClick={load}
                   disabled={loading}
                   className="p-2 rounded-lg"
@@ -358,8 +358,8 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
                   whileTap={{ scale: 0.95 }}
                 >
                   <RefreshCcw size={14} className={loading ? 'animate-spin' : ''} />
-                </motion.button>
-                <motion.button
+                </Motion.button>
+                <Motion.button
                   onClick={onClose}
                   className="p-2 rounded-lg"
                   style={{ color: 'var(--text-muted)', background: 'var(--bg-input)' }}
@@ -368,14 +368,14 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
                   whileTap={{ scale: 0.95 }}
                 >
                   <X size={15} />
-                </motion.button>
+                </Motion.button>
               </div>
             </div>
 
             {/* Error banner */}
             <AnimatePresence>
               {error && (
-                <motion.div
+                <Motion.div
                   key="error"
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
@@ -387,7 +387,7 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
                   <button onClick={() => setError(null)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
                     <X size={13} />
                   </button>
-                </motion.div>
+                </Motion.div>
               )}
             </AnimatePresence>
 
@@ -396,7 +396,7 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
               {loading ? (
                 // Skeleton cards
                 [1, 2, 3].map(i => (
-                  <motion.div
+                  <Motion.div
                     key={i}
                     className="rounded-2xl"
                     style={{ height: 160, background: 'var(--bg-input)', border: '1px solid var(--border)' }}
@@ -405,28 +405,28 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
                   />
                 ))
               ) : pending.length === 0 ? (
-                <motion.div
+                <Motion.div
                   key="empty"
                   className="flex flex-col items-center justify-center py-20 text-center"
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <motion.div
+                  <Motion.div
                     className="h-16 w-16 rounded-2xl flex items-center justify-center mb-4"
                     style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}
                     animate={{ scale: [1, 1.06, 1] }}
                     transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
                   >
                     <CheckCircle size={32} />
-                  </motion.div>
+                  </Motion.div>
                   <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>
                     All clear!
                   </p>
                   <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 240, lineHeight: 1.5 }}>
                     No incidents are awaiting your approval right now.
                   </p>
-                </motion.div>
+                </Motion.div>
               ) : (
                 <AnimatePresence mode="popLayout">
                   {pending.map(inc => (
@@ -459,7 +459,7 @@ export default function LeadApprovalPanel({ isOpen, onClose }) {
                 </span>
               </div>
             )}
-          </motion.div>
+          </Motion.div>
         </>
       )}
     </AnimatePresence>

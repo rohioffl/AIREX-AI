@@ -1,6 +1,6 @@
+import { motion as Motion } from 'framer-motion'
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import {
   User, Mail, Shield, Key, LogOut, Copy, Check,
   ChevronRight, Calendar, Hash, ExternalLink
@@ -86,7 +86,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen flex items-start justify-center py-10 px-4">
-      <motion.div
+      <Motion.div
         className="w-full max-w-lg"
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -100,7 +100,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Avatar + Name Card */}
-        <motion.div
+        <Motion.div
           className="glass rounded-2xl p-6 mb-4 text-center relative overflow-hidden"
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -115,7 +115,7 @@ export default function ProfilePage() {
           />
 
           {/* Avatar */}
-          <motion.div
+          <Motion.div
             className="mx-auto mb-4 flex items-center justify-center rounded-2xl text-2xl font-bold relative"
             style={{
               width: 72,
@@ -130,7 +130,7 @@ export default function ProfilePage() {
             transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.1 }}
           >
             {initials}
-          </motion.div>
+          </Motion.div>
 
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 4 }}>
             {displayName}
@@ -155,10 +155,10 @@ export default function ProfilePage() {
             <Shield size={11} />
             {user?.role || 'viewer'}
           </span>
-        </motion.div>
+        </Motion.div>
 
         {/* Info Section */}
-        <motion.div
+        <Motion.div
           className="glass rounded-2xl p-4 mb-4 space-y-2"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -172,10 +172,10 @@ export default function ProfilePage() {
           <InfoRow icon={Shield}   label="Role"         value={user?.role || 'viewer'} />
           <InfoRow icon={Hash}     label="User ID"      value={user?.userId}    mono copyable />
           <InfoRow icon={Calendar} label="Tenant ID"    value={user?.tenantId}  mono copyable />
-        </motion.div>
+        </Motion.div>
 
         {/* Actions */}
-        <motion.div
+        <Motion.div
           className="glass rounded-2xl overflow-hidden mb-4"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -212,13 +212,13 @@ export default function ProfilePage() {
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>End your current session</div>
             </div>
           </button>
-        </motion.div>
+        </Motion.div>
 
         {/* Version footer */}
         <p className="text-center" style={{ fontSize: 11, color: 'var(--text-muted)', opacity: 0.5 }}>
           AIREX Autonomous SRE Platform
         </p>
-      </motion.div>
+      </Motion.div>
     </div>
   )
 }

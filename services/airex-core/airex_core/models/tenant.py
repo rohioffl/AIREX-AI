@@ -10,11 +10,12 @@ NOT RLS-scoped: only admins interact with this table through the API.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, String, text
+from sqlalchemy import Boolean, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from airex_core.models.base import Base
+from airex_core.models.organization import DEFAULT_ORGANIZATION_ID
 
 
 def _utcnow() -> datetime:
@@ -32,6 +33,13 @@ class Tenant(Base):
     )
 
     # Identity
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+        server_default=text(f"'{DEFAULT_ORGANIZATION_ID}'"),
+    )
     name: Mapped[str] = mapped_column(
         String(100), unique=True, nullable=False, index=True
     )

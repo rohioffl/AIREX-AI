@@ -185,11 +185,26 @@ def _run_async_sync(awaitable_factory: Any, *args: Any) -> Any:
 async def _fetch_active_tenants(sync_url: str) -> list[Any]:
     """Fetch active tenants using asyncpg without requiring psycopg2."""
     import asyncpg
+    import json as _json
 
     conn = await asyncpg.connect(
         sync_url,
         timeout=_DB_CONNECT_TIMEOUT_SECONDS,
         command_timeout=_DB_CONNECT_TIMEOUT_SECONDS,
+    )
+    # asyncpg returns JSONB columns as Python strings by default; register
+    # codecs so they come back as parsed dicts/lists instead.
+    await conn.set_type_codec(
+        "jsonb",
+        encoder=_json.dumps,
+        decoder=_json.loads,
+        schema="pg_catalog",
+    )
+    await conn.set_type_codec(
+        "json",
+        encoder=_json.dumps,
+        decoder=_json.loads,
+        schema="pg_catalog",
     )
     try:
         return await conn.fetch(
@@ -267,13 +282,19 @@ def _load_tenants_from_db() -> dict | None:
             tenant_count=len(tenants),
         )
         return {"defaults": {}, "tenants": tenants}
-    except (ImportError, ModuleNotFoundError):
-        logger.exception("tenant_config_db_driver_missing")
-        raise
-    except (asyncpg.PostgresError, OSError, ConnectionError, TimeoutError) as exc:
+    except (ImportError, ModuleNotFoundError) as exc:
+        logger.warning(
+            "tenant_config_db_driver_missing",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            msg="falling back to YAML",
+        )
+        return None
+    except Exception as exc:
         logger.warning(
             "tenant_config_db_unavailable",
             error=str(exc),
+            error_type=type(exc).__name__,
             msg="falling back to YAML",
         )
         return None

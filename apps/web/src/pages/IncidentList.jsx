@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion as Motion, AnimatePresence } from 'framer-motion'
 import {
   Bell,
   AlertOctagon,
@@ -205,7 +205,7 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <AnimatePresence mode="popLayout">
                   {incidents.map((inc, i) => (
-                    <motion.div
+                    <Motion.div
                       key={inc.id}
                       layout
                       initial={{ opacity: 0, y: 20 }}
@@ -214,7 +214,7 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
                       transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.28, ease: 'easeOut' }}
                     >
                       <IncidentCard incident={inc} />
-                    </motion.div>
+                    </Motion.div>
                   ))}
                 </AnimatePresence>
               </div>
@@ -222,7 +222,7 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
               <div className="space-y-3">
                 <AnimatePresence mode="popLayout">
                   {incidents.map((inc, i) => (
-                    <motion.div
+                    <Motion.div
                       key={inc.id}
                       layout
                       initial={{ opacity: 0, x: -16 }}
@@ -231,7 +231,7 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
                       transition={{ delay: Math.min(i * 0.035, 0.25), duration: 0.25, ease: 'easeOut' }}
                     >
                       <IncidentListRow incident={inc} />
-                    </motion.div>
+                    </Motion.div>
                   ))}
                 </AnimatePresence>
               </div>
@@ -249,5 +249,4 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
     </div>
   )
 }
-
 

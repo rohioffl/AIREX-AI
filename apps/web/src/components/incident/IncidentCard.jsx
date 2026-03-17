@@ -1,5 +1,5 @@
+import { motion as Motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import {
   Clock,
   ChevronRight,
@@ -69,7 +69,7 @@ export default function IncidentCard({ incident }) {
   const manualAt = meta._manual_review_at ? formatTimestamp(String(meta._manual_review_at)) : null
 
   return (
-    <motion.div
+    <Motion.div
       className="rounded-2xl"
       style={{
         background: `linear-gradient(135deg, ${accent}33, transparent 80%)`,
@@ -228,6 +228,6 @@ export default function IncidentCard({ incident }) {
           </div>
         )}
       </Link>
-    </motion.div>
+    </Motion.div>
   )
 }

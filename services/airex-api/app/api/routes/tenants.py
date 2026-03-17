@@ -26,12 +26,7 @@ from sqlalchemy import bindparam, column, func, table, text as sa_text, update
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.api.dependencies import require_role
-from airex_core.cloud.tenant_config import (
-    get_config_source,
-    get_server_by_name,
-    list_tenants,
-    reload_config,
-)
+from airex_core.cloud import tenant_config
 from airex_core.core.database import engine as async_engine
 
 logger = structlog.get_logger()
@@ -41,6 +36,7 @@ TENANTS_TABLE = table(
     column("name"),
     column("display_name"),
     column("cloud"),
+    column("organization_id"),
     column("is_active"),
     column("escalation_email"),
     column("slack_channel"),
@@ -58,9 +54,11 @@ TENANTS_TABLE = table(
 
 
 class TenantSummary(BaseModel):
+    id: str | None = None
     name: str
     display_name: str
     cloud: str
+    organization_id: str | None = None
     server_count: int
     escalation_email: str
     is_active: bool = True
@@ -72,6 +70,7 @@ class TenantDetailResponse(BaseModel):
     name: str
     display_name: str
     cloud: str
+    organization_id: str | None = None
     is_active: bool
     escalation_email: str
     slack_channel: str
@@ -84,6 +83,7 @@ class TenantDetailResponse(BaseModel):
 
 
 class TenantCreateRequest(BaseModel):
+    organization_id: str | None = None
     name: str = Field(..., min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     display_name: str = Field(..., min_length=2, max_length=255)
     cloud: str = Field(..., pattern=r"^(aws|gcp)$")
@@ -96,6 +96,7 @@ class TenantCreateRequest(BaseModel):
 
 
 class TenantUpdateRequest(BaseModel):
+    organization_id: str | None = None
     display_name: str | None = None
     cloud: str | None = Field(None, pattern=r"^(aws|gcp)$")
     escalation_email: str | None = None
@@ -131,7 +132,7 @@ def _credential_status(cloud: str, aws_config: dict, gcp_config: dict) -> str:
 def _invalidate_cache() -> None:
     """Force tenant_config.py to reload from DB on next access."""
     try:
-        reload_config()
+        tenant_config.reload_config()
     except Exception as exc:
         logger.warning("cache_invalidation_failed", error=str(exc))
 
@@ -153,7 +154,7 @@ async def list_all_tenants() -> list[TenantSummary]:
         rows = await conn.execute(
             sa_text(
                 """
-                SELECT name, display_name, cloud, is_active,
+                SELECT id, organization_id, name, display_name, cloud, is_active,
                        escalation_email, aws_config, gcp_config, servers
                 FROM tenants
                 WHERE is_active = true
@@ -162,12 +163,14 @@ async def list_all_tenants() -> list[TenantSummary]:
             )
         )
         for row in rows:
-            name, display_name, cloud, is_active, email, aws_cfg, gcp_cfg, servers = row
+            tenant_id, organization_id, name, display_name, cloud, is_active, email, aws_cfg, gcp_cfg, servers = row
             result.append(
                 TenantSummary(
+                    id=str(tenant_id),
                     name=name,
                     display_name=display_name,
                     cloud=cloud,
+                    organization_id=str(organization_id),
                     server_count=len(servers) if isinstance(servers, list) else 0,
                     escalation_email=email or "",
                     is_active=is_active,
@@ -190,7 +193,7 @@ async def get_tenant_detail(tenant_name: str) -> TenantDetailResponse:
                 sa_text(
                     """
                     SELECT id, name, display_name, cloud, is_active,
-                           escalation_email, slack_channel, ssh_user,
+                           organization_id, escalation_email, slack_channel, ssh_user,
                            aws_config, gcp_config, servers
                     FROM tenants
                     WHERE lower(name) = :name
@@ -203,7 +206,7 @@ async def get_tenant_detail(tenant_name: str) -> TenantDetailResponse:
     if not row:
         raise HTTPException(status_code=404, detail=f"Tenant '{tenant_name}' not found")
 
-    tid, name, display_name, cloud, is_active, email, slack, ssh_user, aws_cfg, gcp_cfg, servers = row
+    tid, name, display_name, cloud, is_active, organization_id, email, slack, ssh_user, aws_cfg, gcp_cfg, servers = row
 
     # Redact sensitive fields for the response
     safe_aws: dict[str, Any] = dict(aws_cfg) if aws_cfg else {}
@@ -215,6 +218,7 @@ async def get_tenant_detail(tenant_name: str) -> TenantDetailResponse:
         name=name,
         display_name=display_name,
         cloud=cloud,
+        organization_id=str(organization_id),
         is_active=is_active,
         escalation_email=email or "",
         slack_channel=slack or "",
@@ -223,7 +227,7 @@ async def get_tenant_detail(tenant_name: str) -> TenantDetailResponse:
         gcp_config=dict(gcp_cfg) if gcp_cfg else {},
         servers=list(servers) if servers else [],
         credential_status=_credential_status(cloud, aws_cfg or {}, gcp_cfg or {}),
-        config_source=get_config_source(),
+        config_source=tenant_config.get_config_source(),
     )
 
 
@@ -250,9 +254,9 @@ async def create_tenant(req: TenantCreateRequest) -> dict:
             sa_text(
                 """
                 INSERT INTO tenants (id, name, display_name, cloud,
-                                     escalation_email, slack_channel, ssh_user,
+                                     organization_id, escalation_email, slack_channel, ssh_user,
                                      aws_config, gcp_config, servers)
-                VALUES (:id, :name, :display_name, :cloud,
+                VALUES (:id, :name, :display_name, :cloud, :organization_id,
                         :escalation_email, :slack_channel, :ssh_user,
                         CAST(:aws_config AS jsonb),
                         CAST(:gcp_config AS jsonb),
@@ -264,6 +268,7 @@ async def create_tenant(req: TenantCreateRequest) -> dict:
                 "name": req.name.lower(),
                 "display_name": req.display_name,
                 "cloud": req.cloud,
+                "organization_id": req.organization_id,
                 "escalation_email": req.escalation_email,
                 "slack_channel": req.slack_channel,
                 "ssh_user": req.ssh_user,
@@ -294,6 +299,8 @@ async def update_tenant(tenant_name: str, req: TenantUpdateRequest) -> dict:
         scalar_updates["ssh_user"] = req.ssh_user
     if req.is_active is not None:
         scalar_updates["is_active"] = req.is_active
+    if req.organization_id is not None:
+        scalar_updates["organization_id"] = req.organization_id
 
     jsonb_updates: dict[str, Any] = {}
     if req.aws_config is not None:
@@ -367,11 +374,11 @@ async def delete_tenant(tenant_name: str) -> dict:
 async def reload_tenant_config() -> dict:
     """Reload tenant config cache (admin only)."""
     _invalidate_cache()
-    names = list_tenants()
+    names = tenant_config.list_tenants()
 
     return {
         "status": "reloaded",
-        "source": get_config_source(),
+        "source": tenant_config.get_config_source(),
         "tenant_count": len(names),
         "tenants": names,
     }
@@ -384,7 +391,7 @@ async def reload_tenant_config() -> dict:
 async def get_server_detail(tenant_name: str, server_name: str) -> dict[str, str]:
     """Look up a specific server within a tenant."""
 
-    server = get_server_by_name(tenant_name, server_name)
+    server = tenant_config.get_server_by_name(tenant_name, server_name)
     if server is None:
         raise HTTPException(
             status_code=404,

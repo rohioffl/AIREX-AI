@@ -11,18 +11,25 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import (
     CurrentUser,
     TenantId,
     TenantSession,
+    get_auth_session,
+    get_authenticated_user,
     require_role,
 )
 from airex_core.core.security import (
+    TokenData,
     UserResponse,
     hash_password,
 )
 from airex_core.models.enums import UserRole
+from airex_core.models.organization_membership import OrganizationMembership
+from airex_core.models.tenant import Tenant
+from airex_core.models.tenant_membership import TenantMembership
 from airex_core.models.user import User
 
 logger = structlog.get_logger()
@@ -511,3 +518,103 @@ async def resend_invitation(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to send invitation email",
         )
+
+
+class AccessibleTenantResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    display_name: str
+    cloud: str
+    is_active: bool
+    organization_id: uuid.UUID | None
+    membership_role: str | None  # None if access is via org membership or home tenant
+
+
+@router.get(
+    "/{user_id}/accessible-tenants",
+    response_model=list[AccessibleTenantResponse],
+    dependencies=[Depends(require_role("admin"))],
+)
+async def list_accessible_tenants(
+    user_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> list[AccessibleTenantResponse]:
+    """List all tenants accessible to a user (admin only).
+
+    Returns tenants the user can access via: home tenant, org membership, or
+    explicit tenant membership.
+    """
+    results: dict[uuid.UUID, AccessibleTenantResponse] = {}
+
+    # 1. Home tenant (from the user's own tenant_id on the User record)
+    user_result = await session.execute(
+        select(User.tenant_id).where(User.id == user_id)
+    )
+    home_tenant_id = user_result.scalar_one_or_none()
+    if home_tenant_id is not None:
+        tenant_result = await session.execute(
+            select(Tenant).where(Tenant.id == home_tenant_id)
+        )
+        home_tenant = tenant_result.scalar_one_or_none()
+        if home_tenant is not None:
+            results[home_tenant.id] = AccessibleTenantResponse(
+                id=home_tenant.id,
+                name=home_tenant.name,
+                display_name=home_tenant.display_name,
+                cloud=home_tenant.cloud,
+                is_active=home_tenant.is_active,
+                organization_id=home_tenant.organization_id,
+                membership_role=None,
+            )
+
+    # 2. Tenants accessible via organization membership
+    org_memberships = await session.execute(
+        select(OrganizationMembership.organization_id).where(
+            OrganizationMembership.user_id == user_id
+        )
+    )
+    org_ids = list(org_memberships.scalars().all())
+    if org_ids:
+        org_tenants_result = await session.execute(
+            select(Tenant).where(Tenant.organization_id.in_(org_ids))
+        )
+        for tenant in org_tenants_result.scalars().all():
+            if tenant.id not in results:
+                results[tenant.id] = AccessibleTenantResponse(
+                    id=tenant.id,
+                    name=tenant.name,
+                    display_name=tenant.display_name,
+                    cloud=tenant.cloud,
+                    is_active=tenant.is_active,
+                    organization_id=tenant.organization_id,
+                    membership_role=None,
+                )
+
+    # 3. Explicit tenant memberships
+    tenant_memberships_result = await session.execute(
+        select(TenantMembership.tenant_id, TenantMembership.role).where(
+            TenantMembership.user_id == user_id
+        )
+    )
+    explicit_memberships = tenant_memberships_result.all()
+    if explicit_memberships:
+        explicit_tenant_ids = [row.tenant_id for row in explicit_memberships]
+        explicit_tenants_result = await session.execute(
+            select(Tenant).where(Tenant.id.in_(explicit_tenant_ids))
+        )
+        tenant_map = {t.id: t for t in explicit_tenants_result.scalars().all()}
+        for row in explicit_memberships:
+            if row.tenant_id not in results and row.tenant_id in tenant_map:
+                tenant = tenant_map[row.tenant_id]
+                results[row.tenant_id] = AccessibleTenantResponse(
+                    id=tenant.id,
+                    name=tenant.name,
+                    display_name=tenant.display_name,
+                    cloud=tenant.cloud,
+                    is_active=tenant.is_active,
+                    organization_id=tenant.organization_id,
+                    membership_role=row.role,
+                )
+
+    return sorted(results.values(), key=lambda t: t.display_name)

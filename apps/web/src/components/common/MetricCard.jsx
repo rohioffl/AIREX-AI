@@ -1,5 +1,5 @@
+import { motion as Motion } from 'framer-motion'
 import { TrendingUp, TrendingDown } from 'lucide-react'
-import { motion } from 'framer-motion'
 
 export default function MetricCard({ title, value, trend, trendType, isCritical, icon: Icon, colorVariant }) {
   const accentColorMap = {
@@ -11,7 +11,7 @@ export default function MetricCard({ title, value, trend, trendType, isCritical,
   const accentColor = colorVariant ? accentColorMap[colorVariant] : '#818cf8'
 
   return (
-    <motion.div
+    <Motion.div
       className={`glass p-6 flex flex-col justify-between metric-card ${colorVariant || ''}`}
       style={isCritical ? { borderColor: 'rgba(249, 115, 22, 0.4)', boxShadow: '0 10px 30px rgba(249, 115, 22, 0.15)' } : {}}
       initial={{ opacity: 0, y: 20 }}
@@ -56,6 +56,6 @@ export default function MetricCard({ title, value, trend, trendType, isCritical,
           <span>{trend}</span>
         </div>
       </div>
-    </motion.div>
+    </Motion.div>
   )
 }

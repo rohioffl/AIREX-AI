@@ -4,16 +4,23 @@ import {
   Users, Building2, Settings, Brain, LayoutDashboard,
   Plus, Trash2, Edit, Search, CheckCircle, XCircle, Clock, AlertTriangle,
   RefreshCcw, ChevronRight, Server, Save,
-  ShieldCheck, Activity, Globe, Cpu, ToggleLeft, ToggleRight, X,
+  ShieldCheck, Activity, Globe, Cpu, ToggleLeft, ToggleRight, X, UserCheck,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
+import ModalShell from '../components/common/ModalShell'
 import {
   fetchUsers, createUser, updateUser, deleteUser,
   fetchTenants, fetchTenantDetail, createTenant, updateTenant, deleteTenant, reloadTenants,
+  fetchOrganizations, createOrganization, createOrganizationTenant,
+  fetchOrgMembers, addOrgMember, updateOrgMember, removeOrgMember,
+  createProject, deleteProject,
+  createIntegration, deleteIntegration, testIntegration,
+  syncIntegrationMonitors, fetchIntegrationTypes,
   fetchSettings, updateSettings, fetchBackendHealth,
   fetchMetrics,
 } from '../services/api'
+import { useTenantWorkspace } from '../hooks/useTenantWorkspace'
 import { extractErrorMessage } from '../utils/errorHandler'
 import { FALLBACK_TENANT_ID } from '../utils/constants'
 import { formatRelativeTime } from '../utils/formatters'
@@ -23,7 +30,7 @@ import { formatRelativeTime } from '../utils/formatters'
 const TABS = [
   { id: 'overview',  label: 'Overview',       icon: LayoutDashboard },
   { id: 'users',     label: 'Users',           icon: Users },
-  { id: 'tenants',   label: 'Tenants',         icon: Building2 },
+  { id: 'members',   label: 'Org Members',     icon: UserCheck },
   { id: 'settings',  label: 'Settings',        icon: Settings },
   { id: 'models',    label: 'AI Models',       icon: Brain },
 ]
@@ -77,6 +84,10 @@ const inputCls = {
   fontSize: 13,
   outline: 'none',
   width: '100%',
+}
+
+function slugify(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
@@ -158,7 +169,6 @@ function OverviewTab({ onNavigate }) {
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{tab.label}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 {tab.id === 'users'    && `${users.length} users`}
-                {tab.id === 'tenants'  && `${tenants.length} tenants`}
                 {tab.id === 'settings' && 'System configuration'}
                 {tab.id === 'models'   && 'LLM & AI settings'}
                 {tab.id === 'queue'    && 'Pending approvals'}
@@ -476,31 +486,44 @@ function CredBadge({ status }) {
   )
 }
 
-function TenantsTab() {
+export function TenantsTab() {
   const { addToast } = useToasts()
-  const [tenants, setTenants] = useState([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showOnboard, setShowOnboard] = useState(false)
   const [editingTenant, setEditingTenant] = useState(null)
   const [deletingTenant, setDeletingTenant] = useState(null)
+  const [showCreateOrganization, setShowCreateOrganization] = useState(false)
+  const [showCreateProject, setShowCreateProject] = useState(false)
+  const [showCreateIntegration, setShowCreateIntegration] = useState(false)
 
-  const toast = (msg, type = 'success') =>
-    addToast({ title: type === 'error' ? 'Error' : 'Success', message: msg, severity: type === 'error' ? 'CRITICAL' : 'LOW' })
+  const toast = useCallback(
+    (msg, type = 'success') => {
+      addToast({
+        title: type === 'error' ? 'Error' : 'Success',
+        message: msg,
+        severity: type === 'error' ? 'CRITICAL' : 'LOW',
+      })
+    },
+    [addToast]
+  )
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true)
-      const data = await fetchTenants()
-      setTenants(Array.isArray(data) ? data : [])
-    } catch {
-      toast('Failed to load tenants', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { load() }, [load])
+  const {
+    organizations,
+    activeOrganizationId,
+    tenants,
+    selectedTenantId,
+    selectedTenant,
+    projects,
+    integrations,
+    loading,
+    detailLoading,
+    setSelectedTenantId,
+    changeOrganization,
+    loadWorkspace,
+    reloadWorkspace,
+  } = useTenantWorkspace({
+    onError: (message) => toast(message, 'error'),
+  })
 
   const filtered = useMemo(() => {
     if (!search) return tenants
@@ -512,7 +535,7 @@ function TenantsTab() {
     try {
       const res = await reloadTenants()
       toast(`Config reloaded from ${res.source || 'db'} — ${res.tenant_count} tenant(s)`)
-      load()
+      reloadWorkspace()
     } catch (err) { toast(extractErrorMessage(err) || 'Reload failed', 'error') }
   }
 
@@ -522,7 +545,7 @@ function TenantsTab() {
       await deleteTenant(deletingTenant.name)
       toast(`Tenant "${deletingTenant.display_name}" deleted`)
       setDeletingTenant(null)
-      load()
+      reloadWorkspace()
     } catch (err) { toast(extractErrorMessage(err) || 'Delete failed', 'error') }
   }
 
@@ -533,20 +556,79 @@ function TenantsTab() {
     } catch { toast('Failed to load tenant detail', 'error') }
   }
 
+  const handleDeleteProject = async (project) => {
+    if (!window.confirm(`Delete project "${project.name}" from ${selectedTenant?.display_name || 'this tenant'}?`)) return
+    try {
+      await deleteProject(project.id)
+      toast(`Project "${project.name}" deleted`)
+      loadWorkspace(selectedTenantId)
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Project delete failed', 'error')
+    }
+  }
+
+  const handleTestIntegration = async (integration) => {
+    try {
+      await testIntegration(integration.id)
+      toast(`Integration "${integration.name}" verified`)
+      loadWorkspace(selectedTenantId)
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Integration test failed', 'error')
+    }
+  }
+
+  const handleSyncIntegration = async (integration) => {
+    try {
+      const result = await syncIntegrationMonitors(integration.id, [])
+      toast(`Integration synced — ${result.monitor_count || 0} monitor(s) updated`)
+      loadWorkspace(selectedTenantId)
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Integration sync failed', 'error')
+    }
+  }
+
+  const handleDeleteIntegration = async (integration) => {
+    if (!window.confirm(`Disable integration "${integration.name}"?`)) return
+    try {
+      await deleteIntegration(integration.id)
+      toast(`Integration "${integration.name}" disabled`)
+      loadWorkspace(selectedTenantId)
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Integration delete failed', 'error')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Organizations" value={organizations.length} color="var(--neon-purple)" icon={ShieldCheck} />
         <StatCard label="Total Tenants" value={tenants.length} color="var(--neon-indigo)" icon={Building2} />
         <StatCard label="Cloud Providers" value={[...new Set(tenants.map(t => t.cloud))].filter(Boolean).length} color="var(--neon-cyan)" icon={Globe} />
         <StatCard label="Total Servers" value={tenants.reduce((s, t) => s + (t.server_count || 0), 0)} color="var(--neon-green)" icon={Server} />
       </div>
 
       <div className="flex justify-between items-center gap-3 flex-wrap">
-        <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 320 }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tenants…" style={{ ...inputCls, paddingLeft: 34 }} />
+        <div className="flex items-center gap-3 flex-wrap flex-1 min-w-[240px]">
+          <select
+            value={activeOrganizationId || ''}
+            onChange={(e) => changeOrganization(e.target.value || null)}
+            style={{ ...inputCls, maxWidth: 280 }}
+          >
+            <option value="">All accessible tenants</option>
+            {organizations.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
+
+          <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 320 }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tenants…" style={{ ...inputCls, paddingLeft: 34 }} />
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowCreateOrganization(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+            <ShieldCheck size={14} /> Add Organization
+          </button>
           <button onClick={handleReload} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
             <RefreshCcw size={14} /> Reload Config
           </button>
@@ -563,7 +645,15 @@ function TenantsTab() {
       ) : (
         <div className="space-y-3">
           {filtered.map(t => (
-            <div key={t.name} className="glass rounded-xl p-4 flex items-center justify-between">
+            <div
+              key={t.id || t.name}
+              className="glass rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all"
+              style={{
+                border: selectedTenantId === t.id ? '1px solid rgba(99,102,241,0.45)' : '1px solid transparent',
+                boxShadow: selectedTenantId === t.id ? '0 0 0 1px rgba(99,102,241,0.1)' : 'none',
+              }}
+              onClick={() => setSelectedTenantId(t.id || null)}
+            >
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--glow-indigo)' }}>
                   <Building2 size={18} style={{ color: 'var(--neon-indigo)' }} />
@@ -572,6 +662,7 @@ function TenantsTab() {
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>{t.display_name}</div>
                   <div className="flex items-center gap-2" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                     <span style={{ fontFamily: 'var(--font-mono)' }}>{t.name}</span>
+                    {t.organization_name && <span>· {t.organization_name}</span>}
                     {t.escalation_email && <span>· {t.escalation_email}</span>}
                   </div>
                 </div>
@@ -584,10 +675,10 @@ function TenantsTab() {
                 </div>
                 <CloudBadge cloud={t.cloud} />
                 <div className="flex items-center gap-1">
-                  <button onClick={() => openEdit(t)} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Edit">
+                  <button onClick={(event) => { event.stopPropagation(); openEdit(t) }} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Edit">
                     <Edit size={14} style={{ color: 'var(--text-muted)' }} />
                   </button>
-                  <button onClick={() => setDeletingTenant(t)} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Delete">
+                  <button onClick={(event) => { event.stopPropagation(); setDeletingTenant(t) }} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Delete">
                     <Trash2 size={14} style={{ color: 'var(--color-accent-amber)' }} />
                   </button>
                 </div>
@@ -597,13 +688,113 @@ function TenantsTab() {
         </div>
       )}
 
-      {showOnboard && <TenantOnboardModal onClose={() => setShowOnboard(false)} onSaved={() => { setShowOnboard(false); load() }} />}
-      {editingTenant && <TenantEditDrawer tenant={editingTenant} onClose={() => setEditingTenant(null)} onSaved={() => { setEditingTenant(null); load() }} />}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="glass rounded-xl p-5 space-y-4">
+          <SectionHeader
+            title={`Projects${selectedTenant ? ` · ${selectedTenant.display_name}` : ''}`}
+            action={(
+              <button
+                onClick={() => setShowCreateProject(true)}
+                disabled={!selectedTenant}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm disabled:opacity-50"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+              >
+                <Plus size={14} /> Add Project
+              </button>
+            )}
+          />
+          {detailLoading ? (
+            <div className="space-y-2">{[1,2].map(i => <div key={i} className="rounded-xl h-14 skeleton" style={{ background: 'var(--bg-input)' }} />)}</div>
+          ) : !selectedTenant ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select a tenant to manage its projects.</div>
+          ) : projects.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No projects configured for this tenant yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {projects.map(project => (
+                <div key={project.id} className="flex items-center justify-between rounded-xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{project.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>{project.slug}</span>
+                      {project.description ? <span> · {project.description}</span> : null}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span style={{ fontSize: 11, color: project.is_active ? 'var(--neon-green)' : 'var(--text-muted)' }}>
+                      {project.is_active ? 'Active' : 'Disabled'}
+                    </span>
+                    <button onClick={() => handleDeleteProject(project)} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Delete project">
+                      <Trash2 size={14} style={{ color: 'var(--color-accent-amber)' }} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="glass rounded-xl p-5 space-y-4">
+          <SectionHeader
+            title={`Integrations${selectedTenant ? ` · ${selectedTenant.display_name}` : ''}`}
+            action={(
+              <button
+                onClick={() => setShowCreateIntegration(true)}
+                disabled={!selectedTenant}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm disabled:opacity-50"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+              >
+                <Plus size={14} /> Add Integration
+              </button>
+            )}
+          />
+          {detailLoading ? (
+            <div className="space-y-2">{[1,2].map(i => <div key={i} className="rounded-xl h-14 skeleton" style={{ background: 'var(--bg-input)' }} />)}</div>
+          ) : !selectedTenant ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select a tenant to manage integrations.</div>
+          ) : integrations.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No integrations configured for this tenant yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {integrations.map(integration => (
+                <div key={integration.id} className="rounded-xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{integration.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)' }}>{integration.slug}</span>
+                        <span> · {integration.integration_type_key || integration.integration_type_id}</span>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, color: integration.enabled ? 'var(--neon-green)' : 'var(--text-muted)' }}>
+                      {integration.status || 'configured'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <button onClick={() => handleTestIntegration(integration)} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'rgba(52,211,153,0.08)', color: 'var(--neon-green)', border: '1px solid rgba(52,211,153,0.18)' }}>
+                      Verify
+                    </button>
+                    <button onClick={() => handleSyncIntegration(integration)} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'rgba(56,189,248,0.08)', color: 'var(--neon-cyan)', border: '1px solid rgba(56,189,248,0.18)' }}>
+                      Sync Monitors
+                    </button>
+                    <button onClick={() => handleDeleteIntegration(integration)} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'rgba(251,191,36,0.08)', color: 'var(--color-accent-amber)', border: '1px solid rgba(251,191,36,0.18)' }}>
+                      Disable
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showOnboard && <TenantOnboardModal organizationId={activeOrganizationId} onClose={() => setShowOnboard(false)} onSaved={() => { setShowOnboard(false); reloadWorkspace() }} />}
+      {editingTenant && <TenantEditDrawer tenant={editingTenant} onClose={() => setEditingTenant(null)} onSaved={() => { setEditingTenant(null); reloadWorkspace() }} />}
+      {showCreateOrganization && <OrganizationCreateModal onClose={() => setShowCreateOrganization(false)} onSaved={() => { setShowCreateOrganization(false); reloadWorkspace() }} />}
+      {showCreateProject && selectedTenant && <ProjectCreateModal tenant={selectedTenant} onClose={() => setShowCreateProject(false)} onSaved={() => { setShowCreateProject(false); loadWorkspace(selectedTenant.id) }} />}
+      {showCreateIntegration && selectedTenant && <IntegrationCreateModal tenant={selectedTenant} onClose={() => setShowCreateIntegration(false)} onSaved={() => { setShowCreateIntegration(false); loadWorkspace(selectedTenant.id) }} />}
       {deletingTenant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setDeletingTenant(null)} />
-          <div className="relative glass rounded-2xl p-6 max-w-sm mx-4 space-y-4" onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>Delete Tenant</h3>
+        <ModalShell onClose={() => setDeletingTenant(null)} title="Delete Tenant" maxWidth="max-w-sm" panelClassName="space-y-4">
             <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
               Are you sure you want to delete <strong>{deletingTenant.display_name}</strong>? This will deactivate the tenant configuration.
             </p>
@@ -611,8 +802,7 @@ function TenantsTab() {
               <button onClick={() => setDeletingTenant(null)} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
               <button onClick={handleDelete} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: 'var(--color-danger, #ef4444)' }}>Delete</button>
             </div>
-          </div>
-        </div>
+        </ModalShell>
       )}
     </div>
   )
@@ -705,7 +895,7 @@ function TenantEditDrawer({ tenant, onClose, onSaved }) {
 
 // ── Tenant Onboard Wizard (4 steps) ─────────────────────────────────────────
 
-function TenantOnboardModal({ onClose, onSaved }) {
+function TenantOnboardModal({ organizationId = null, onClose, onSaved }) {
   const { addToast } = useToasts()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -736,25 +926,27 @@ function TenantOnboardModal({ onClose, onSaved }) {
   const handleCreate = async () => {
     setSaving(true)
     try {
-      await createTenant(form)
+      if (organizationId) {
+        await createOrganizationTenant(organizationId, form)
+      } else {
+        await createTenant({ ...form, organization_id: organizationId })
+      }
       toast(`Tenant "${form.display_name}" created successfully`)
       onSaved()
     } catch (err) { toast(extractErrorMessage(err) || 'Create failed', 'error') } finally { setSaving(false) }
   }
 
-  const autoSlug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
-      <div className="relative w-full max-w-lg mx-4 glass rounded-2xl p-6 space-y-5 overflow-y-auto" style={{ maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>Onboard New Tenant</h3>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Step {step + 1} of {steps.length}</span>
-          </div>
-          <button onClick={onClose}><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+    <ModalShell
+      onClose={onClose}
+      title="Onboard New Tenant"
+      subtitle={`Step ${step + 1} of ${steps.length}`}
+      maxWidth="max-w-lg"
+      panelClassName="space-y-5 overflow-y-auto"
+      panelStyle={{ maxHeight: '90vh' }}
+    >
+        <div className="flex items-center justify-end">
+          <button onClick={onClose} aria-label="Close onboard tenant modal"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
         </div>
 
         {/* Progress */}
@@ -776,9 +968,9 @@ function TenantOnboardModal({ onClose, onSaved }) {
         {step === 0 && (
           <div className="space-y-3">
             <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Display Name *</label>
-              <input value={form.display_name} onChange={e => { upd('display_name', e.target.value); if (!form.name || form.name === autoSlug(form.display_name)) upd('name', autoSlug(e.target.value)) }} placeholder="Acme Corporation" style={inputCls} /></div>
+              <input value={form.display_name} onChange={e => { upd('display_name', e.target.value); if (!form.name || form.name === slugify(form.display_name)) upd('name', slugify(e.target.value)) }} placeholder="Acme Corporation" style={inputCls} /></div>
             <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug (URL-safe identifier) *</label>
-              <input value={form.name} onChange={e => upd('name', autoSlug(e.target.value))} placeholder="acme-corp" style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} /></div>
+              <input value={form.name} onChange={e => upd('name', slugify(e.target.value))} placeholder="acme-corp" style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} /></div>
             <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cloud Provider *</label>
               <select value={form.cloud} onChange={e => upd('cloud', e.target.value)} style={inputCls}><option value="aws">AWS</option><option value="gcp">GCP</option></select></div>
             <div className="grid grid-cols-2 gap-3">
@@ -900,8 +1092,190 @@ function TenantOnboardModal({ onClose, onSaved }) {
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
+  )
+}
+
+function OrganizationCreateModal({ onClose, onSaved }) {
+  const { addToast } = useToasts()
+  const [form, setForm] = useState({ name: '', slug: '' })
+  const [saving, setSaving] = useState(false)
+
+  const toast = (msg, type = 'success') =>
+    addToast({ title: type === 'error' ? 'Error' : 'Success', message: msg, severity: type === 'error' ? 'CRITICAL' : 'LOW' })
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await createOrganization({ ...form, slug: slugify(form.slug || form.name) })
+      toast(`Organization "${form.name}" created`)
+      onSaved()
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Organization create failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} title="Create Organization" maxWidth="max-w-md" panelClassName="space-y-4">
+        <div className="flex items-center justify-end">
+          <button onClick={onClose} aria-label="Close organization modal"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Name</label>
+          <input aria-label="Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value, slug: f.slug || slugify(e.target.value) }))} style={inputCls} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug</label>
+          <input aria-label="Slug" value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} />
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || !form.name.trim()} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+            {saving ? 'Creating…' : 'Create Organization'}
+          </button>
+        </div>
+    </ModalShell>
+  )
+}
+
+function ProjectCreateModal({ tenant, onClose, onSaved }) {
+  const { addToast } = useToasts()
+  const [form, setForm] = useState({ name: '', slug: '', description: '' })
+  const [saving, setSaving] = useState(false)
+
+  const toast = (msg, type = 'success') =>
+    addToast({ title: type === 'error' ? 'Error' : 'Success', message: msg, severity: type === 'error' ? 'CRITICAL' : 'LOW' })
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await createProject(tenant.id, { ...form, slug: slugify(form.slug || form.name) })
+      toast(`Project "${form.name}" created`)
+      onSaved()
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Project create failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} title="Create Project" subtitle={tenant.display_name} maxWidth="max-w-md" panelClassName="space-y-4">
+        <div className="flex items-center justify-end">
+          <button onClick={onClose} aria-label="Close project modal"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Name</label>
+          <input aria-label="Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value, slug: f.slug || slugify(e.target.value) }))} style={inputCls} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug</label>
+          <input aria-label="Slug" value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Description</label>
+          <input aria-label="Description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={inputCls} />
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || !form.name.trim()} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+            {saving ? 'Creating…' : 'Create Project'}
+          </button>
+        </div>
+    </ModalShell>
+  )
+}
+
+function IntegrationCreateModal({ tenant, onClose, onSaved }) {
+  const { addToast } = useToasts()
+  const [types, setTypes] = useState([])
+  const [loadingTypes, setLoadingTypes] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    integration_type_key: 'site24x7',
+    name: '',
+    slug: '',
+    secret_ref: '',
+    webhook_token_ref: '',
+  })
+
+  const toast = (msg, type = 'success') =>
+    addToast({ title: type === 'error' ? 'Error' : 'Success', message: msg, severity: type === 'error' ? 'CRITICAL' : 'LOW' })
+
+  useEffect(() => {
+    fetchIntegrationTypes()
+      .then(data => {
+        const nextTypes = Array.isArray(data) ? data : []
+        setTypes(nextTypes)
+        if (nextTypes[0]?.key && !form.integration_type_key) {
+          setForm(current => ({ ...current, integration_type_key: nextTypes[0].key }))
+        }
+      })
+      .catch(() => toast('Failed to load integration types', 'error'))
+      .finally(() => setLoadingTypes(false))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await createIntegration(tenant.id, {
+        ...form,
+        slug: slugify(form.slug || form.name),
+        config_json: {},
+      })
+      toast(`Integration "${form.name}" created`)
+      onSaved()
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Integration create failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} title="Add Integration" subtitle={tenant.display_name} maxWidth="max-w-md" panelClassName="space-y-4">
+        <div className="flex items-center justify-end">
+          <button onClick={onClose} aria-label="Close integration modal"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Integration Type</label>
+          <select
+            aria-label="Integration Type"
+            value={form.integration_type_key}
+            onChange={e => setForm(current => ({ ...current, integration_type_key: e.target.value }))}
+            disabled={loadingTypes}
+            style={inputCls}
+          >
+            {types.map(type => (
+              <option key={type.id} value={type.key}>{type.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Name</label>
+          <input aria-label="Name" value={form.name} onChange={e => setForm(current => ({ ...current, name: e.target.value, slug: current.slug || slugify(e.target.value) }))} style={inputCls} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug</label>
+          <input aria-label="Slug" value={form.slug} onChange={e => setForm(current => ({ ...current, slug: e.target.value }))} style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Secret Ref</label>
+          <input aria-label="Secret Ref" value={form.secret_ref} onChange={e => setForm(current => ({ ...current, secret_ref: e.target.value }))} placeholder="secret://provider/api-token" style={inputCls} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Webhook Token Ref</label>
+          <input aria-label="Webhook Token Ref" value={form.webhook_token_ref} onChange={e => setForm(current => ({ ...current, webhook_token_ref: e.target.value }))} placeholder="secret://provider/webhook" style={inputCls} />
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || !form.name.trim()} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+            {saving ? 'Creating…' : 'Create Integration'}
+          </button>
+        </div>
+    </ModalShell>
   )
 }
 
@@ -1142,11 +1516,187 @@ function ModelsTab() {
   )
 }
 
+// ── Org Members Tab ───────────────────────────────────────────────────────────
+
+function MembersTab() {
+  const [orgs, setOrgs] = useState([])
+  const [selectedOrgId, setSelectedOrgId] = useState('')
+  const [members, setMembers] = useState([])
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
+  const [addUserId, setAddUserId] = useState('')
+  const [addRole, setAddRole] = useState('operator')
+  const [saving, setSaving] = useState(false)
+  const { addToast } = useToasts()
+
+  useEffect(() => {
+    fetchOrganizations().then(setOrgs).catch(() => {})
+    fetchUsers().then(data => setUsers(Array.isArray(data) ? data : (data.items || []))).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!selectedOrgId) { setMembers([]); return }
+    setLoading(true)
+    fetchOrgMembers(selectedOrgId)
+      .then(setMembers)
+      .catch(() => addToast('error', 'Failed to load members'))
+      .finally(() => setLoading(false))
+  }, [selectedOrgId])
+
+  function userName(userId) {
+    const u = users.find(x => String(x.id) === String(userId))
+    return u ? (u.display_name || u.email || String(userId)) : String(userId).slice(0, 8) + '…'
+  }
+
+  async function handleAdd() {
+    if (!addUserId || !selectedOrgId) return
+    setSaving(true)
+    try {
+      const m = await addOrgMember(selectedOrgId, { user_id: addUserId, role: addRole })
+      setMembers(prev => [...prev, m])
+      setShowAdd(false)
+      setAddUserId('')
+      setAddRole('operator')
+      addToast('success', 'Member added')
+    } catch (e) {
+      addToast('error', extractErrorMessage(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRoleChange(userId, role) {
+    try {
+      const m = await updateOrgMember(selectedOrgId, userId, { role })
+      setMembers(prev => prev.map(x => String(x.user_id) === String(userId) ? { ...x, role: m.role } : x))
+    } catch (e) {
+      addToast('error', extractErrorMessage(e))
+    }
+  }
+
+  async function handleRemove(userId) {
+    try {
+      await removeOrgMember(selectedOrgId, userId)
+      setMembers(prev => prev.filter(x => String(x.user_id) !== String(userId)))
+      addToast('success', 'Member removed')
+    } catch (e) {
+      addToast('error', extractErrorMessage(e))
+    }
+  }
+
+  const nonMembers = users.filter(u => !members.some(m => String(m.user_id) === String(u.id)))
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader title="Organization Members" />
+
+      <div className="glass rounded-xl p-4 space-y-3">
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Select Organization</label>
+          <select value={selectedOrgId} onChange={e => setSelectedOrgId(e.target.value)} style={inputCls}>
+            <option value="">Choose an organization…</option>
+            {orgs.map(o => <option key={o.id} value={o.id}>{o.name} ({o.slug})</option>)}
+          </select>
+        </div>
+      </div>
+
+      {selectedOrgId && (
+        <div className="glass rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>
+              Members ({members.length})
+            </span>
+            <button
+              onClick={() => setShowAdd(s => !s)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{ background: 'rgba(99,102,241,0.12)', color: 'var(--neon-indigo)', border: '1px solid rgba(99,102,241,0.2)' }}
+            >
+              <Plus size={12} /> Add Member
+            </button>
+          </div>
+
+          {showAdd && (
+            <div className="flex items-end gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+              <div className="flex-1">
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>User</label>
+                <select value={addUserId} onChange={e => setAddUserId(e.target.value)} style={inputCls}>
+                  <option value="">Select user…</option>
+                  {nonMembers.map(u => (
+                    <option key={u.id} value={u.id}>{u.display_name || u.email}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Role</label>
+                <select value={addRole} onChange={e => setAddRole(e.target.value)} style={{ ...inputCls, width: 130 }}>
+                  <option value="viewer">Viewer</option>
+                  <option value="operator">Operator</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <button
+                onClick={handleAdd}
+                disabled={!addUserId || saving}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50 transition-all"
+                style={{ background: 'var(--gradient-primary)', flexShrink: 0 }}
+              >
+                <Plus size={12} /> {saving ? 'Adding…' : 'Add'}
+              </button>
+              <button onClick={() => setShowAdd(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, flexShrink: 0 }}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+          ) : members.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>No members yet</div>
+          ) : (
+            <div className="space-y-2">
+              {members.map(m => (
+                <div key={m.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <div className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0" style={{ background: 'rgba(99,102,241,0.12)', color: 'var(--neon-indigo)', fontWeight: 700, fontSize: 11 }}>
+                    {userName(m.user_id).charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }}>{userName(m.user_id)}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{String(m.user_id).slice(0, 8)}…</div>
+                  </div>
+                  <select
+                    value={m.role}
+                    onChange={e => handleRoleChange(m.user_id, e.target.value)}
+                    style={{ ...inputCls, width: 120, fontSize: 12, padding: '4px 8px' }}
+                  >
+                    <option value="viewer">Viewer</option>
+                    <option value="operator">Operator</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <button
+                    onClick={() => handleRemove(m.user_id)}
+                    title="Remove member"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent-red)', padding: 4, flexShrink: 0, opacity: 0.7 }}
+                    className="transition-opacity hover:opacity-100"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SuperAdminPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = searchParams.get('tab') || 'overview'
+  const requestedTab = searchParams.get('tab') || 'overview'
+  const activeTab = TABS.some((tab) => tab.id === requestedTab) ? requestedTab : 'overview'
 
   const setTab = (id) => setSearchParams(id === 'overview' ? {} : { tab: id })
 
@@ -1160,9 +1710,53 @@ export default function SuperAdminPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>Super Admin</h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Users · Tenants · Settings · AI Models
+            Users · Settings · AI Models
           </p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          {
+            to: '/admin/organizations',
+            title: 'Organizations',
+            desc: 'Customer orgs and tenant onboarding',
+            icon: ShieldCheck,
+            tint: 'rgba(167,139,250,0.14)',
+            color: 'var(--neon-purple)',
+          },
+          {
+            to: '/admin/workspaces',
+            title: 'Tenant Workspaces',
+            desc: 'Tenant structure, projects, and defaults',
+            icon: Building2,
+            tint: 'rgba(99,102,241,0.14)',
+            color: 'var(--neon-indigo)',
+          },
+          {
+            to: '/admin/integrations',
+            title: 'Integrations',
+            desc: 'Tenant-owned monitoring and webhook paths',
+            icon: Activity,
+            tint: 'rgba(56,189,248,0.14)',
+            color: 'var(--neon-cyan)',
+          },
+        ].map(item => (
+          <Link
+            key={item.to}
+            to={item.to}
+            className="glass rounded-xl p-4 flex items-start gap-3 hover-lift transition-all"
+            style={{ border: '1px solid var(--border)' }}
+          >
+            <div className="p-2 rounded-lg" style={{ background: item.tint }}>
+              <item.icon size={16} style={{ color: item.color }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{item.title}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{item.desc}</div>
+            </div>
+          </Link>
+        ))}
       </div>
 
       {/* Tab Bar */}
@@ -1188,7 +1782,7 @@ export default function SuperAdminPage() {
       {/* Tab Content */}
       {activeTab === 'overview' && <OverviewTab onNavigate={setTab} />}
       {activeTab === 'users'    && <UsersTab />}
-      {activeTab === 'tenants'  && <TenantsTab />}
+      {activeTab === 'members'  && <MembersTab />}
       {activeTab === 'settings' && <SettingsTab />}
       {activeTab === 'models'   && <ModelsTab />}
     </div>

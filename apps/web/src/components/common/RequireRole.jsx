@@ -1,6 +1,13 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
+function normalizeRole(role) {
+  const normalized = (role || 'operator').toLowerCase()
+  if (normalized.startsWith('org_')) return normalized.replace(/^org_/, '')
+  if (normalized.startsWith('tenant_')) return normalized.replace(/^tenant_/, '')
+  return normalized
+}
+
 /**
  * RequireRole - Protects routes that require specific roles.
  * 
@@ -26,7 +33,7 @@ export default function RequireRole({ children, roles, fallback = null }) {
 
   // Normalize roles to array
   const requiredRoles = Array.isArray(roles) ? roles : [roles]
-  const userRole = (user.role || 'operator').toLowerCase()
+  const userRole = normalizeRole(user.role || 'operator')
 
   // Check if user has required role
   // Role hierarchy: admin > operator > viewer
@@ -37,7 +44,7 @@ export default function RequireRole({ children, roles, fallback = null }) {
   }
 
   const hasAccess = requiredRoles.some(role => {
-    const roleLower = role.toLowerCase()
+    const roleLower = normalizeRole(role)
     const allowedRoles = roleHierarchy[roleLower] || [roleLower]
     return allowedRoles.includes(userRole) || requiredRoles.includes(userRole)
   })

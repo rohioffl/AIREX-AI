@@ -76,12 +76,12 @@ describe('AnomalyBadge', () => {
   it('uses warning styling when highest severity is warning', () => {
     render(<AnomalyBadge anomalies={warningOnly} />)
     const header = screen.getByText('1 Anomaly Detected')
-    expect(header).toHaveStyle({ color: '#f59e0b' })
+    expect(header).toHaveStyle({ color: 'var(--color-accent-amber)' })
   })
 
   it('uses info styling when all anomalies are info', () => {
     render(<AnomalyBadge anomalies={infoOnly} />)
     const header = screen.getByText('1 Anomaly Detected')
-    expect(header).toHaveStyle({ color: '#06b6d4' })
+    expect(header).toHaveStyle({ color: 'var(--neon-cyan)' })
   })
 })

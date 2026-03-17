@@ -1,0 +1,513 @@
+"""Organization and organization-scoped tenant APIs."""
+
+import uuid
+from datetime import datetime
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import (
+    RequirePlatformAdmin,
+    authorize_org_access,
+    authorize_org_admin,
+    get_authenticated_user,
+    get_auth_session,
+    get_home_organization_id,
+    has_org_membership,
+)
+from airex_core.core.rbac import normalize_role_name
+from airex_core.core.security import TokenData
+from airex_core.models.organization import Organization
+from airex_core.models.organization_membership import OrganizationMembership
+from airex_core.models.tenant import Tenant
+from airex_core.models.tenant_membership import TenantMembership
+
+router = APIRouter()
+
+
+class OrganizationResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    status: str
+    tenant_count: int = 0
+
+
+class OrganizationCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=255)
+    slug: str = Field(..., min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")
+
+
+class OrganizationUpdateRequest(BaseModel):
+    name: str | None = Field(None, min_length=2, max_length=255)
+    slug: str | None = Field(None, min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    status: str | None = Field(None, pattern=r"^(active|disabled|suspended)$")
+
+
+class OrganizationTenantResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    display_name: str
+    cloud: str
+    is_active: bool
+    organization_id: uuid.UUID
+
+
+class OrganizationTenantCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    display_name: str = Field(..., min_length=2, max_length=255)
+    cloud: str = Field(..., pattern=r"^(aws|gcp)$")
+    escalation_email: str = ""
+    slack_channel: str = ""
+    ssh_user: str = "ubuntu"
+    aws_config: dict = {}
+    gcp_config: dict = {}
+    servers: list = []
+
+
+def _organization_listing_query():
+    return (
+        select(
+            Organization.id,
+            Organization.name,
+            Organization.slug,
+            Organization.status,
+            func.count(Tenant.id).label("tenant_count"),
+        )
+        .outerjoin(Tenant, Tenant.organization_id == Organization.id)
+        .group_by(
+            Organization.id,
+            Organization.name,
+            Organization.slug,
+            Organization.status,
+        )
+        .order_by(Organization.name.asc())
+    )
+
+
+def _organization_response_from_row(row: Any) -> OrganizationResponse:
+    return OrganizationResponse(
+        id=row.id,
+        name=row.name,
+        slug=row.slug,
+        status=row.status,
+        tenant_count=int(getattr(row, "tenant_count", 0) or 0),
+    )
+
+
+@router.get("/organizations", response_model=list[OrganizationResponse])
+async def list_organizations(
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> list[OrganizationResponse]:
+    """List organizations visible to the current user."""
+    if current_user.role.lower() == "platform_admin":
+        result = await session.execute(_organization_listing_query())
+        return [_organization_response_from_row(row) for row in result.all()]
+
+    org_ids: set[uuid.UUID] = set()
+    home_org_id = await get_home_organization_id(session, current_user)
+    if home_org_id is not None:
+        org_ids.add(home_org_id)
+
+    membership_result = await session.execute(
+        select(OrganizationMembership.organization_id).where(
+            OrganizationMembership.user_id == current_user.user_id
+        )
+    )
+    org_ids.update(membership_result.scalars().all())
+
+    if not org_ids:
+        return []
+
+    result = await session.execute(
+        _organization_listing_query().where(Organization.id.in_(list(org_ids)))
+    )
+    return [_organization_response_from_row(row) for row in result.all()]
+
+
+@router.post("/organizations", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED)
+async def create_organization(
+    body: OrganizationCreateRequest,
+    _: RequirePlatformAdmin,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> OrganizationResponse:
+    """Create a new organization. Requires platform_admin role."""
+    existing = await session.execute(
+        select(Organization).where(Organization.slug == body.slug.lower().strip())
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Organization slug already exists")
+
+    org = Organization(name=body.name.strip(), slug=body.slug.lower().strip(), status="active")
+    session.add(org)
+    await session.flush()
+    return OrganizationResponse(id=org.id, name=org.name, slug=org.slug, status=org.status)
+
+
+@router.get("/organizations/{organization_id}", response_model=OrganizationResponse)
+async def get_organization(
+    organization_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> OrganizationResponse:
+    """Get a single organization if visible to the current user."""
+    org_result = await session.execute(select(Organization).where(Organization.id == organization_id))
+    organization = org_result.scalar_one_or_none()
+    if organization is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    if not await authorize_org_access(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for organization")
+    return OrganizationResponse(
+        id=organization.id,
+        name=organization.name,
+        slug=organization.slug,
+        status=organization.status,
+        tenant_count=getattr(organization, "tenant_count", 0),
+    )
+
+
+@router.put("/organizations/{organization_id}", response_model=OrganizationResponse)
+async def update_organization(
+    organization_id: uuid.UUID,
+    body: OrganizationUpdateRequest,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> OrganizationResponse:
+    """Update an organization."""
+    if not await authorize_org_admin(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+    org_result = await session.execute(select(Organization).where(Organization.id == organization_id))
+    organization = org_result.scalar_one_or_none()
+    if organization is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    if body.slug and body.slug.lower().strip() != organization.slug:
+        existing = await session.execute(
+            select(Organization.id).where(Organization.slug == body.slug.lower().strip())
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Organization slug already exists")
+
+    if body.name is not None:
+        organization.name = body.name.strip()
+    if body.slug is not None:
+        organization.slug = body.slug.lower().strip()
+    if body.status is not None:
+        organization.status = body.status
+    session.add(organization)
+    await session.flush()
+
+    return OrganizationResponse(
+        id=organization.id,
+        name=organization.name,
+        slug=organization.slug,
+        status=organization.status,
+        tenant_count=getattr(organization, "tenant_count", 0),
+    )
+
+
+@router.get("/organizations/{organization_id}/tenants", response_model=list[OrganizationTenantResponse])
+async def list_organization_tenants(
+    organization_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> list[OrganizationTenantResponse]:
+    """List tenants in the organization visible to the user."""
+    if not await authorize_org_access(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for organization")
+
+    can_view_all = (
+        current_user.role.lower() == "platform_admin"
+        or await authorize_org_admin(session, current_user, organization_id)
+        or await has_org_membership(
+            session,
+            user_id=current_user.user_id,
+            organization_id=organization_id,
+        )
+    )
+
+    if can_view_all:
+        query = (
+            select(Tenant)
+            .where(Tenant.organization_id == organization_id)
+            .order_by(Tenant.display_name.asc())
+        )
+        result = await session.execute(query)
+        tenants = result.scalars().all()
+    else:
+        membership_result = await session.execute(
+            select(TenantMembership.tenant_id)
+            .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+            .where(
+                Tenant.organization_id == organization_id,
+                TenantMembership.user_id == current_user.user_id,
+            )
+        )
+        accessible_tenant_ids = {current_user.tenant_id, *membership_result.scalars().all()}
+        result = await session.execute(
+            select(Tenant)
+            .where(
+                Tenant.organization_id == organization_id,
+                Tenant.id.in_(list(accessible_tenant_ids)),
+            )
+            .order_by(Tenant.display_name.asc())
+        )
+        tenants = result.scalars().all()
+
+    return [
+        OrganizationTenantResponse(
+            id=tenant.id,
+            name=tenant.name,
+            display_name=tenant.display_name,
+            cloud=tenant.cloud,
+            is_active=tenant.is_active,
+            organization_id=tenant.organization_id,
+        )
+        for tenant in tenants
+    ]
+
+
+@router.post(
+    "/organizations/{organization_id}/tenants",
+    response_model=OrganizationTenantResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_organization_tenant(
+    organization_id: uuid.UUID,
+    body: OrganizationTenantCreateRequest,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> OrganizationTenantResponse:
+    """Create a tenant under an organization."""
+    if not await authorize_org_admin(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+    org_result = await session.execute(select(Organization.id).where(Organization.id == organization_id))
+    if org_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    existing = await session.execute(select(Tenant.id).where(Tenant.name == body.name.lower().strip()))
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tenant name already exists")
+
+    tenant = Tenant(
+        organization_id=organization_id,
+        name=body.name.lower().strip(),
+        display_name=body.display_name.strip(),
+        cloud=body.cloud,
+        escalation_email=body.escalation_email,
+        slack_channel=body.slack_channel,
+        ssh_user=body.ssh_user,
+        aws_config=body.aws_config,
+        gcp_config=body.gcp_config,
+        servers=body.servers,
+        is_active=True,
+    )
+    session.add(tenant)
+    await session.flush()
+
+    return OrganizationTenantResponse(
+        id=tenant.id,
+        name=tenant.name,
+        display_name=tenant.display_name,
+        cloud=tenant.cloud,
+        is_active=tenant.is_active,
+        organization_id=tenant.organization_id,
+    )
+
+
+# ─── Org Member Management ────────────────────────────────────────────────────
+
+_MEMBER_ROLES = {"viewer", "operator", "admin"}
+
+
+class OrgMemberResponse(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    organization_id: uuid.UUID
+    role: str
+    created_at: datetime
+
+
+class OrgMemberAddRequest(BaseModel):
+    user_id: uuid.UUID
+    role: str = Field(..., pattern=r"^(viewer|operator|admin)$")
+
+
+class OrgMemberUpdateRequest(BaseModel):
+    role: str = Field(..., pattern=r"^(viewer|operator|admin)$")
+
+
+@router.get("/organizations/{organization_id}/members", response_model=list[OrgMemberResponse])
+async def list_org_members(
+    organization_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> list[OrgMemberResponse]:
+    """List members of an organization."""
+    if not await authorize_org_admin(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+    result = await session.execute(
+        select(OrganizationMembership)
+        .where(OrganizationMembership.organization_id == organization_id)
+        .order_by(OrganizationMembership.created_at.asc())
+    )
+    rows = result.scalars().all()
+    return [
+        OrgMemberResponse(
+            id=m.id,
+            user_id=m.user_id,
+            organization_id=m.organization_id,
+            role=m.role,
+            created_at=m.created_at,
+        )
+        for m in rows
+    ]
+
+
+@router.post(
+    "/organizations/{organization_id}/members",
+    response_model=OrgMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_org_member(
+    organization_id: uuid.UUID,
+    body: OrgMemberAddRequest,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> OrgMemberResponse:
+    """Add a user as a member of the organization."""
+    if not await authorize_org_admin(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+    org_result = await session.execute(select(Organization.id).where(Organization.id == organization_id))
+    if org_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    existing = await session.execute(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == body.user_id,
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User is already a member")
+
+    membership = OrganizationMembership(
+        organization_id=organization_id,
+        user_id=body.user_id,
+        role=body.role,
+    )
+    session.add(membership)
+    await session.flush()
+    return OrgMemberResponse(
+        id=membership.id,
+        user_id=membership.user_id,
+        organization_id=membership.organization_id,
+        role=membership.role,
+        created_at=membership.created_at,
+    )
+
+
+@router.patch("/organizations/{organization_id}/members/{user_id}", response_model=OrgMemberResponse)
+async def update_org_member(
+    organization_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body: OrgMemberUpdateRequest,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> OrgMemberResponse:
+    """Update the role of an organization member."""
+    if not await authorize_org_admin(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+    result = await session.execute(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user_id,
+        )
+    )
+    membership = result.scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+
+    membership.role = body.role
+    session.add(membership)
+    await session.flush()
+    return OrgMemberResponse(
+        id=membership.id,
+        user_id=membership.user_id,
+        organization_id=membership.organization_id,
+        role=membership.role,
+        created_at=membership.created_at,
+    )
+
+
+@router.delete("/organizations/{organization_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_org_member(
+    organization_id: uuid.UUID,
+    user_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> None:
+    """Remove a user from the organization."""
+    if not await authorize_org_admin(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+    result = await session.execute(
+        delete(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user_id,
+        )
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+
+
+# ─── Org Analytics ────────────────────────────────────────────────────────────
+
+
+class OrgAnalyticsResponse(BaseModel):
+    organization_id: uuid.UUID
+    tenant_count: int
+    active_tenant_count: int
+    member_count: int
+
+
+@router.get("/organizations/{organization_id}/analytics", response_model=OrgAnalyticsResponse)
+async def get_org_analytics(
+    organization_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> OrgAnalyticsResponse:
+    """Return aggregate analytics for an organization."""
+    if not await authorize_org_access(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for organization")
+
+    tenant_total = await session.execute(
+        select(func.count(Tenant.id)).where(Tenant.organization_id == organization_id)
+    )
+    active_total = await session.execute(
+        select(func.count(Tenant.id)).where(
+            Tenant.organization_id == organization_id, Tenant.is_active.is_(True)
+        )
+    )
+    member_total = await session.execute(
+        select(func.count(OrganizationMembership.id)).where(
+            OrganizationMembership.organization_id == organization_id
+        )
+    )
+
+    return OrgAnalyticsResponse(
+        organization_id=organization_id,
+        tenant_count=tenant_total.scalar_one(),
+        active_tenant_count=active_total.scalar_one(),
+        member_count=member_total.scalar_one(),
+    )

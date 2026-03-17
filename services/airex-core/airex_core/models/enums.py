@@ -45,6 +45,7 @@ class UserRole(str, enum.Enum):
         "admin"  # Full access: user management, tenant config, all operator permissions
     )
     VIEWER = "viewer"  # Read-only: view incidents, no approvals
+    PLATFORM_ADMIN = "platform_admin"  # Super-admin: full platform access across all orgs
 
 
 class Permission(str, enum.Enum):
@@ -75,3 +76,17 @@ class Permission(str, enum.Enum):
     # System permissions
     SYSTEM_METRICS = "system:metrics"
     SYSTEM_DLQ = "system:dlq"
+
+    # Organization permissions
+    ORG_VIEW = "org:view"
+    ORG_CREATE = "org:create"
+    ORG_UPDATE = "org:update"
+    ORG_DELETE = "org:delete"
+    ORG_MANAGE_MEMBERS = "org:manage_members"
+
+    # Tenant member management (accessible to org_admin and above)
+    TENANT_MANAGE_MEMBERS = "tenant:manage_members"
+
+    # Platform-level permissions
+    PLATFORM_SETTINGS = "platform:settings"
+    PLATFORM_IMPERSONATE = "platform:impersonate"

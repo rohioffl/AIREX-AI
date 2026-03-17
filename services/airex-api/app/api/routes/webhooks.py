@@ -10,6 +10,7 @@ import hashlib
 import json as _json
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from importlib import import_module
@@ -17,8 +18,10 @@ from typing import Any, Awaitable, Callable, cast
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import text as sa_text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import Redis, TenantId, TenantSession
+from app.api.dependencies import Redis, TenantId, TenantSession, get_auth_session
 from airex_core.core.rate_limit import webhook_rate_limit
 from airex_core.core.webhook_signature import verify_webhook_signature
 from airex_core.models.enums import IncidentState, SeverityLevel
@@ -35,6 +38,114 @@ from sqlalchemy.orm.attributes import flag_modified
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+@dataclass(slots=True)
+class Site24x7IntegrationContext:
+    integration_id: uuid.UUID
+    tenant_id: uuid.UUID
+    integration_name: str
+    integration_slug: str
+    integration_type_key: str
+    enabled: bool
+
+
+@dataclass(slots=True)
+class Site24x7ProjectBinding:
+    project_id: uuid.UUID
+    project_name: str
+    project_slug: str
+    alert_type_override: str | None = None
+
+
+async def _resolve_site24x7_integration_context(
+    session,
+    integration_id: uuid.UUID,
+) -> Site24x7IntegrationContext:
+    result = await session.execute(
+        sa_text(
+            """
+            SELECT mi.id, mi.tenant_id, mi.name, mi.slug, mi.enabled, it.key AS integration_type_key
+            FROM monitoring_integrations mi
+            JOIN integration_types it ON it.id = mi.integration_type_id
+            WHERE mi.id = :integration_id
+            """
+        ),
+        {"integration_id": str(integration_id)},
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+    if row.integration_type_key != "site24x7":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integration is not a Site24x7 webhook target")
+    if not row.enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Integration is disabled")
+    return Site24x7IntegrationContext(
+        integration_id=uuid.UUID(str(row.id)),
+        tenant_id=uuid.UUID(str(row.tenant_id)),
+        integration_name=row.name,
+        integration_slug=row.slug,
+        integration_type_key=row.integration_type_key,
+        enabled=bool(row.enabled),
+    )
+
+
+async def _resolve_site24x7_project_binding(
+    session,
+    *,
+    integration_id: uuid.UUID,
+    monitor_id: str,
+) -> Site24x7ProjectBinding | None:
+    result = await session.execute(
+        sa_text(
+            """
+            SELECT p.id AS project_id, p.name AS project_name, p.slug AS project_slug,
+                   pmb.alert_type_override
+            FROM external_monitors em
+            JOIN project_monitor_bindings pmb
+              ON pmb.external_monitor_id = em.id
+             AND pmb.enabled = true
+            JOIN projects p
+              ON p.id = pmb.project_id
+             AND p.is_active = true
+            WHERE em.integration_id = :integration_id
+              AND em.external_monitor_id = :monitor_id
+              AND em.enabled = true
+            ORDER BY p.name
+            LIMIT 1
+            """
+        ),
+        {
+            "integration_id": str(integration_id),
+            "monitor_id": monitor_id,
+        },
+    )
+    row = result.first()
+    if row is None:
+        return None
+    return Site24x7ProjectBinding(
+        project_id=uuid.UUID(str(row.project_id)),
+        project_name=row.project_name,
+        project_slug=row.project_slug,
+        alert_type_override=row.alert_type_override,
+    )
+
+
+def _merge_site24x7_integration_meta(
+    meta: dict[str, Any],
+    integration_context: Site24x7IntegrationContext | None,
+    project_binding: Site24x7ProjectBinding | None,
+) -> dict[str, Any]:
+    if integration_context is not None:
+        meta["_integration_id"] = str(integration_context.integration_id)
+        meta["_integration_name"] = integration_context.integration_name
+        meta["_integration_slug"] = integration_context.integration_slug
+        meta["_integration_type"] = integration_context.integration_type_key
+    if project_binding is not None:
+        meta["project_id"] = str(project_binding.project_id)
+        meta["project_name"] = project_binding.project_name
+        meta["project_slug"] = project_binding.project_slug
+    return meta
 
 
 @lru_cache(maxsize=1)
@@ -354,6 +465,45 @@ async def ingest_site24x7(
     session: TenantSession,
     redis: Redis,
 ) -> IncidentCreatedResponse:
+    return await _ingest_site24x7_request(
+        request,
+        tenant_id=tenant_id,
+        session=session,
+        redis=redis,
+        integration_context=None,
+    )
+
+
+@router.post(
+    "/site24x7/{integration_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=IncidentCreatedResponse,
+    dependencies=[Depends(webhook_rate_limit), Depends(verify_webhook_signature)],
+)
+async def ingest_site24x7_for_integration(
+    integration_id: uuid.UUID,
+    request: Request,
+    redis: Redis,
+    session: AsyncSession = Depends(get_auth_session),
+) -> IncidentCreatedResponse:
+    integration_context = await _resolve_site24x7_integration_context(session, integration_id)
+    return await _ingest_site24x7_request(
+        request,
+        tenant_id=integration_context.tenant_id,
+        session=session,
+        redis=redis,
+        integration_context=integration_context,
+    )
+
+
+async def _ingest_site24x7_request(
+    request: Request,
+    *,
+    tenant_id: uuid.UUID,
+    session,
+    redis,
+    integration_context: Site24x7IntegrationContext | None,
+) -> IncidentCreatedResponse:
     """
     Ingest a Site24x7 alert webhook.
 
@@ -386,6 +536,13 @@ async def ingest_site24x7(
     monitor_type = payload.get_monitor_type()
     monitor_id = payload.get_monitor_id()
     incident_reason = payload.get_incident_reason()
+    project_binding = None
+    if integration_context is not None:
+        project_binding = await _resolve_site24x7_project_binding(
+            session,
+            integration_id=integration_context.integration_id,
+            monitor_id=monitor_id,
+        )
 
     # ── Parse cloud tags early to resolve tenant_id ──────────────
     # Site24x7 sends TAGS as either a comma-string or a JSON array.
@@ -457,6 +614,8 @@ async def ingest_site24x7(
     alert_type, override_info = _refine_alert_type(
         alert_type, monitor_type, incident_reason, cloud_ctx
     )
+    if project_binding and project_binding.alert_type_override:
+        alert_type = project_binding.alert_type_override
     if override_info:
         logger.info(
             "alert_type_overridden",
@@ -597,6 +756,7 @@ async def ingest_site24x7(
     meta["monitor_name"] = monitor_name
     meta["host"] = monitor_name
     meta["_source_monitor_type"] = monitor_type
+    meta = _merge_site24x7_integration_meta(meta, integration_context, project_binding)
     if override_info:
         meta["_alert_type_override"] = override_info
 

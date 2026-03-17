@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
 import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken, googleLogin as apiGoogleLogin } from '../services/auth'
 import { getRefreshToken, getValidAccessToken } from '../services/tokenStorage'
+import { fetchAuthMe, getActiveTenantId, setActiveTenantId as persistActiveTenantId } from '../services/api'
 
 const AuthContext = createContext()
 
@@ -18,6 +19,21 @@ function parseTokenUser(t) {
   }
 }
 
+function buildUser(parsed, me) {
+  const meUser = me?.user || {}
+  const activeTenant = me?.active_tenant || null
+  return {
+    email: meUser.email || parsed?.email || null,
+    role: meUser.role || parsed?.role || 'operator',
+    tenantId: activeTenant?.id || meUser.tenant_id || parsed?.tenantId || null,
+    tenant_id: activeTenant?.id || meUser.tenant_id || parsed?.tenantId || null,
+    homeTenantId: meUser.tenant_id || parsed?.tenantId || null,
+    userId: meUser.id || parsed?.userId || null,
+    user_id: meUser.id || parsed?.userId || null,
+    displayName: meUser.display_name || parsed?.email || null,
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const t = getValidAccessToken()
@@ -25,50 +41,84 @@ export function AuthProvider({ children }) {
   })
   const [token, setToken] = useState(() => getValidAccessToken() || null)
   const [loading, setLoading] = useState(() => !getValidAccessToken() && !!getRefreshToken())
+  const [sessionContext, setSessionContext] = useState(null)
+
+  const hydrateSession = useCallback(async (accessToken, tenantId = null) => {
+    const parsed = accessToken ? parseTokenUser(accessToken) : null
+    const resolvedTenantId = tenantId || getActiveTenantId() || parsed?.tenantId || null
+    if (resolvedTenantId) {
+      persistActiveTenantId(resolvedTenantId)
+    }
+    const me = await fetchAuthMe(resolvedTenantId)
+    const nextUser = buildUser(parsed, me)
+    setUser(nextUser)
+    setSessionContext(me)
+    if (me?.active_tenant?.id) {
+      persistActiveTenantId(me.active_tenant.id)
+    }
+    return me
+  }, [])
 
   const login = useCallback(async ({ email, password }) => {
     const res = await apiLogin({ email, password })
-    const parsed = parseTokenUser(res.access_token)
-    setUser(parsed)
     setToken(res.access_token)
-    if (parsed?.tenantId) {
-      localStorage.setItem('tenant_id', parsed.tenantId)
-    }
+    await hydrateSession(res.access_token)
     return res
-  }, [])
+  }, [hydrateSession])
 
   const loginWithGoogle = useCallback(async (idToken) => {
     const res = await apiGoogleLogin(idToken)
-    const parsed = parseTokenUser(res.access_token)
-    setUser(parsed)
     setToken(res.access_token)
-    if (parsed?.tenantId) {
-      localStorage.setItem('tenant_id', parsed.tenantId)
-    }
+    await hydrateSession(res.access_token)
     return res
-  }, [])
+  }, [hydrateSession])
 
   const logout = useCallback(() => {
     apiLogout()
     setUser(null)
     setToken(null)
+    setSessionContext(null)
+    persistActiveTenantId(null)
   }, [])
 
   const refresh = useCallback(async () => {
     try {
       const res = await apiRefreshToken()
-      const parsed = parseTokenUser(res.access_token)
-      setUser(parsed)
       setToken(res.access_token)
+      await hydrateSession(res.access_token)
     } catch {
       logout()
     }
-  }, [logout])
+  }, [hydrateSession, logout])
+
+  const switchTenant = useCallback(async (tenantId) => {
+    persistActiveTenantId(tenantId)
+    if (!token) return
+    await hydrateSession(token, tenantId)
+  }, [hydrateSession, token])
 
   useEffect(() => {
     if (token) {
-      setLoading(false)
-      return
+      let cancelled = false
+
+      async function ensureContext() {
+        try {
+          await hydrateSession(token)
+        } catch {
+          if (!cancelled) {
+            logout()
+          }
+        } finally {
+          if (!cancelled) {
+            setLoading(false)
+          }
+        }
+      }
+
+      ensureContext()
+      return () => {
+        cancelled = true
+      }
     }
 
     if (!getRefreshToken()) {
@@ -83,9 +133,8 @@ export function AuthProvider({ children }) {
       try {
         const res = await apiRefreshToken()
         if (cancelled) return
-        const parsed = parseTokenUser(res.access_token)
-        setUser(parsed)
         setToken(res.access_token)
+        await hydrateSession(res.access_token)
       } catch {
         if (!cancelled) {
           logout()
@@ -102,7 +151,7 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true
     }
-  }, [logout, token])
+  }, [hydrateSession, logout, token])
 
   useEffect(() => {
     const handleSessionExpired = () => {
@@ -113,8 +162,23 @@ export function AuthProvider({ children }) {
   }, [logout])
 
   const value = useMemo(() => ({
-    user, token, loading, login, loginWithGoogle, logout, refresh, isAuthenticated: !!token
-  }), [user, token, loading, login, loginWithGoogle, logout, refresh])
+    user,
+    token,
+    loading,
+    login,
+    loginWithGoogle,
+    logout,
+    refresh,
+    switchTenant,
+    isAuthenticated: !!token,
+    sessionContext,
+    organizations: sessionContext?.organization_memberships || [],
+    tenants: sessionContext?.tenants || [],
+    projects: sessionContext?.projects || [],
+    activeOrganization: sessionContext?.active_organization || null,
+    activeTenant: sessionContext?.active_tenant || null,
+    activeTenantId: sessionContext?.active_tenant?.id || user?.tenantId || null,
+  }), [user, token, loading, login, loginWithGoogle, logout, refresh, switchTenant, sessionContext])
 
   return (
     <AuthContext.Provider value={value}>

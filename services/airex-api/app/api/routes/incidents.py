@@ -156,7 +156,7 @@ async def create_incident_manual(
         title = body.title
         severity_str = body.severity
         alert_type = body.alert_type
-        meta = body.meta
+        meta = body.meta or {}
 
     # Validate severity
     try:
@@ -195,13 +195,16 @@ async def create_incident_manual(
 
     await session.flush()
 
+    actor_email = current_user.user_email if current_user else "system"
+    actor_id = str(current_user.user_id) if current_user else "system"
+
     # Transition to INVESTIGATING
     await transition_state(
         session,
         incident,
         IncidentState.INVESTIGATING,
-        reason=f"Manual incident creation by {current_user.user_email}",
-        actor=str(current_user.user_id),
+        reason=f"Manual incident creation by {actor_email}",
+        actor=actor_id,
     )
 
     logger.info(
@@ -209,7 +212,7 @@ async def create_incident_manual(
         tenant_id=str(tenant_id),
         incident_id=str(incident.id),
         template_id=str(template_id) if template_id else None,
-        user_id=str(current_user.user_id),
+        user_id=str(current_user.user_id) if current_user else "system",
     )
 
     # Enqueue investigation
@@ -841,7 +844,7 @@ async def submit_feedback(
         tenant_id=str(tenant_id),
         incident_id=str(incident_id),
         score=body.score,
-        user_id=str(current_user.user_id),
+        user_id=str(current_user.user_id) if current_user else "system",
     )
 
     result = await session.execute(
@@ -896,7 +899,7 @@ async def delete_incident(
         "incident_deletion_requested",
         tenant_id=str(tenant_id),
         incident_id=str(incident_id),
-        user_id=str(current_user.user_id),
+        user_id=str(current_user.user_id) if current_user else "system",
     )
 
     result = await session.execute(
@@ -953,7 +956,7 @@ async def restore_incident(
         "incident_restore_requested",
         tenant_id=str(tenant_id),
         incident_id=str(incident_id),
-        user_id=str(current_user.user_id),
+        user_id=str(current_user.user_id) if current_user else "system",
     )
 
     result = await session.execute(
@@ -1262,7 +1265,7 @@ async def create_comment(
     comment = Comment(
         tenant_id=tenant_id,
         incident_id=incident_id,
-        user_id=current_user.user_id,
+        user_id=current_user.user_id if current_user else None,
         content=body.content,
     )
     session.add(comment)
@@ -1272,7 +1275,7 @@ async def create_comment(
     user_result = await session.execute(
         select(User).where(
             User.tenant_id == tenant_id,
-            User.id == current_user.user_id,
+            User.id == (current_user.user_id if current_user else None),
         )
     )
     user = user_result.scalar_one()
@@ -1282,7 +1285,7 @@ async def create_comment(
         tenant_id=str(tenant_id),
         incident_id=str(incident_id),
         comment_id=str(comment.id),
-        user_id=str(current_user.user_id),
+        user_id=str(current_user.user_id) if current_user else "system",
     )
 
     return CommentResponse(
@@ -1346,14 +1349,14 @@ async def assign_incident(
     meta = dict(incident.meta or {})
     if body.assigned_to:
         meta["assigned_to"] = str(body.assigned_to)
-        meta["assigned_by"] = str(current_user.user_id)
+        meta["assigned_by"] = str(current_user.user_id) if current_user else "system"
         meta["assigned_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(
             "incident_assigned",
             tenant_id=str(tenant_id),
             incident_id=str(incident_id),
             assigned_to=str(body.assigned_to),
-            assigned_by=str(current_user.user_id),
+            assigned_by=str(current_user.user_id) if current_user else "system",
         )
     else:
         meta.pop("assigned_to", None)
@@ -1363,7 +1366,7 @@ async def assign_incident(
             "incident_unassigned",
             tenant_id=str(tenant_id),
             incident_id=str(incident_id),
-            unassigned_by=str(current_user.user_id),
+            unassigned_by=str(current_user.user_id) if current_user else "system",
         )
 
     incident.meta = meta

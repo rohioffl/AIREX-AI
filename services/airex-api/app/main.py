@@ -16,14 +16,16 @@ from app.api.routes import (
     auth,
     chat,
     dlq,
-    grafana_dashboards,
     health_checks,
+    integrations,
     incidents,
     knowledge_base,
     metrics as metrics_router,
     notification_preferences,
+    organizations,
     patterns,
     predictions,
+    projects,
     reports,
     root_causes,
     runbooks,
@@ -31,6 +33,7 @@ from app.api.routes import (
     site24x7,
     sse,
     templates,
+    tenant_members,
     tenants,
     users,
     webhooks,
@@ -159,6 +162,26 @@ app.include_router(
     tags=["tenants"],
 )
 app.include_router(
+    organizations.router,
+    prefix=f"{settings.API_V1_STR}",
+    tags=["organizations"],
+)
+app.include_router(
+    tenant_members.router,
+    prefix=f"{settings.API_V1_STR}",
+    tags=["tenant-members"],
+)
+app.include_router(
+    projects.router,
+    prefix=f"{settings.API_V1_STR}",
+    tags=["projects"],
+)
+app.include_router(
+    integrations.router,
+    prefix=f"{settings.API_V1_STR}",
+    tags=["integrations"],
+)
+app.include_router(
     users.router,
     prefix=f"{settings.API_V1_STR}/users",
     tags=["users"],
@@ -237,9 +260,4 @@ app.include_router(
     root_causes.router,
     prefix=f"{settings.API_V1_STR}/root-causes",
     tags=["root-causes"],
-)
-app.include_router(
-    grafana_dashboards.router,
-    prefix=f"{settings.API_V1_STR}/grafana-dashboards",
-    tags=["grafana-dashboards"],
 )

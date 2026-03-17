@@ -1,0 +1,33 @@
+
+> frontend@0.0.0 build
+> vite build
+
+vite v7.3.1 building client environment for production...
+transforming...
+✓ 2890 modules transformed.
+rendering chunks...
+[plugin vite:reporter] 
+(!) /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/services/api.js is dynamically imported by /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/IncidentDetail.jsx but also statically imported by /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/admin/TenantWorkspaceManager.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/common/AlertHistoryWidget.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/AIRecommendationApproval.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/AcknowledgeRejectModal.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/AssignmentPanel.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/AutoRunbook.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/CommentsPanel.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/CreateIncidentModal.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/IncidentChat.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/RelatedIncidentsPanel.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/ResolutionOutcome.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/incident/Site24x7MetricsPanel.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/layout/Layout.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/components/layout/LeadApprovalPanel.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/context/AuthContext.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/hooks/useIncidentDetail.js, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/hooks/useIncidents.js, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/hooks/useTenantWorkspace.js, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/AlertsPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/AnalyticsPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/DashboardPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/HealthChecksPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/IncidentDetail.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/KnowledgeBasePage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/PatternsPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/PlatformAdminPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/ReportsPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/RunbooksPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/SetPasswordPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/SettingsPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/SuperAdminPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/pages/admin/UsersAdminPage.jsx, /home/ubuntu/AIREX-AI/AIREX-AI/apps/web/src/services/auth.js, dynamic import will not move module into another chunk.
+
+computing gzip size...
+dist/index.html                                                        0.70 kB │ gzip:   0.35 kB
+dist/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2       7.50 kB
+dist/assets/plus-jakarta-sans-vietnamese-wght-normal-qRpaaN48.woff2    8.35 kB
+dist/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2            9.00 kB
+dist/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2        12.11 kB
+dist/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2       15.20 kB
+dist/assets/plus-jakarta-sans-latin-ext-wght-normal-DmpS2jIq.woff2    21.73 kB
+dist/assets/plus-jakarta-sans-latin-wght-normal-eXO_dkmS.woff2        27.35 kB
+dist/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2           40.40 kB
+dist/assets/land_final-kkN0xoaL.jpg                                  423.30 kB
+dist/assets/index-C9v8hv1w.css                                       101.01 kB │ gzip:  22.70 kB
+dist/assets/vendor-icons-O4kCaRIR.js                                  24.93 kB │ gzip:   8.30 kB
+dist/assets/vendor-react-3kkp8Geh.js                                  47.96 kB │ gzip:  17.05 kB
+dist/assets/vendor-charts-BiT3jvDv.js                                373.63 kB │ gzip: 109.97 kB
+dist/assets/index-DzptVcfq.js                                        832.32 kB │ gzip: 218.33 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 15.80s

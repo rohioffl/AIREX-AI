@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import structlog
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select, cast, Date
+from sqlalchemy import func, select, cast, Date, Float, Integer
 
 from app.api.dependencies import TenantId, TenantSession, RequireAdmin
 from airex_core.models.enums import IncidentState
@@ -67,7 +67,7 @@ async def get_analytics_trends(
             func.avg(
                 func.extract("epoch", Incident.updated_at - Incident.created_at)
             ).label("avg_mttr"),
-            func.count().label("count"),
+            func.count().label("incident_count"),
         )
         .where(
             Incident.tenant_id == tenant_id,
@@ -83,7 +83,7 @@ async def get_analytics_trends(
             MTTRTrendPoint(
                 date=str(row.date),
                 mttr_seconds=float(row.avg_mttr) if row.avg_mttr else None,
-                incident_count=int(row.count or 0),
+                incident_count=int(row.incident_count or 0),
             )
         )
 
@@ -94,7 +94,7 @@ async def get_analytics_trends(
             Incident.alert_type,
             func.count().label("total"),
             func.sum(
-                func.cast(Incident.state == IncidentState.RESOLVED, func.Integer)
+                cast(Incident.state == IncidentState.RESOLVED, Integer)
             ).label("resolved"),
         )
         .where(
@@ -122,9 +122,9 @@ async def get_analytics_trends(
         select(
             date_col,
             func.avg(
-                func.cast(Incident.meta["recommendation"]["confidence"], func.Float)
+                cast(Incident.meta["recommendation"]["confidence"], Float)
             ).label("avg_confidence"),
-            func.count().label("count"),
+            func.count().label("incident_count"),
         )
         .where(
             Incident.tenant_id == tenant_id,
@@ -141,7 +141,7 @@ async def get_analytics_trends(
             AIConfidenceTrendPoint(
                 date=str(row.date),
                 avg_confidence=float(row.avg_confidence) if row.avg_confidence else None,
-                incident_count=int(row.count or 0),
+                incident_count=int(row.incident_count or 0),
             )
         )
 

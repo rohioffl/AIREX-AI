@@ -1,0 +1,841 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/ubuntu/AIREX-AI/AIREX-AI/tests
+plugins: anyio-4.12.1, asyncio-0.26.0
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 574 items
+
+test_actions.py ......................................                   [  6%]
+test_api_routes.py .............F..................                      [ 12%]
+test_auth.py .............                                               [ 14%]
+test_auth_google_route.py .....                                          [ 15%]
+test_auth_mfa.py .................                                       [ 18%]
+test_chat.py ...............................                             [ 23%]
+test_chunker.py ..                                                       [ 24%]
+test_cloud.py ...............................                            [ 29%]
+test_correlation_service.py .............                                [ 31%]
+test_enhanced_recommendation.py .......................                  [ 35%]
+test_enums.py .........                                                  [ 37%]
+test_fallback_service.py .................                               [ 40%]
+test_generic_investigations.py ............                              [ 42%]
+test_health_check_service.py .......................................     [ 49%]
+test_incident_embedding_service.py ..                                    [ 49%]
+test_integration.py ........                                             [ 50%]
+test_investigation_healthcheck.py ..                                     [ 51%]
+test_investigations.py ...........                                       [ 53%]
+test_llm_client.py .....                                                 [ 54%]
+test_llm_prompts.py ............                                         [ 56%]
+test_new_probes.py .............................................         [ 63%]
+test_policy.py ..............................................            [ 71%]
+test_rag_context.py ...                                                  [ 72%]
+test_rejection.py ...                                                    [ 72%]
+test_resolution_service.py .......................                       [ 77%]
+test_runbook_generator.py ................                               [ 79%]
+test_schemas.py ..........                                               [ 81%]
+test_security.py .....                                                   [ 82%]
+test_site24x7.py ..................                                      [ 85%]
+test_ssh_user_resolver.py .......................................        [ 92%]
+test_state_machine.py F................                                  [ 95%]
+test_tenant_config.py ........F.............                             [ 99%]
+test_worker.py .....                                                     [100%]
+
+=================================== FAILURES ===================================
+___________ test_auth_me_returns_memberships_and_accessible_tenants ____________
+  + Exception Group Traceback (most recent call last):
+  |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_utils.py", line 81, in collapse_excgroups
+  |     yield
+  |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 192, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |   File "/home/ubuntu/.local/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 783, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/_pytest/runner.py", line 344, in from_call
+    |     result: TResult | None = func()
+    |                              ^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/_pytest/runner.py", line 246, in <lambda>
+    |     lambda: runtest_hook(item=item, **kwds), when=when, reraise=reraise
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+    |     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    |     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 167, in _multicall
+    |     raise exception
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/_pytest/logging.py", line 850, in pytest_runtest_call
+    |     yield
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/_pytest/capture.py", line 900, in pytest_runtest_call
+    |     return (yield)
+    |             ^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/_pytest/skipping.py", line 263, in pytest_runtest_call
+    |     return (yield)
+    |             ^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+    |     res = hook_impl.function(*args)
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/_pytest/runner.py", line 178, in pytest_runtest_call
+    |     item.runtest()
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pytest_asyncio/plugin.py", line 549, in runtest
+    |     super().runtest()
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/_pytest/python.py", line 1671, in runtest
+    |     self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+    |     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    |     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 167, in _multicall
+    |     raise exception
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 53, in run_old_style_hookwrapper
+    |     return result.get_result()
+    |            ^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_result.py", line 103, in get_result
+    |     raise exc.with_traceback(tb)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 38, in run_old_style_hookwrapper
+    |     res = yield
+    |           ^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+    |     res = hook_impl.function(*args)
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/_pytest/python.py", line 157, in pytest_pyfunc_call
+    |     result = testfunction(**testargs)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pytest_asyncio/plugin.py", line 1069, in inner
+    |     _loop.run_until_complete(task)
+    |   File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    |     return future.result()
+    |            ^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/AIREX-AI/AIREX-AI/tests/test_api_routes.py", line 304, in test_auth_me_returns_memberships_and_accessible_tenants
+    |     response = await client.get(
+    |                ^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1768, in get
+    |     return await self.request(
+    |            ^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1540, in request
+    |     return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1629, in send
+    |     response = await self._send_handling_auth(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    |     response = await self._send_handling_redirects(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    |     response = await self._send_single_request(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    |     response = await transport.handle_async_request(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_transports/asgi.py", line 170, in handle_async_request
+    |     await self.app(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/applications.py", line 1160, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/applications.py", line 107, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    |     raise exc
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |   File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    |     raise exc
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/AIREX-AI/AIREX-AI/services/airex-api/app/main.py", line 113, in correlation_id_middleware
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |   File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    |     raise exc
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/AIREX-AI/AIREX-AI/services/airex-api/app/main.py", line 93, in prometheus_middleware
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |   File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    |     raise exc
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/AIREX-AI/AIREX-AI/services/airex-core/airex_core/core/csrf.py", line 77, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/routing.py", line 716, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/routing.py", line 736, in app
+    |     await route.handle(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/routing.py", line 290, in handle
+    |     await self.app(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/routing.py", line 130, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/routing.py", line 116, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/routing.py", line 670, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/routing.py", line 324, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/AIREX-AI/AIREX-AI/services/airex-api/app/api/routes/auth.py", line 353, in auth_me
+    |     active_organization=OrganizationSummary(
+    |                         ^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/ubuntu/.local/lib/python3.12/site-packages/pydantic/main.py", line 250, in __init__
+    |     validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    | pydantic_core._pydantic_core.ValidationError: 3 validation errors for OrganizationSummary
+    | id
+    |   UUID input should be a string, bytes or UUID object [type=uuid_type, input_value=<MagicMock name='mock.one...d' id='140234288398208'>, input_type=MagicMock]
+    |     For further information visit https://errors.pydantic.dev/2.12/v/uuid_type
+    | name
+    |   Input should be a valid string [type=string_type, input_value=<MagicMock name='mock.one...e' id='140234288328544'>, input_type=MagicMock]
+    |     For further information visit https://errors.pydantic.dev/2.12/v/string_type
+    | slug
+    |   Input should be a valid string [type=string_type, input_value=<MagicMock name='mock.one...g' id='140234286884016'>, input_type=MagicMock]
+    |     For further information visit https://errors.pydantic.dev/2.12/v/string_type
+    +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/AIREX-AI/AIREX-AI/tests/test_api_routes.py", line 304, in test_auth_me_returns_memberships_and_accessible_tenants
+    response = await client.get(
+               ^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1768, in get
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/httpx/_transports/asgi.py", line 170, in handle_async_request
+    await self.app(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/AIREX-AI/AIREX-AI/services/airex-api/app/main.py", line 113, in correlation_id_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/AIREX-AI/AIREX-AI/services/airex-api/app/main.py", line 93, in prometheus_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/AIREX-AI/AIREX-AI/services/airex-core/airex_core/core/csrf.py", line 77, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/routing.py", line 670, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/fastapi/routing.py", line 324, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/AIREX-AI/AIREX-AI/services/airex-api/app/api/routes/auth.py", line 353, in auth_me
+    active_organization=OrganizationSummary(
+                        ^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pydantic/main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 3 validation errors for OrganizationSummary
+id
+  UUID input should be a string, bytes or UUID object [type=uuid_type, input_value=<MagicMock name='mock.one...d' id='140234288398208'>, input_type=MagicMock]
+    For further information visit https://errors.pydantic.dev/2.12/v/uuid_type
+name
+  Input should be a valid string [type=string_type, input_value=<MagicMock name='mock.one...e' id='140234288328544'>, input_type=MagicMock]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+slug
+  Input should be a valid string [type=string_type, input_value=<MagicMock name='mock.one...g' id='140234286884016'>, input_type=MagicMock]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+
+The above exception was the direct cause of the following exception:
+
+client = <httpx.AsyncClient object at 0x7f8ad6de6b10>
+mock_session = <AsyncMock id='140234286984432'>
+
+    @pytest.mark.asyncio
+    async def test_auth_me_returns_memberships_and_accessible_tenants(client, mock_session):
+        org_id = uuid.uuid4()
+        home_tenant_id = uuid.UUID(TENANT_ID)
+        sibling_tenant_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+    
+        token = create_access_token(
+            home_tenant_id,
+            "org-admin@example.com",
+            user_id=user_id,
+            role="org_admin",
+        )
+    
+        user_row = MagicMock()
+        user_row.scalar_one_or_none = MagicMock(
+            return_value=MagicMock(
+                id=user_id,
+                tenant_id=home_tenant_id,
+                email="org-admin@example.com",
+                display_name="Org Admin",
+                role="org_admin",
+                is_active=True,
+            )
+        )
+    
+        home_tenant_row = MagicMock()
+        home_tenant_row.scalar_one_or_none = MagicMock(
+            return_value=MagicMock(
+                id=home_tenant_id,
+                name="home-tenant",
+                display_name="Home Tenant",
+                organization_id=org_id,
+                organization_name="Ankercloud",
+                organization_slug="ankercloud",
+            )
+        )
+    
+        org_membership_rows = MagicMock()
+        org_membership_rows.all = MagicMock(
+            return_value=[
+                MagicMock(
+                    organization_id=org_id,
+                    role="org_admin",
+                    organization_name="Ankercloud",
+                    organization_slug="ankercloud",
+                )
+            ]
+        )
+    
+        tenant_membership_rows = MagicMock()
+        tenant_membership_rows.all = MagicMock(return_value=[])
+    
+        org_access_rows = MagicMock()
+        org_access_rows.all = MagicMock(
+            return_value=[
+                MagicMock(
+                    id=home_tenant_id,
+                    name="home-tenant",
+                    display_name="Home Tenant",
+                    organization_id=org_id,
+                    organization_name="Ankercloud",
+                    organization_slug="ankercloud",
+                ),
+                MagicMock(
+                    id=sibling_tenant_id,
+                    name="uno-secur",
+                    display_name="UnoSecur",
+                    organization_id=org_id,
+                    organization_name="Ankercloud",
+                    organization_slug="ankercloud",
+                ),
+            ]
+        )
+    
+        active_project_rows = MagicMock()
+        active_project_rows.all = MagicMock(
+            return_value=[
+                MagicMock(id=uuid.uuid4(), name="Project-1", slug="project-1"),
+                MagicMock(id=uuid.uuid4(), name="Project-2", slug="project-2"),
+            ]
+        )
+    
+        mock_session.execute = AsyncMock(
+            side_effect=[
+                user_row,
+                home_tenant_row,
+                org_membership_rows,
+                tenant_membership_rows,
+                org_access_rows,
+                active_project_rows,
+            ]
+        )
+    
+>       response = await client.get(
+            "/api/v1/auth/me",
+            headers={**HEADERS, "Authorization": f"Bearer {token}"},
+        )
+
+test_api_routes.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/lib/python3.12/site-packages/httpx/_client.py:1768: in get
+    return await self.request(
+../../../.local/lib/python3.12/site-packages/httpx/_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/lib/python3.12/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+../../../.local/lib/python3.12/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+../../../.local/lib/python3.12/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/lib/python3.12/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/lib/python3.12/site-packages/httpx/_transports/asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/starlette/applications.py:107: in __call__
+    await self.middleware_stack(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../../../.local/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:191: in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+/usr/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+../../../.local/lib/python3.12/site-packages/starlette/_utils.py:87: in collapse_excgroups
+    raise exc
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../services/airex-api/app/main.py:113: in correlation_id_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:191: in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+/usr/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+../../../.local/lib/python3.12/site-packages/starlette/_utils.py:87: in collapse_excgroups
+    raise exc
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../services/airex-api/app/main.py:93: in prometheus_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:191: in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+/usr/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+../../../.local/lib/python3.12/site-packages/starlette/_utils.py:87: in collapse_excgroups
+    raise exc
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../services/airex-core/airex_core/core/csrf.py:77: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../../../.local/lib/python3.12/site-packages/starlette/middleware/base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../../../.local/lib/python3.12/site-packages/starlette/middleware/cors.py:87: in __call__
+    await self.app(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../../../.local/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../../../.local/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/starlette/routing.py:716: in __call__
+    await self.middleware_stack(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/starlette/routing.py:736: in app
+    await route.handle(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/starlette/routing.py:290: in handle
+    await self.app(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../../../.local/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../../../.local/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../../../.local/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../../../.local/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../../../.local/lib/python3.12/site-packages/fastapi/routing.py:324: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+current_user = TokenData(tenant_id=UUID('00000000-0000-0000-0000-000000000000'), sub='org-admin@example.com', user_id=UUID('4e86519e-8129-49ef-a214-04b2b8abb391'), role='org_admin')
+session = <AsyncMock id='140234286984432'>, x_active_tenant_id = None
+x_tenant_id = '00000000-0000-0000-0000-000000000000'
+
+    @router.get("/me", response_model=AuthMeResponse)
+    async def auth_me(
+        current_user=Depends(get_current_user),
+        session: AsyncSession = Depends(get_auth_session),
+        x_active_tenant_id: str | None = Header(None, alias="X-Active-Tenant-Id"),
+        x_tenant_id: str | None = Header(None, alias="X-Tenant-Id"),
+    ) -> AuthMeResponse:
+        """Return the authenticated user's active SaaS context and memberships."""
+        if current_user is None or current_user.user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+            )
+    
+        active_tenant_id = await resolve_active_tenant_id(
+            session=session,
+            current_user=current_user,
+            active_tenant_id=x_active_tenant_id or x_tenant_id,
+        )
+    
+        user_result = await session.execute(select(User).where(User.id == current_user.user_id))
+        user = user_result.scalar_one_or_none()
+        if user is None or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found or disabled",
+            )
+    
+        active_tenant_result = await session.execute(
+            select(
+                Tenant.id,
+                Tenant.name,
+                Tenant.display_name,
+                Tenant.organization_id,
+                Organization.name.label("organization_name"),
+                Organization.slug.label("organization_slug"),
+            )
+            .join(Organization, Organization.id == Tenant.organization_id)
+            .where(Tenant.id == active_tenant_id)
+        )
+        active_tenant = active_tenant_result.one_or_none()
+        if active_tenant is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+    
+        org_membership_result = await session.execute(
+            select(
+                OrganizationMembership.organization_id,
+                OrganizationMembership.role,
+                Organization.name.label("organization_name"),
+                Organization.slug.label("organization_slug"),
+            )
+            .join(Organization, Organization.id == OrganizationMembership.organization_id)
+            .where(OrganizationMembership.user_id == current_user.user_id)
+        )
+        organization_memberships = [
+            OrganizationSummary(
+                id=row.organization_id,
+                name=row.organization_name,
+                slug=row.organization_slug,
+                role=row.role,
+            )
+            for row in org_membership_result.all()
+        ]
+    
+        tenant_membership_result = await session.execute(
+            select(
+                TenantMembership.tenant_id,
+                TenantMembership.role,
+                Tenant.name,
+                Tenant.display_name,
+                Tenant.organization_id,
+                Organization.name.label("organization_name"),
+                Organization.slug.label("organization_slug"),
+            )
+            .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+            .join(Organization, Organization.id == Tenant.organization_id)
+            .where(TenantMembership.user_id == current_user.user_id)
+        )
+        tenant_memberships = [
+            TenantSummary(
+                id=row.tenant_id,
+                name=_row_str(row, "name"),
+                display_name=_row_str(row, "display_name"),
+                organization_id=row.organization_id,
+                organization_name=_row_optional_str(row, "organization_name"),
+                organization_slug=_row_optional_str(row, "organization_slug"),
+                role=_row_str(row, "role"),
+            )
+            for row in tenant_membership_result.all()
+        ]
+    
+        if organization_memberships:
+            accessible_tenant_query = (
+                select(
+                    Tenant.id,
+                    Tenant.name,
+                    Tenant.display_name,
+                    Tenant.organization_id,
+                    Organization.name.label("organization_name"),
+                    Organization.slug.label("organization_slug"),
+                )
+                .join(Organization, Organization.id == Tenant.organization_id)
+                .where(Tenant.organization_id == active_tenant.organization_id)
+                .order_by(Tenant.display_name.asc())
+            )
+        else:
+            accessible_tenant_query = (
+                select(
+                    Tenant.id,
+                    Tenant.name,
+                    Tenant.display_name,
+                    Tenant.organization_id,
+                    Organization.name.label("organization_name"),
+                    Organization.slug.label("organization_slug"),
+                )
+                .join(Organization, Organization.id == Tenant.organization_id)
+                .join(TenantMembership, TenantMembership.tenant_id == Tenant.id)
+                .where(TenantMembership.user_id == current_user.user_id)
+                .order_by(Tenant.display_name.asc())
+            )
+    
+        accessible_tenants_result = await session.execute(accessible_tenant_query)
+        accessible_tenants = [
+            TenantSummary(
+                id=row.id,
+                name=_row_str(row, "name"),
+                display_name=_row_str(row, "display_name"),
+                organization_id=row.organization_id,
+                organization_name=_row_optional_str(row, "organization_name"),
+                organization_slug=_row_optional_str(row, "organization_slug"),
+            )
+            for row in accessible_tenants_result.all()
+        ]
+    
+        project_result = await session.execute(
+            select(Project.id, Project.name, Project.slug)
+            .where(Project.tenant_id == active_tenant_id, Project.is_active.is_(True))
+            .order_by(Project.name.asc())
+        )
+        projects = [
+            ProjectSummary(
+                id=row.id,
+                name=_row_str(row, "name"),
+                slug=_row_str(row, "slug"),
+            )
+            for row in project_result.all()
+        ]
+    
+        return AuthMeResponse(
+            user=UserResponse(
+                id=user.id,
+                tenant_id=user.tenant_id,
+                email=user.email,
+                display_name=user.display_name,
+                role=user.role,
+                is_active=user.is_active,
+                created_at=getattr(user, "created_at", None),
+                updated_at=getattr(user, "updated_at", None),
+            ),
+>           active_organization=OrganizationSummary(
+                id=active_tenant.organization_id,
+                name=active_tenant.organization_name,
+                slug=active_tenant.organization_slug,
+                role=organization_memberships[0].role if organization_memberships else "tenant_member",
+            ),
+            active_tenant=TenantSummary(
+                id=active_tenant.id,
+                name=_row_str(active_tenant, "name"),
+                display_name=_row_str(active_tenant, "display_name"),
+                organization_id=active_tenant.organization_id,
+                organization_name=_row_optional_str(active_tenant, "organization_name"),
+                organization_slug=_row_optional_str(active_tenant, "organization_slug"),
+                role=user.role,
+            ),
+            organization_memberships=organization_memberships,
+            tenant_memberships=tenant_memberships,
+            tenants=accessible_tenants,
+            projects=projects,
+        )
+E       pydantic_core._pydantic_core.ValidationError: 3 validation errors for OrganizationSummary
+E       id
+E         UUID input should be a string, bytes or UUID object [type=uuid_type, input_value=<MagicMock name='mock.one...d' id='140234288398208'>, input_type=MagicMock]
+E           For further information visit https://errors.pydantic.dev/2.12/v/uuid_type
+E       name
+E         Input should be a valid string [type=string_type, input_value=<MagicMock name='mock.one...e' id='140234288328544'>, input_type=MagicMock]
+E           For further information visit https://errors.pydantic.dev/2.12/v/string_type
+E       slug
+E         Input should be a valid string [type=string_type, input_value=<MagicMock name='mock.one...g' id='140234286884016'>, input_type=MagicMock]
+E           For further information visit https://errors.pydantic.dev/2.12/v/string_type
+
+../services/airex-api/app/api/routes/auth.py:353: ValidationError
+_______ TestAllowedTransitions.test_received_only_goes_to_investigating ________
+
+self = <tests.test_state_machine.TestAllowedTransitions object at 0x7f8ad7153170>
+
+    def test_received_only_goes_to_investigating(self):
+>       assert ALLOWED_TRANSITIONS[IncidentState.RECEIVED] == [
+            IncidentState.INVESTIGATING
+        ]
+E       AssertionError: assert [<IncidentSta...: 'REJECTED'>] == [<IncidentSta...VESTIGATING'>]
+E         
+E         Left contains one more item: <IncidentState.REJECTED: 'REJECTED'>
+E         Use -v to get more diff
+
+test_state_machine.py:25: AssertionError
+____ TestTenantConfigLoader.test_missing_db_driver_is_not_silently_ignored _____
+
+self = <tests.test_tenant_config.TestTenantConfigLoader object at 0x7f8ad6f76570>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f8accf06780>
+
+    def test_missing_db_driver_is_not_silently_ignored(self, monkeypatch):
+        original_import = builtins.__import__
+    
+        def fake_import(name, *args, **kwargs):
+            if name == "asyncpg":
+                raise ModuleNotFoundError("asyncpg missing")
+            return original_import(name, *args, **kwargs)
+    
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+    
+>       with pytest.raises(ModuleNotFoundError):
+E       Failed: DID NOT RAISE <class 'ModuleNotFoundError'>
+
+test_tenant_config.py:143: Failed
+----------------------------- Captured stdout call -----------------------------
+[2m2026-03-17T00:41:49.755902Z[0m [[33m[1mwarning  [0m] [1mtenant_config_db_driver_missing[0m [[0m[1m[34mairex_core.cloud.tenant_config[0m][0m [36mcorrelation_id[0m=[35mNone[0m [36merror[0m=[35m'asyncpg missing'[0m [36merror_type[0m=[35mModuleNotFoundError[0m [36mincident_id[0m=[35mNone[0m [36mmsg[0m=[35m'falling back to YAML'[0m [36mtenant_id[0m=[35mNone[0m
+------------------------------ Captured log call -------------------------------
+WARNING  airex_core.cloud.tenant_config:tenant_config.py:286 {'error': 'asyncpg missing', 'error_type': 'ModuleNotFoundError', 'msg': 'falling back to YAML', 'event': 'tenant_config_db_driver_missing', 'correlation_id': None, 'tenant_id': None, 'incident_id': None, 'logger': 'airex_core.cloud.tenant_config', 'level': 'warning', 'timestamp': '2026-03-17T00:41:49.755902Z'}
+=============================== warnings summary ===============================
+../../../.local/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /home/ubuntu/.local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+test_cloud.py::TestCloudInvestigationPlugin::test_aws_dispatch_calls_ssm
+test_cloud.py::TestCloudInvestigationPlugin::test_aws_fallback_to_ec2_instance_connect_when_ssm_fails
+  /usr/lib/python3/dist-packages/botocore/auth.py:419: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    datetime_now = datetime.datetime.utcnow()
+
+test_cloud.py::TestCloudInvestigationPlugin::test_gcp_dispatch_calls_ssh
+test_cloud.py::TestCloudInvestigationPlugin::test_gcp_resolves_ip_when_only_instance_given
+  /home/ubuntu/.local/lib/python3.12/site-packages/google/auth/_default.py:114: UserWarning: Your application has authenticated using end user credentials from Google Cloud SDK without a quota project. You might receive a "quota exceeded" or "API not enabled" error. See the following page for troubleshooting: https://cloud.google.com/docs/authentication/adc-troubleshooting/user-creds. 
+    warnings.warn(_CLOUD_SDK_CREDENTIALS_WARNING)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test_api_routes.py::test_auth_me_returns_memberships_and_accessible_tenants
+FAILED test_state_machine.py::TestAllowedTransitions::test_received_only_goes_to_investigating
+FAILED test_tenant_config.py::TestTenantConfigLoader::test_missing_db_driver_is_not_silently_ignored
+============= 3 failed, 571 passed, 5 warnings in 61.51s (0:01:01) =============

@@ -8,12 +8,17 @@ from typing import Annotated, TypeAlias
 
 import redis.asyncio as aioredis
 from fastapi import Depends, Header, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airex_core.core.config import settings
-from airex_core.core.database import get_tenant_session
-from airex_core.core.rbac import Permission, has_any_permission
+from airex_core.core.database import async_session_factory, get_tenant_session
+from airex_core.core.rbac import Permission, has_any_permission, normalize_role_name
 from airex_core.core.security import TokenData, decode_access_token
+from airex_core.models.monitoring_integration import MonitoringIntegration
+from airex_core.models.organization_membership import OrganizationMembership
+from airex_core.models.tenant import Tenant
+from airex_core.models.tenant_membership import TenantMembership
 
 
 AUTH_ERROR_DETAIL = "Invalid or expired token"
@@ -29,11 +34,6 @@ def _decode_bearer_token_or_401(token: str) -> TokenData:
         ) from exc
 
 
-async def get_tenant_id() -> uuid.UUID:
-    """Single-tenant mode: always use the primary DEV tenant ID."""
-    return uuid.UUID(settings.DEV_TENANT_ID)
-
-
 async def get_current_user(
     authorization: str | None = Header(None),
 ) -> TokenData | None:
@@ -45,6 +45,231 @@ async def get_current_user(
         token = authorization[len("Bearer ") :]
         return _decode_bearer_token_or_401(token)
     return None
+
+
+async def get_auth_session() -> AsyncGenerator[AsyncSession, None]:
+    """Yield a non-RLS session for auth/bootstrap and membership checks."""
+    async with async_session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def resolve_active_tenant_id(
+    session: AsyncSession,
+    current_user: TokenData | None,
+    active_tenant_id: str | None,
+) -> uuid.UUID:
+    """Resolve the effective tenant for the current request."""
+    try:
+        parsed_active_tenant_id = uuid.UUID(active_tenant_id) if active_tenant_id else None
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid active tenant identifier",
+        ) from exc
+
+    if current_user is None:
+        if parsed_active_tenant_id:
+            return parsed_active_tenant_id
+        return uuid.UUID(settings.DEV_TENANT_ID)
+
+    requested_tenant_id = parsed_active_tenant_id or current_user.tenant_id
+    if requested_tenant_id == current_user.tenant_id:
+        return requested_tenant_id
+
+    tenant_result = await session.execute(
+        select(Tenant.id, Tenant.organization_id, Tenant.is_active).where(Tenant.id == requested_tenant_id)
+    )
+    tenant_row = tenant_result.first()
+    if tenant_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    organization_id = tenant_row.organization_id
+    is_active = tenant_row.is_active
+    if not is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant is inactive")
+
+    if organization_id is not None:
+        org_membership_result = await session.execute(
+            select(OrganizationMembership.role).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == current_user.user_id,
+            )
+        )
+        if org_membership_result.scalar_one_or_none() is not None:
+            return requested_tenant_id
+
+    tenant_membership_result = await session.execute(
+        select(TenantMembership.role).where(
+            TenantMembership.tenant_id == requested_tenant_id,
+            TenantMembership.user_id == current_user.user_id,
+        )
+    )
+    if tenant_membership_result.scalar_one_or_none() is not None:
+        return requested_tenant_id
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not authorized to access requested tenant",
+    )
+
+
+def require_authenticated_user(current_user: TokenData | None) -> TokenData:
+    """Require a decoded access token for SaaS-protected routes."""
+    if current_user is None or current_user.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    return current_user
+
+
+async def get_authenticated_user(
+    current_user: TokenData | None = Depends(get_current_user),
+) -> TokenData:
+    """Dependency wrapper requiring an authenticated user."""
+    return require_authenticated_user(current_user)
+
+
+async def get_home_organization_id(
+    session: AsyncSession,
+    current_user: TokenData,
+) -> uuid.UUID | None:
+    """Return the organization that owns the user's home tenant."""
+    result = await session.execute(
+        select(Tenant.organization_id).where(Tenant.id == current_user.tenant_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def has_org_membership(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    organization_id: uuid.UUID,
+) -> bool:
+    """Return True if the user is a member of the organization."""
+    result = await session.execute(
+        select(OrganizationMembership.role).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user_id,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def has_org_admin_membership(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    organization_id: uuid.UUID,
+) -> bool:
+    """Return True if the user has admin rights on the organization."""
+    result = await session.execute(
+        select(OrganizationMembership.role).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user_id,
+        )
+    )
+    role = result.scalar_one_or_none()
+    return role is not None and normalize_role_name(str(role)) in ("admin", "platform_admin")
+
+
+async def has_tenant_membership(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+) -> bool:
+    """Return True if the user has any membership on the tenant."""
+    result = await session.execute(
+        select(TenantMembership.role).where(
+            TenantMembership.tenant_id == tenant_id,
+            TenantMembership.user_id == user_id,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def authorize_org_access(
+    session: AsyncSession,
+    current_user: TokenData,
+    organization_id: uuid.UUID,
+) -> bool:
+    """Check if the user can access the organization."""
+    if current_user.role.lower() == "platform_admin":
+        return True
+
+    home_org_id = await get_home_organization_id(session, current_user)
+    if home_org_id == organization_id:
+        return True
+
+    return await has_org_membership(
+        session, user_id=current_user.user_id, organization_id=organization_id
+    )
+
+
+async def authorize_org_admin(
+    session: AsyncSession,
+    current_user: TokenData,
+    organization_id: uuid.UUID,
+) -> bool:
+    """Check if the user has admin rights for the organization."""
+    if normalize_role_name(current_user.role) in ("admin", "platform_admin"):
+        if current_user.role.lower() == "platform_admin":
+            return True
+        home_org_id = await get_home_organization_id(session, current_user)
+        if home_org_id == organization_id:
+            return True
+
+    return await has_org_admin_membership(
+        session, user_id=current_user.user_id, organization_id=organization_id
+    )
+
+
+async def authorize_tenant_access(
+    session: AsyncSession,
+    current_user: TokenData,
+    tenant_id: uuid.UUID,
+) -> bool:
+    """Check if the user can access the tenant."""
+    try:
+        resolved = await resolve_active_tenant_id(
+            session=session,
+            current_user=current_user,
+            active_tenant_id=str(tenant_id),
+        )
+    except HTTPException as exc:
+        if exc.status_code in {status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND}:
+            return False
+        raise
+    return resolved == tenant_id
+
+
+async def authorize_tenant_admin(
+    session: AsyncSession,
+    current_user: TokenData,
+    tenant_id: uuid.UUID,
+) -> bool:
+    """Check if the user has admin rights for the tenant."""
+    normalized = normalize_role_name(current_user.role)
+    if normalized == "platform_admin":
+        return True
+    if normalized != "admin":
+        result = await session.execute(
+            select(TenantMembership.role).where(
+                TenantMembership.tenant_id == tenant_id,
+                TenantMembership.user_id == current_user.user_id,
+            )
+        )
+        role = result.scalar_one_or_none()
+        return role is not None and normalize_role_name(str(role)) == "admin"
+
+    return await authorize_tenant_access(session, current_user, tenant_id)
 
 
 def require_role(*allowed_roles: str):
@@ -64,9 +289,8 @@ def require_role(*allowed_roles: str):
         token = authorization[len("Bearer ") :]
         data = _decode_bearer_token_or_401(token)
 
-        # Normalize role names (case-insensitive)
-        user_role = data.role.lower()
-        allowed_normalized = [r.lower() for r in allowed_roles]
+        user_role = normalize_role_name(data.role)
+        allowed_normalized = [normalize_role_name(r) for r in allowed_roles]
 
         if user_role not in allowed_normalized:
             raise HTTPException(
@@ -104,17 +328,50 @@ def require_permission(*permissions: Permission):
     return _check
 
 
+async def get_redis(request: Request) -> aioredis.Redis:
+    """Return the shared Redis connection from app state."""
+    return request.app.state.redis
+
+
+async def get_tenant_id(
+    current_user: TokenData | None = Depends(get_current_user),
+    session: AsyncSession = Depends(get_auth_session),
+    x_active_tenant_id: str | None = Header(None, alias="X-Active-Tenant-Id"),
+    x_tenant_id: str | None = Header(None, alias="X-Tenant-Id"),
+    integration_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    """Resolve the active tenant using auth context and optional tenant headers."""
+    if integration_id is not None and current_user is None:
+        integration_result = await session.execute(
+            select(MonitoringIntegration.tenant_id, MonitoringIntegration.enabled).where(
+                MonitoringIntegration.id == integration_id
+            )
+        )
+        integration = integration_result.one_or_none()
+        if integration is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+        tenant_id, enabled = integration
+        if not enabled:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Integration is disabled",
+            )
+        return tenant_id
+
+    requested_tenant_id = x_active_tenant_id or x_tenant_id
+    return await resolve_active_tenant_id(
+        session=session,
+        current_user=current_user,
+        active_tenant_id=requested_tenant_id,
+    )
+
+
 async def get_db_session(
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yield a tenant-scoped async DB session."""
     async with get_tenant_session(tenant_id) as session:
         yield session
-
-
-async def get_redis(request: Request) -> aioredis.Redis:
-    """Return the shared Redis connection from app state."""
-    return request.app.state.redis
 
 
 # Type aliases for cleaner route signatures
@@ -132,3 +389,24 @@ RequireViewer: TypeAlias = Annotated[None, Depends(require_role("viewer", "opera
 def RequirePermission(*permissions: Permission):
     """Create a type alias for permission-based access control."""
     return Annotated[None, Depends(require_permission(*permissions))]
+
+
+def require_platform_admin():
+    """Dependency factory that enforces platform_admin role."""
+
+    async def _check(
+        current_user: TokenData | None = Depends(get_current_user),
+    ) -> None:
+        if current_user is None:
+            # Allow dev mode without auth
+            return
+        if normalize_role_name(current_user.role) != "platform_admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Platform admin access required",
+            )
+
+    return _check
+
+
+RequirePlatformAdmin: TypeAlias = Annotated[None, Depends(require_platform_admin())]
