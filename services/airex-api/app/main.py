@@ -28,6 +28,7 @@ from app.api.routes import (
     projects,
     reports,
     root_causes,
+    runbook_executions,
     runbooks,
     settings as settings_router,
     site24x7,
@@ -255,6 +256,11 @@ app.include_router(
     runbooks.router,
     prefix=f"{settings.API_V1_STR}/runbooks",
     tags=["runbooks"],
+)
+app.include_router(
+    runbook_executions.router,
+    prefix=f"{settings.API_V1_STR}/runbook-executions",
+    tags=["runbook-executions"],
 )
 app.include_router(
     root_causes.router,

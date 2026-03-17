@@ -665,6 +665,48 @@ export async function duplicateRunbook(runbookId) {
   return res.data
 }
 
+export async function fetchRunbookVersions(runbookId) {
+  const res = await api.get(`/runbooks/${runbookId}/versions`)
+  return res.data
+}
+
+// Runbook Executions
+export async function startRunbookExecution(incidentId, runbookId) {
+  const res = await api.post(`/incidents/${incidentId}/run-runbook`, { runbook_id: runbookId })
+  return res.data
+}
+
+export async function getRunbookExecution(incidentId) {
+  const res = await api.get(`/incidents/${incidentId}/runbook-execution`)
+  return res.data
+}
+
+export async function getRunbookExecutionById(executionId) {
+  const res = await api.get(`/runbook-executions/${executionId}`)
+  return res.data
+}
+
+export async function completeRunbookStep(executionId, stepOrder, notes = null) {
+  const res = await api.post(
+    `/runbook-executions/${executionId}/steps/${stepOrder}/complete`,
+    { notes }
+  )
+  return res.data
+}
+
+export async function skipRunbookStep(executionId, stepOrder, notes = null) {
+  const res = await api.post(
+    `/runbook-executions/${executionId}/steps/${stepOrder}/skip`,
+    { notes }
+  )
+  return res.data
+}
+
+export async function abandonRunbookExecution(executionId) {
+  const res = await api.post(`/runbook-executions/${executionId}/abandon`)
+  return res.data
+}
+
 // Grafana Dashboards
 export async function fetchGrafanaTemplates(category = null) {
   const params = category ? { category } : {}
@@ -681,6 +723,31 @@ export async function fetchNotificationPreferences() {
 
 export async function updateNotificationPreferences(data) {
   const res = await api.put('/notification-preferences/me', data)
+  return res.data
+}
+
+export async function testNotification() {
+  const res = await api.post('/notification-preferences/me/test')
+  return res.data
+}
+
+export async function fetchDeliveryLog(limit = 20) {
+  const res = await api.get('/notification-preferences/me/delivery-log', { params: { limit } })
+  return res.data
+}
+
+export async function fetchWebhookEvents(integrationId, limit = 50) {
+  const res = await api.get(`/integrations/${integrationId}/webhook-events`, { params: { limit } })
+  return res.data
+}
+
+export async function replayWebhookEvent(integrationId, eventId) {
+  const res = await api.post(`/integrations/${integrationId}/webhook-events/${eventId}/replay`)
+  return res.data
+}
+
+export async function rotateIntegrationSecret(integrationId) {
+  const res = await api.post(`/integrations/${integrationId}/rotate-secret`)
   return res.data
 }
 

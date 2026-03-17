@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Edit, Trash2, Copy, ChevronDown, ChevronUp, GripVertical, Play, Pause, AlertTriangle, Terminal, Globe, Bell, GitBranch } from 'lucide-react'
-import { fetchRunbooks, createRunbook, updateRunbook, deleteRunbook, duplicateRunbook } from '../services/api'
+import { Plus, Edit, Trash2, Copy, ChevronDown, ChevronUp, GripVertical, Play, Pause, AlertTriangle, Terminal, Globe, Bell, GitBranch, History, X } from 'lucide-react'
+import { fetchRunbooks, createRunbook, updateRunbook, deleteRunbook, duplicateRunbook, fetchRunbookVersions } from '../services/api'
 import { useToasts } from '../context/ToastContext'
 
 const ACTION_TYPES = [
@@ -243,10 +243,103 @@ function RunbookEditor({ runbook, onSave, onCancel }) {
   )
 }
 
+function RunbookVersionsPanel({ runbook, onClose }) {
+  const [versions, setVersions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [expanded, setExpanded] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    fetchRunbookVersions(runbook.id)
+      .then((data) => {
+        if (!cancelled) setVersions(data.versions || [])
+      })
+      .catch(() => {
+        if (!cancelled) setError('Failed to load version history')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [runbook.id])
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div className="flex-1 bg-black/50" onClick={onClose} />
+      {/* Panel */}
+      <div className="w-full max-w-lg bg-[var(--color-bg,#0f1117)] border-l border-border flex flex-col h-full overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <h2 className="text-lg font-semibold text-heading">Version History</h2>
+            <p className="text-xs text-muted mt-0.5 truncate">{runbook.name}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-elevated transition-colors text-muted hover:text-primary">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {loading && (
+            <div className="flex justify-center py-10">
+              <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          {error && <p className="text-red-400 text-sm text-center py-6">{error}</p>}
+          {!loading && !error && versions.length === 0 && (
+            <p className="text-muted text-sm text-center py-10">No version snapshots yet. Snapshots are created when a runbook is edited.</p>
+          )}
+          {versions.map((v) => (
+            <div key={v.id} className="glass rounded-xl overflow-hidden">
+              <button
+                onClick={() => setExpanded(expanded === v.id ? null : v.id)}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-elevated/40 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 text-xs font-semibold">v{v.version}</span>
+                  <span className="text-sm text-secondary">{(v.steps || []).length} steps</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {v.updated_at && (
+                    <span className="text-xs text-muted">{new Date(v.updated_at).toLocaleString()}</span>
+                  )}
+                  {expanded === v.id ? <ChevronUp className="w-4 h-4 text-muted" /> : <ChevronDown className="w-4 h-4 text-muted" />}
+                </div>
+              </button>
+              {expanded === v.id && (
+                <div className="px-4 pb-4 border-t border-border space-y-2 pt-3">
+                  {(v.steps || []).length === 0 && (
+                    <p className="text-muted text-xs">No steps in this snapshot.</p>
+                  )}
+                  {(v.steps || []).map((step, idx) => {
+                    const at = ACTION_TYPES.find(a => a.value === step.action_type) || ACTION_TYPES[0]
+                    return (
+                      <div key={idx} className="flex items-center gap-2 text-sm">
+                        <span className="text-muted font-mono text-xs w-5 shrink-0">{idx + 1}.</span>
+                        <span className="text-base leading-none">{at.icon}</span>
+                        <span className="text-secondary">{step.title || `Step ${idx + 1}`}</span>
+                        <span className="text-xs text-muted ml-auto">{at.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function RunbooksPage() {
   const [runbooks, setRunbooks] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null) // null | 'new' | runbook object
+  const [versionsRunbook, setVersionsRunbook] = useState(null)
   const [filterActive, setFilterActive] = useState(false)
   const { addToast } = useToasts()
 
@@ -382,6 +475,9 @@ export default function RunbooksPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button onClick={() => setVersionsRunbook(rb)} className="p-2 rounded-lg hover:bg-elevated transition-colors text-muted hover:text-primary" title="Version history">
+                    <History className="w-4 h-4" />
+                  </button>
                   <button onClick={() => setEditing(rb)} className="p-2 rounded-lg hover:bg-elevated transition-colors text-muted hover:text-primary" title="Edit">
                     <Edit className="w-4 h-4" />
                   </button>
@@ -414,6 +510,10 @@ export default function RunbooksPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {versionsRunbook && (
+        <RunbookVersionsPanel runbook={versionsRunbook} onClose={() => setVersionsRunbook(null)} />
       )}
     </div>
   )

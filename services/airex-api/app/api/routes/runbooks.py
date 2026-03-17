@@ -16,6 +16,7 @@ from sqlalchemy import select
 from app.api.dependencies import CurrentUser, TenantId, TenantSession, require_permission
 from airex_core.core.rbac import Permission
 from airex_core.models.runbook import Runbook
+from airex_core.models.runbook_execution import RunbookVersion
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -184,6 +185,18 @@ async def update_runbook(
     if not runbook:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Runbook not found")
 
+    # Snapshot current state before applying changes
+    snapshot = RunbookVersion(
+        tenant_id=tenant_id,
+        id=uuid.uuid4(),
+        runbook_id=runbook.id,
+        version=runbook.version,
+        steps=runbook.steps,
+        updated_by=runbook.updated_by,
+        updated_at=runbook.updated_at or datetime.now(timezone.utc),
+    )
+    session.add(snapshot)
+
     update_data = body.model_dump(exclude_unset=True)
     if "steps" in update_data and body.steps is not None:
         update_data["steps"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in body.steps]
@@ -258,3 +271,46 @@ async def duplicate_runbook(
     await session.flush()
     logger.info("runbook_duplicated", original_id=str(runbook_id), new_id=str(duplicate.id))
     return _to_response(duplicate)
+
+
+@router.get("/{runbook_id}/versions")
+async def list_runbook_versions(
+    runbook_id: uuid.UUID,
+    tenant_id: TenantId,
+    session: TenantSession,
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
+):
+    """Return all version snapshots for a runbook, newest first."""
+    result = await session.execute(
+        select(Runbook).where(
+            Runbook.tenant_id == tenant_id,
+            Runbook.id == runbook_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Runbook not found")
+
+    v_result = await session.execute(
+        select(RunbookVersion)
+        .where(
+            RunbookVersion.tenant_id == tenant_id,
+            RunbookVersion.runbook_id == runbook_id,
+        )
+        .order_by(RunbookVersion.version.desc())
+    )
+    versions = v_result.scalars().all()
+    return {
+        "versions": [
+            {
+                "id": str(v.id),
+                "runbook_id": str(v.runbook_id),
+                "version": v.version,
+                "steps": v.steps if isinstance(v.steps, list) else [],
+                "updated_by": str(v.updated_by) if v.updated_by else None,
+                "updated_at": v.updated_at.isoformat() if v.updated_at else "",
+            }
+            for v in versions
+        ],
+        "total": len(list(versions)),
+    }

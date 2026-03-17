@@ -21,7 +21,9 @@ from app.api.dependencies import (
     RequireOperator,
     TenantId,
     TenantSession,
+    require_permission,
 )
+from airex_core.core.rbac import Permission
 from airex_core.core.rate_limit import approval_rate_limit
 from airex_core.core.config import settings
 from airex_core.core.state_machine import IllegalStateTransition, transition_state
@@ -32,6 +34,8 @@ from airex_core.models.feedback_learning import FeedbackLearning
 from airex_core.models.incident import Incident
 from airex_core.models.incident_template import IncidentTemplate
 from airex_core.models.related_incident import RelatedIncident
+from airex_core.models.runbook import Runbook
+from airex_core.models.runbook_execution import RunbookExecution, RunbookStepExecution
 from airex_core.schemas.incident import (
     ApproveRequest,
     CorrelatedIncidentItem,
@@ -1689,3 +1693,175 @@ async def unlink_incident(
         related_incident_id=str(related_incident_id),
         user_id=str(current_user.user_id) if current_user else None,
     )
+
+
+# ── Runbook Execution ─────────────────────────────────────────────────────────
+
+
+class RunRunbookRequest(BaseModel):
+    runbook_id: uuid.UUID
+
+
+@router.post("/{incident_id:uuid}/run-runbook", status_code=status.HTTP_201_CREATED)
+async def run_runbook(
+    incident_id: uuid.UUID,
+    body: RunRunbookRequest,
+    tenant_id: TenantId,
+    session: TenantSession,
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_APPROVE)),
+):
+    """Start a runbook execution for an incident."""
+    # Verify incident exists
+    inc_result = await session.execute(
+        select(Incident).where(
+            Incident.tenant_id == tenant_id,
+            Incident.id == incident_id,
+        )
+    )
+    if not inc_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+
+    # Verify no active execution already running for this incident
+    active_result = await session.execute(
+        select(RunbookExecution).where(
+            RunbookExecution.tenant_id == tenant_id,
+            RunbookExecution.incident_id == incident_id,
+            RunbookExecution.status == "in_progress",
+        )
+    )
+    if active_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An active runbook execution already exists for this incident",
+        )
+
+    # Load the runbook
+    rb_result = await session.execute(
+        select(Runbook).where(
+            Runbook.tenant_id == tenant_id,
+            Runbook.id == body.runbook_id,
+        )
+    )
+    runbook = rb_result.scalar_one_or_none()
+    if not runbook:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Runbook not found")
+
+    steps_snapshot = runbook.steps if isinstance(runbook.steps, list) else []
+
+    execution = RunbookExecution(
+        tenant_id=tenant_id,
+        id=uuid.uuid4(),
+        runbook_id=runbook.id,
+        runbook_version=runbook.version,
+        runbook_steps_snapshot=steps_snapshot,
+        incident_id=incident_id,
+        status="in_progress",
+        started_by=current_user.user_id if current_user else None,
+        started_at=datetime.now(timezone.utc),
+    )
+    session.add(execution)
+
+    # Create a RunbookStepExecution row per step
+    for step_data in steps_snapshot:
+        order = step_data.get("order", 0) if isinstance(step_data, dict) else 0
+        title = step_data.get("title", "") if isinstance(step_data, dict) else ""
+        action_type = step_data.get("action_type", "manual") if isinstance(step_data, dict) else "manual"
+        step_exec = RunbookStepExecution(
+            tenant_id=tenant_id,
+            id=uuid.uuid4(),
+            execution_id=execution.id,
+            step_order=order,
+            step_title=title,
+            step_action_type=action_type,
+            status="pending",
+        )
+        session.add(step_exec)
+
+    await session.flush()
+
+    logger.info(
+        "runbook_execution_started",
+        tenant_id=str(tenant_id),
+        incident_id=str(incident_id),
+        execution_id=str(execution.id),
+        runbook_id=str(runbook.id),
+        version=runbook.version,
+    )
+
+    return {
+        "execution_id": str(execution.id),
+        "runbook_id": str(runbook.id),
+        "runbook_version": runbook.version,
+        "incident_id": str(incident_id),
+        "status": execution.status,
+        "step_count": len(steps_snapshot),
+        "started_at": execution.started_at.isoformat(),
+    }
+
+
+@router.get("/{incident_id:uuid}/runbook-execution")
+async def get_incident_runbook_execution(
+    incident_id: uuid.UUID,
+    tenant_id: TenantId,
+    session: TenantSession,
+    current_user: CurrentUser,
+    _perm: None = Depends(require_permission(Permission.INCIDENT_VIEW)),
+):
+    """Return the active (or most recent) runbook execution for an incident."""
+    # Prefer in_progress, then most recent by started_at
+    result = await session.execute(
+        select(RunbookExecution)
+        .where(
+            RunbookExecution.tenant_id == tenant_id,
+            RunbookExecution.incident_id == incident_id,
+        )
+        .order_by(
+            # in_progress first
+            (RunbookExecution.status == "in_progress").desc(),
+            RunbookExecution.started_at.desc(),
+        )
+        .limit(1)
+    )
+    execution = result.scalar_one_or_none()
+    if not execution:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No runbook execution found for this incident",
+        )
+
+    steps_result = await session.execute(
+        select(RunbookStepExecution).where(
+            RunbookStepExecution.tenant_id == tenant_id,
+            RunbookStepExecution.execution_id == execution.id,
+        )
+    )
+    steps = list(steps_result.scalars().all())
+    snapshot = execution.runbook_steps_snapshot
+    if not isinstance(snapshot, list):
+        snapshot = []
+
+    return {
+        "id": str(execution.id),
+        "runbook_id": str(execution.runbook_id),
+        "runbook_version": execution.runbook_version,
+        "incident_id": str(incident_id),
+        "status": execution.status,
+        "started_by": str(execution.started_by) if execution.started_by else None,
+        "started_at": execution.started_at.isoformat() if execution.started_at else "",
+        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+        "steps": [
+            {
+                "id": str(s.id),
+                "step_order": s.step_order,
+                "step_title": s.step_title,
+                "step_action_type": s.step_action_type,
+                "status": s.status,
+                "actor_id": str(s.actor_id) if s.actor_id else None,
+                "notes": s.notes,
+                "started_at": s.started_at.isoformat() if s.started_at else None,
+                "completed_at": s.completed_at.isoformat() if s.completed_at else None,
+            }
+            for s in sorted(steps, key=lambda x: x.step_order)
+        ],
+    }
