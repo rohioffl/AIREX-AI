@@ -3,9 +3,16 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockAddToast = vi.hoisted(() => vi.fn())
+const mockAuth = vi.hoisted(() => ({
+  user: { role: 'platform_admin' },
+}))
 
 vi.mock('../context/ToastContext', () => ({
   useToasts: () => ({ addToast: mockAddToast }),
+}))
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => mockAuth,
 }))
 
 const mockWorkspace = vi.hoisted(() => ({
@@ -95,6 +102,7 @@ describe('TenantWorkspaceManager', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockAddToast.mockReset()
+    mockAuth.user = { role: 'platform_admin' }
     mockApi.testIntegration.mockResolvedValue({ status: 'verified' })
     mockApi.syncIntegrationMonitors.mockResolvedValue({ status: 'synced', monitor_count: 0 })
     mockApi.fetchProjectMonitorBindings.mockResolvedValue([])
@@ -156,5 +164,32 @@ describe('TenantWorkspaceManager', () => {
         enabled: true,
       })
     })
+  })
+
+  it('hides the add organization control for org admins', async () => {
+    mockAuth.user = { role: 'org_admin' }
+
+    render(<TenantWorkspaceManager mode="organizations" />)
+
+    expect(screen.queryByRole('button', { name: /add organization/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /onboard tenant/i })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockApi.fetchProjectMonitorBindings).toHaveBeenCalledWith('project-1')
+    })
+  })
+
+  it('renders platform inventory mode without tenant detail panels', async () => {
+    render(<TenantWorkspaceManager mode="platform" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Tenant Profile · UnoSecur')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Projects · UnoSecur')).not.toBeInTheDocument()
+    expect(screen.queryByText('Primary Site24x7')).not.toBeInTheDocument()
+    expect(screen.getByText('SaaS Admin Guardrails')).toBeInTheDocument()
+    expect(screen.getAllByText('Ankercloud').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /edit tenant/i })).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Edit')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Delete')).not.toBeInTheDocument()
   })
 })

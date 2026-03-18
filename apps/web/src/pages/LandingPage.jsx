@@ -3,7 +3,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Zap,
   Search,
@@ -17,6 +17,7 @@ import {
   Lock,
   BarChart3,
   CheckCircle2,
+  Mail,
 } from 'lucide-react'
 import landFinalBg from '../assets/land_final.jpg'
 import './LandingPage.css'
@@ -111,6 +112,13 @@ function useScrollReveal() {
 
 export default function LandingPage() {
   useScrollReveal()
+  const [form, setForm] = useState({ name: '', email: '', company: '', message: '' })
+  const [submitted, setSubmitted] = useState(false)
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    setSubmitted(true)
+  }
 
   return (
     <div className="airex-landing">
@@ -125,8 +133,8 @@ export default function LandingPage() {
           <span className="airex-logo-abbr">Autonomous Incident Resolution Engine</span>
         </div>
         <nav className="airex-landing-nav">
+          <Link to="/admin/login" className="airex-nav-link airex-nav-admin">Platform Admin</Link>
           <Link to="/login" className="airex-nav-link">Sign in</Link>
-          <Link to="/incidents" className="airex-nav-link airex-nav-cta">Open app</Link>
         </nav>
       </header>
       {/* ── Hero (text left, cube clear) ── */}
@@ -140,7 +148,7 @@ export default function LandingPage() {
               From alert to resolution with AI in the loop and humans in control. Detect. Investigate. Resolve.
             </p>
             <div className="airex-hero-cta">
-              <Link to="/incidents" className="airex-hero-btn airex-hero-btn-primary">Open AIREX</Link>
+              <a href="#demo" className="airex-hero-btn airex-hero-btn-primary">Get Demo</a>
               <Link to="/login" className="airex-hero-btn airex-hero-btn-secondary">Sign in</Link>
             </div>
           </div>
@@ -283,15 +291,145 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Demo & Contact ── */}
+      <section id="demo" className="airex-section airex-demo" aria-label="Demo and Contact">
+        <div className="airex-container">
+          <h2 className="airex-section-title airex-reveal">See AIREX in action</h2>
+          <p className="airex-section-lead airex-reveal">
+            AI-driven incident response from alert to resolution — with humans always in control.
+          </p>
+          <div className="airex-demo-grid">
+            {/* Product Showcase */}
+            <div className="airex-demo-showcase airex-reveal">
+              <div className="airex-mock-header">
+                <span className="airex-mock-dot red" />
+                <span className="airex-mock-dot yellow" />
+                <span className="airex-mock-dot green" />
+                <span className="airex-mock-title">AIREX — Incident Dashboard</span>
+              </div>
+              <div className="airex-mock-body">
+                <div className="airex-mock-incident active">
+                  <div className="airex-mock-incident-header">
+                    <span className="airex-mock-badge critical">CRITICAL</span>
+                    <span className="airex-mock-time">just now</span>
+                  </div>
+                  <div className="airex-mock-incident-title">High CPU on prod-api-01</div>
+                  <div className="airex-mock-state investigating">
+                    <Activity size={12} /> Investigating...
+                  </div>
+                </div>
+                <div className="airex-mock-incident">
+                  <div className="airex-mock-incident-header">
+                    <span className="airex-mock-badge warning">HIGH</span>
+                    <span className="airex-mock-time">2m ago</span>
+                  </div>
+                  <div className="airex-mock-incident-title">Disk usage 94% on db-replica-2</div>
+                  <div className="airex-mock-state awaiting">
+                    <ShieldCheck size={12} /> Awaiting approval
+                  </div>
+                </div>
+                <div className="airex-mock-incident">
+                  <div className="airex-mock-incident-header">
+                    <span className="airex-mock-badge info">MED</span>
+                    <span className="airex-mock-time">14m ago</span>
+                  </div>
+                  <div className="airex-mock-incident-title">Memory pressure on worker-3</div>
+                  <div className="airex-mock-state resolved">
+                    <CheckCircle2 size={12} /> Resolved
+                  </div>
+                </div>
+                <div className="airex-mock-rec">
+                  <div className="airex-mock-rec-label">AI Recommendation</div>
+                  <div className="airex-mock-rec-action">
+                    restart_service <span className="airex-mock-risk">risk: LOW</span>
+                  </div>
+                  <div className="airex-mock-rec-reason">
+                    CPU spike linked to memory leak in v2.4.1. Restarting will clear the leak. Confidence: 91%
+                  </div>
+                  <div className="airex-mock-rec-actions">
+                    <button className="airex-mock-btn approve">Approve</button>
+                    <button className="airex-mock-btn reject">Reject</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Form */}
+            <div className="airex-contact-panel airex-reveal airex-reveal-stagger-1">
+              <h3 className="airex-contact-title">Request a demo</h3>
+              <p className="airex-contact-lead">
+                Tell us about your infrastructure and we&apos;ll show you AIREX in your environment.
+              </p>
+              {submitted ? (
+                <div className="airex-form-success">
+                  <CheckCircle2 size={36} className="airex-success-icon" />
+                  <p>Thanks! We&apos;ll be in touch shortly.</p>
+                </div>
+              ) : (
+                <form className="airex-contact-form" onSubmit={handleSubmit}>
+                  <div className="airex-form-row">
+                    <div className="airex-form-group">
+                      <label className="airex-form-label">Name</label>
+                      <input
+                        className="airex-form-input"
+                        type="text"
+                        placeholder="Your name"
+                        value={form.name}
+                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="airex-form-group">
+                      <label className="airex-form-label">Email</label>
+                      <input
+                        className="airex-form-input"
+                        type="email"
+                        placeholder="Work email"
+                        value={form.email}
+                        onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="airex-form-group">
+                    <label className="airex-form-label">Company</label>
+                    <input
+                      className="airex-form-input"
+                      type="text"
+                      placeholder="Your company"
+                      value={form.company}
+                      onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+                    />
+                  </div>
+                  <div className="airex-form-group">
+                    <label className="airex-form-label">Message</label>
+                    <textarea
+                      className="airex-form-textarea"
+                      rows={4}
+                      placeholder="What incident pain points are you solving?"
+                      value={form.message}
+                      onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
+                    />
+                  </div>
+                  <button type="submit" className="airex-form-submit">
+                    <Mail size={16} /> Request Demo
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA ── */}
       <section className="airex-section airex-cta-section" aria-label="Get started">
         <div className="airex-container airex-reveal">
           <h2 className="airex-cta-title">Ready to run autonomous SRE?</h2>
-          <p className="airex-cta-lead">Open the app and see incidents, recommendations, and the live feed.</p>
+          <p className="airex-cta-lead">AI-backed incident response — detection, investigation, and resolution.</p>
           <div className="airex-cta-buttons">
-            <Link to="/incidents" className="airex-hero-btn airex-hero-btn-primary">
-              Open AIREX <ArrowRight size={18} />
-            </Link>
+            <a href="#demo" className="airex-hero-btn airex-hero-btn-primary">
+              Request Demo <ArrowRight size={18} />
+            </a>
             <Link to="/login" className="airex-hero-btn airex-hero-btn-secondary">Sign in</Link>
           </div>
         </div>

@@ -1,12 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-
-function normalizeRole(role) {
-  const normalized = (role || 'operator').toLowerCase()
-  if (normalized.startsWith('org_')) return normalized.replace(/^org_/, '')
-  if (normalized.startsWith('tenant_')) return normalized.replace(/^tenant_/, '')
-  return normalized
-}
+import { canAccessRoute, normalizeRole } from '../../utils/accessControl'
 
 /**
  * RequireRole - Protects routes that require specific roles.
@@ -15,9 +9,11 @@ function normalizeRole(role) {
  * @param {React.ReactNode} props.children - Child components to render if authorized
  * @param {string|string[]} props.roles - Required role(s). Can be 'admin', 'operator', 'viewer', or array
  * @param {React.ReactNode} props.fallback - Optional fallback component (default: redirect to /dashboard)
+ * @param {string} props.access - Optional named access policy
  */
-export default function RequireRole({ children, roles, fallback = null }) {
-  const { user, loading } = useAuth()
+export default function RequireRole({ children, roles, access = null, fallback = null }) {
+  const auth = useAuth()
+  const { user, loading } = auth
 
   if (loading) {
     return (
@@ -43,11 +39,12 @@ export default function RequireRole({ children, roles, fallback = null }) {
     viewer: ['viewer'],
   }
 
-  const hasAccess = requiredRoles.some(role => {
+  const hasRoleAccess = requiredRoles.some(role => {
     const roleLower = normalizeRole(role)
     const allowedRoles = roleHierarchy[roleLower] || [roleLower]
     return allowedRoles.includes(userRole) || requiredRoles.includes(userRole)
   })
+  const hasAccess = access ? canAccessRoute(auth, access) : hasRoleAccess
 
   if (!hasAccess) {
     if (fallback) {

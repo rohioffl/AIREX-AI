@@ -12,6 +12,8 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/airex"
+    # Optional separate DB for platform_admins table (falls back to DATABASE_URL if empty)
+    PLATFORM_ADMIN_DATABASE_URL: str = ""
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

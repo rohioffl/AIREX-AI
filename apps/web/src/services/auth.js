@@ -54,6 +54,24 @@ export async function googleLogin(idToken) {
   return res.data
 }
 
+export async function platformAdminLogin({ email, password }) {
+  const res = await api.post('/auth/admin/login', { email, password })
+  const { access_token, refresh_token, expires_in } = res.data
+
+  setTokens({ accessToken: access_token, refreshToken: refresh_token, expiresIn: expires_in })
+
+  return res.data
+}
+
+export async function platformAdminGoogleLogin(idToken) {
+  const res = await api.post('/auth/admin/google', { id_token: idToken })
+  const { access_token, refresh_token, expires_in } = res.data
+
+  setTokens({ accessToken: access_token, refreshToken: refresh_token, expiresIn: expires_in })
+
+  return res.data
+}
+
 export async function acceptInvitationWithGoogle(invitationToken, idToken) {
   const res = await api.post('/auth/accept-invitation-with-google', {
     invitation_token: invitationToken,

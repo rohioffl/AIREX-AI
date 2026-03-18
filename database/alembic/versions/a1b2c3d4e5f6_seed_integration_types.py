@@ -217,7 +217,7 @@ def upgrade() -> None:
                 VALUES
                     (gen_random_uuid(), :key, :display_name, :category,
                      :supports_webhook, :supports_polling, :supports_sync,
-                     TRUE, :config_schema_json::jsonb)
+                     TRUE, CAST(:config_schema_json AS jsonb))
                 ON CONFLICT (key) DO UPDATE SET
                     display_name       = EXCLUDED.display_name,
                     category           = EXCLUDED.category,
@@ -243,6 +243,6 @@ def downgrade() -> None:
     conn = op.get_bind()
     keys = [e["key"] for e in _TYPES]
     conn.execute(
-        sa.text("DELETE FROM integration_types WHERE key = ANY(:keys)"),
+        sa.text("DELETE FROM integration_types WHERE key = ANY(CAST(:keys AS text[]))"),
         {"keys": keys},
     )

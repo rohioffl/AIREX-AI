@@ -1,8 +1,13 @@
+.reports/
 .tmp/
+.*
 tmp/
 profitgrid/
 memory/
 everything-claude-code
+.codex/
+.agents/
+.ruff_cache
 # Local development commands (personal reference)
 commands.txt
 powers/
@@ -30,6 +35,7 @@ wheels/
 .installed.cfg
 *.egg
 .cursor
+.mcp.json
 # Node
 node_modules/
 dist/

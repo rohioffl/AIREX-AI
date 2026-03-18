@@ -8,10 +8,10 @@ import json
 from typing import Any, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.api.dependencies import CurrentUser, Redis, TenantId, require_role
+from app.api.dependencies import CurrentUser, Redis, TenantId, RequirePlatformAdmin
 from airex_core.core.config import settings
 
 DLQ_KEY = "airex:dlq"
@@ -34,8 +34,9 @@ class DLQListResponse(BaseModel):
     total: int
 
 
-@router.get("/", response_model=DLQListResponse, dependencies=[Depends(require_role("admin"))])
+@router.get("/", response_model=DLQListResponse)
 async def list_dlq(
+    _: RequirePlatformAdmin,
     tenant_id: TenantId,
     redis: Redis,
     limit: int = Query(default=100, le=1000),
@@ -74,9 +75,10 @@ async def list_dlq(
     return DLQListResponse(items=paginated_items, total=len(items))
 
 
-@router.post("/{entry_index}/replay", dependencies=[Depends(require_role("admin"))])
+@router.post("/{entry_index}/replay")
 async def replay_dlq_entry(
     entry_index: int,
+    _: RequirePlatformAdmin,
     tenant_id: TenantId,
     redis: Redis,
     current_user: CurrentUser,
@@ -156,8 +158,9 @@ async def replay_dlq_entry(
         ) from exc
 
 
-@router.delete("/", dependencies=[Depends(require_role("admin"))])
+@router.delete("/")
 async def clear_dlq(
+    _: RequirePlatformAdmin,
     tenant_id: TenantId,
     redis: Redis,
     current_user: CurrentUser,

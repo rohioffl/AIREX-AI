@@ -1,55 +1,65 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   ArrowRightCircle,
   Brain,
   Building2,
   CheckCircle,
   ChevronRight,
+  Clock,
+  Edit,
   Globe,
   Layers,
   LogOut,
+  Moon,
   Plus,
   RefreshCcw,
+  Search,
   Settings,
   ShieldCheck,
+  Sun,
   Trash2,
   Users,
   X,
   XCircle,
   Zap,
 } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
-import { useToasts } from '../context/ToastContext'
+
 import TenantWorkspaceManager from '../components/admin/TenantWorkspaceManager'
+import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
+import { useToasts } from '../context/ToastContext'
 import {
+  clearDLQ,
+  createPlatformAdmin,
+  createIntegrationType,
   createOrganization,
+  deleteIntegrationType,
   fetchBackendHealth,
   fetchDLQ,
-  fetchMetrics,
+  fetchIntegrationTypes,
   fetchOrganizations,
+  fetchOrganizationTenants,
+  fetchPlatformAnalytics,
+  fetchPlatformAdmins,
   fetchSettings,
-  fetchTenants,
-  fetchUsers,
   replayDLQEntry,
-  clearDLQ,
+  updateIntegrationType,
+  updatePlatformAdmin,
+  updateSettings,
 } from '../services/api'
 import { extractErrorMessage } from '../utils/errorHandler'
 import { formatRelativeTime } from '../utils/formatters'
-import { FALLBACK_TENANT_ID } from '../utils/constants'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function useToast() {
   const { addToast } = useToasts()
   return useCallback(
-    (msg, type = 'success') =>
+    (message, type = 'success') =>
       addToast({
         title: type === 'error' ? 'Error' : 'Success',
-        message: msg,
+        message,
         severity: type === 'error' ? 'CRITICAL' : 'LOW',
       }),
     [addToast]
@@ -65,6 +75,13 @@ const inputCls = {
   fontSize: 13,
   outline: 'none',
   width: '100%',
+}
+
+const textareaCls = {
+  ...inputCls,
+  minHeight: 112,
+  fontFamily: 'var(--font-mono)',
+  fontSize: 12,
 }
 
 function StatCard({ label, value, color = 'var(--neon-indigo)', icon: Icon, sub }) {
@@ -89,103 +106,358 @@ function SectionTitle({ children }) {
 }
 
 function StatusBadge({ status }) {
-  const map = {
-    active:    { bg: 'rgba(34,197,94,0.12)',   color: 'var(--color-accent-green)', label: 'Active' },
-    disabled:  { bg: 'rgba(148,163,184,0.12)', color: 'var(--text-muted)',         label: 'Disabled' },
-    suspended: { bg: 'rgba(244,63,94,0.12)',   color: 'var(--color-accent-red)',   label: 'Suspended' },
+  const meta = {
+    active: { bg: 'rgba(34,197,94,0.12)', color: 'var(--color-accent-green)', label: 'Active' },
+    disabled: { bg: 'rgba(148,163,184,0.12)', color: 'var(--text-muted)', label: 'Disabled' },
+    suspended: { bg: 'rgba(244,63,94,0.12)', color: 'var(--color-accent-red)', label: 'Suspended' },
   }
-  const s = map[status] || map.disabled
+  const current = meta[status] || meta.disabled
   return (
-    <span style={{ fontSize: 10, fontWeight: 700, background: s.bg, color: s.color, borderRadius: 999, padding: '3px 9px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-      {s.label}
+    <span style={{ fontSize: 10, fontWeight: 700, background: current.bg, color: current.color, borderRadius: 999, padding: '3px 9px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      {current.label}
     </span>
   )
 }
 
-// ── Nav sections ──────────────────────────────────────────────────────────────
-
 const SECTIONS = [
-  { id: 'overview',      label: 'Overview',       icon: Activity },
-  { id: 'organizations', label: 'Organizations',  icon: Globe },
-  { id: 'workspaces',    label: 'Workspaces',     icon: Layers },
-  { id: 'integrations',  label: 'Integrations',   icon: Zap },
-  { id: 'settings',      label: 'Settings',       icon: Settings },
+  { id: 'overview', label: 'Overview', icon: Activity },
+  { id: 'organizations', label: 'Organizations', icon: Globe },
+  { id: 'workspaces', label: 'Workspaces', icon: Layers },
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'integrations', label: 'Integrations', icon: Zap },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
-// ── Overview Section ──────────────────────────────────────────────────────────
+function roleMeta(role) {
+  const r = (role || 'operator').toLowerCase()
+  if (r === 'platform_admin') return { label: 'PLATFORM ADMIN', color: '#d946ef', bg: 'rgba(217,70,239,0.12)' }
+  if (r === 'admin')  return { label: 'ADMIN',    color: 'var(--neon-purple)', bg: 'rgba(192,132,252,0.12)' }
+  if (r === 'viewer') return { label: 'VIEWER',   color: 'var(--text-muted)',  bg: 'rgba(148,163,184,0.12)' }
+  return                     { label: 'OPERATOR', color: 'var(--neon-cyan)',   bg: 'rgba(56,189,248,0.12)' }
+}
+
+function PlatformAdminModal({ admin, onClose, onSaved, toast }) {
+  const [form, setForm] = useState({
+    email: admin?.email || '',
+    display_name: admin?.display_name || '',
+    password: '',
+    is_active: admin?.is_active !== false,
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!form.email || !form.display_name) { toast('Email and name are required', 'error'); return }
+    if (!admin && !form.password.trim()) { toast('Password is required for new platform admins', 'error'); return }
+    setSaving(true)
+    try {
+      if (admin) {
+        const payload = {
+          display_name: form.display_name.trim(),
+          is_active: form.is_active,
+        }
+        if (form.password.trim()) {
+          payload.password = form.password
+        }
+        await updatePlatformAdmin(admin.id, payload)
+        toast('Platform admin updated')
+      } else {
+        await createPlatformAdmin({
+          email: form.email.trim(),
+          display_name: form.display_name.trim(),
+          password: form.password,
+        })
+        toast('Platform admin created')
+      }
+      onSaved()
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="relative w-full max-w-md mx-4 glass rounded-2xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>{admin ? 'Edit Platform Admin' : 'Create Platform Admin'}</h3>
+          <button onClick={onClose}><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+        </div>
+        <input
+          value={form.email}
+          onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+          placeholder="Email address"
+          type="email"
+          disabled={Boolean(admin)}
+          style={{ ...inputCls, opacity: admin ? 0.7 : 1 }}
+        />
+        <input value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} placeholder="Display name" style={inputCls} />
+        <input
+          value={form.password}
+          onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+          placeholder={admin ? 'New password (optional)' : 'Password'}
+          type="password"
+          style={inputCls}
+        />
+        {admin && (
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={form.is_active}
+              onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
+            />
+            Account active
+          </label>
+        )}
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+            {saving ? 'Saving…' : admin ? 'Save Changes' : 'Create Platform Admin'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function UsersSection() {
+  const toast = useToast()
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [editingAdmin, setEditingAdmin] = useState(null)
+  const [showCreate, setShowCreate] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchPlatformAdmins()
+      setUsers((data.items || []).map((admin) => ({
+        ...admin,
+        isPlatformAdmin: true,
+        role: 'platform_admin',
+      })))
+    } catch {
+      toast('Failed to load platform admins', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load() }, [load])
+
+  const filtered = useMemo(() => {
+    if (!search) return users
+    const q = search.toLowerCase()
+    return users.filter((u) => u.email?.toLowerCase().includes(q) || u.display_name?.toLowerCase().includes(q))
+  }, [users, search])
+
+  const stats = useMemo(() => ({
+    total:   users.length,
+    active:  users.filter(u => u.is_active !== false).length,
+    inactive: users.filter(u => u.is_active === false).length,
+  }), [users])
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Platform Administrators</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+            This view is intentionally isolated to platform-admin identities. Tenant users remain managed from organization and tenant-scoped user management.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+          style={{ background: 'var(--gradient-primary)' }}
+        >
+          <Plus size={14} />
+          Add Platform Admin
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard label="Total Users"    value={loading ? '…' : stats.total}   color="var(--neon-indigo)"        icon={Users} />
+        <StatCard label="Active"         value={loading ? '…' : stats.active}  color="var(--neon-green)"          icon={CheckCircle} />
+        <StatCard label="Inactive"       value={loading ? '…' : stats.inactive} color="var(--color-accent-amber)" icon={Clock} />
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-[200px] flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          <Search size={13} style={{ color: 'var(--text-muted)' }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name or email…"
+            className="flex-1 bg-transparent outline-none"
+            style={{ fontSize: 13, color: 'var(--text-primary)' }}
+          />
+          {search && <button onClick={() => setSearch('')}><X size={12} style={{ color: 'var(--text-muted)' }} /></button>}
+        </div>
+        <button onClick={load} className="p-2 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          <RefreshCcw size={13} style={{ color: 'var(--text-muted)' }} />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">{[1, 2, 3, 4, 5].map(i => <div key={i} className="glass rounded-xl h-14 skeleton" />)}</div>
+      ) : (
+        <div className="glass rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['User', 'Role', 'Status', 'Scope', 'Actions'].map(h => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No platform admins found</td></tr>
+              )}
+              {filtered.map(u => {
+                const rm = roleMeta(u.role)
+                return (
+                  <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }} className="hover:bg-elevated transition-colors">
+                    <td style={{ padding: '10px 16px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{u.display_name || '—'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.email}</div>
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, background: rm.bg, color: rm.color, borderRadius: 999, padding: '3px 9px', textTransform: 'uppercase' }}>
+                        {rm.label}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <span style={{
+                        background: u.is_active !== false ? 'rgba(52,211,153,0.12)' : 'rgba(244,63,94,0.12)',
+                        color: u.is_active !== false ? 'var(--neon-green)' : 'var(--color-accent-red)',
+                        borderRadius: 999, padding: '3px 9px', fontSize: 11, fontWeight: 700,
+                      }}>
+                        {u.is_active !== false ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                        Global platform scope
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <button
+                        onClick={() => setEditingAdmin(u)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                      >
+                        <Edit size={12} />
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showCreate && (
+        <PlatformAdminModal
+          onClose={() => setShowCreate(false)}
+          onSaved={() => {
+            setShowCreate(false)
+            load()
+          }}
+          toast={toast}
+        />
+      )}
+
+      {editingAdmin && (
+        <PlatformAdminModal
+          admin={editingAdmin}
+          onClose={() => setEditingAdmin(null)}
+          onSaved={() => {
+            setEditingAdmin(null)
+            load()
+          }}
+          toast={toast}
+        />
+      )}
+    </div>
+  )
+}
 
 function OverviewSection({ onNavigate }) {
-  const { user, tenants: authTenants } = useAuth()
-  const [health,  setHealth]  = useState(null)
-  const [metrics, setMetrics] = useState(null)
-  const [users,   setUsers]   = useState([])
-  const [tenants, setTenants] = useState([])
-  const [orgs,    setOrgs]    = useState([])
+  const { user } = useAuth()
+  const [health, setHealth] = useState(null)
+  const [summary, setSummary] = useState(null)
+  const [orgs, setOrgs] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
       fetchBackendHealth().catch(() => null),
-      fetchMetrics().catch(() => null),
-      fetchUsers({ limit: 100 }).catch(() => ({ items: [] })),
-      fetchTenants().catch(() => []),
+      fetchPlatformAnalytics().catch(() => null),
       fetchOrganizations().catch(() => []),
-    ]).then(([h, m, u, t, o]) => {
-      setHealth(h)
-      setMetrics(m)
-      setUsers(u?.items || [])
-      setTenants(Array.isArray(t) ? t : [])
-      setOrgs(Array.isArray(o) ? o : [])
-    }).finally(() => setLoading(false))
+    ])
+      .then(([healthResponse, summaryResponse, organizationsResponse]) => {
+        setHealth(healthResponse)
+        setSummary(summaryResponse)
+        setOrgs(Array.isArray(organizationsResponse) ? organizationsResponse : [])
+      })
+      .finally(() => setLoading(false))
   }, [])
 
-  const STATUS_ROWS = [
-    { label: 'Backend API',   ok: health?.status === 'ok', detail: 'FastAPI + Uvicorn' },
-    { label: 'Database',      ok: true,                     detail: 'PostgreSQL 15 + RLS' },
-    { label: 'Redis / Queue', ok: true,                     detail: 'ARQ Worker' },
-    { label: 'AI Engine',     ok: true,                     detail: 'Gemini 2.0 Flash' },
+  const statusRows = [
+    { label: 'Backend API', ok: health?.status === 'ok', detail: 'FastAPI + Uvicorn' },
+    { label: 'Database', ok: true, detail: 'PostgreSQL' },
+    { label: 'Redis / Queue', ok: true, detail: 'Redis + ARQ' },
+    { label: 'AI Engine', ok: !(summary?.llm_circuit_breaker_open), detail: summary?.llm_circuit_breaker_open ? 'Circuit breaker open' : 'Inference available' },
   ]
 
   return (
     <div className="space-y-6">
-      {/* Health */}
       <div>
         <SectionTitle>System Health</SectionTitle>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {STATUS_ROWS.map(s => (
-            <div key={s.label} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          {statusRows.map((row) => (
+            <div key={row.label} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
               {loading
                 ? <div className="w-4 h-4 rounded-full animate-pulse" style={{ background: 'var(--border)' }} />
-                : s.ok
+                : row.ok
                   ? <CheckCircle size={16} style={{ color: 'var(--neon-green)', flexShrink: 0 }} />
-                  : <AlertTriangle size={16} style={{ color: 'var(--brand-orange)', flexShrink: 0 }} />
-              }
+                  : <AlertTriangle size={16} style={{ color: 'var(--brand-orange)', flexShrink: 0 }} />}
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }}>{s.label}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{s.detail}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }}>{row.label}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{row.detail}</div>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Users"        value={loading ? '…' : users.length}                              color="var(--neon-indigo)"  icon={Users}         sub={`${users.filter(u => u.is_active !== false).length} active`} />
-        <StatCard label="Organizations" value={loading ? '…' : orgs.length}                             color="#22d3ee"             icon={Globe}         sub="Registered" />
-        <StatCard label="Workspaces"   value={loading ? '…' : (tenants.length || authTenants?.length || '—')} color="var(--brand-orange)" icon={Layers}    sub="Tenant spaces" />
-        <StatCard label="Active Alerts" value={loading ? '…' : (metrics?.active_alerts ?? '—')}         color="var(--brand-orange)" icon={AlertTriangle} sub={`${metrics?.critical_alerts ?? 0} critical`} />
+        <StatCard label="Tenant Users" value={loading ? '…' : (summary?.total_users ?? '—')} color="var(--neon-indigo)" icon={Users} sub={`${summary?.active_users ?? 0} active`} />
+        <StatCard label="Organizations" value={loading ? '…' : (summary?.total_organizations ?? orgs.length)} color="#22d3ee" icon={Globe} sub={`${summary?.active_organizations ?? 0} active`} />
+        <StatCard label="Workspaces" value={loading ? '…' : (summary?.total_tenants ?? '—')} color="var(--brand-orange)" icon={Layers} sub={`${summary?.active_tenants ?? 0} active`} />
+        <StatCard label="Active Incidents" value={loading ? '…' : (summary?.active_incidents ?? '—')} color="var(--brand-orange)" icon={AlertTriangle} sub={`${summary?.critical_incidents ?? 0} critical`} />
       </div>
 
-      {/* Session info */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Failed 24h" value={loading ? '…' : (summary?.failed_incidents_24h ?? '—')} color="var(--color-accent-red)" icon={XCircle} sub={`${((summary?.platform_error_rate_24h ?? 0) * 100).toFixed(1)}% error rate`} />
+        <StatCard label="DLQ Entries" value={loading ? '…' : (summary?.dlq_entries ?? '—')} color="var(--color-accent-amber)" icon={AlertTriangle} sub="Queued worker failures" />
+        <StatCard label="Circuit Breaker" value={loading ? '…' : (summary?.llm_circuit_breaker_open ? 'OPEN' : 'CLOSED')} color={summary?.llm_circuit_breaker_open ? 'var(--color-accent-red)' : 'var(--neon-green)'} icon={Brain} sub="LLM safety gate" />
+        <StatCard label="Platform Admins" value={loading ? '…' : (summary?.total_platform_admins ?? '—')} color="var(--neon-cyan)" icon={ShieldCheck} sub={`${summary?.active_platform_admins ?? 0} active`} />
+      </div>
+
       <div>
         <SectionTitle>Current Session</SectionTitle>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
-            { label: 'Tenant ID',   value: user?.tenantId || user?.tenant_id || FALLBACK_TENANT_ID, mono: true },
-            { label: 'Logged in as', value: user?.email || '—',                                     mono: false },
-            { label: 'Role',        value: (user?.role || '—').toUpperCase(),                       mono: true },
-          ].map(item => (
+            { label: 'Logged in as', value: user?.email || '—', mono: false },
+            { label: 'Role', value: (user?.role || '—').toUpperCase(), mono: true },
+          ].map((item) => (
             <div key={item.label} className="p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</div>
               <div style={{ fontFamily: item.mono ? 'var(--font-mono)' : 'inherit', fontSize: 12, color: 'var(--text-heading)', marginTop: 4, wordBreak: 'break-all' }}>{item.value}</div>
@@ -194,28 +466,27 @@ function OverviewSection({ onNavigate }) {
         </div>
       </div>
 
-      {/* Quick nav */}
       <div>
         <SectionTitle>Quick Navigation</SectionTitle>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {SECTIONS.filter(s => s.id !== 'overview').map(sec => (
+          {SECTIONS.filter((section) => section.id !== 'overview').map((section) => (
             <button
-              key={sec.id}
-              onClick={() => onNavigate(sec.id)}
+              key={section.id}
+              onClick={() => onNavigate(section.id)}
               className="glass rounded-xl p-4 flex items-center gap-3 hover-lift transition-all text-left"
               style={{ border: '1px solid var(--border)', cursor: 'pointer' }}
             >
               <div className="p-2 rounded-lg" style={{ background: 'rgba(99,102,241,0.12)' }}>
-                <sec.icon size={15} style={{ color: 'var(--neon-indigo)' }} />
+                <section.icon size={15} style={{ color: 'var(--neon-indigo)' }} />
               </div>
               <div className="min-w-0">
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{sec.label}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{section.label}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {sec.id === 'organizations' && `${loading ? '…' : orgs.length} orgs`}
-                  {sec.id === 'users'         && `${loading ? '…' : users.length} users`}
-                  {sec.id === 'workspaces'    && 'Tenant workspace management'}
-                  {sec.id === 'integrations'  && 'Monitor integrations'}
-                  {sec.id === 'settings'      && 'System configuration'}
+                  {section.id === 'organizations' && `${loading ? '…' : orgs.length} orgs`}
+                  {section.id === 'workspaces' && 'Tenant workspace management'}
+                  {section.id === 'users' && 'Platform admin accounts'}
+                  {section.id === 'integrations' && 'Global catalog definitions'}
+                  {section.id === 'settings' && 'Runtime controls'}
                 </div>
               </div>
               <ChevronRight size={13} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
@@ -227,66 +498,119 @@ function OverviewSection({ onNavigate }) {
   )
 }
 
-// ── Organizations Section ─────────────────────────────────────────────────────
-
 function OrganizationsSection() {
-  const { organizations: authOrgs, activeOrganization, tenants, switchTenant } = useAuth()
+  const { organizations: authOrganizations, tenants } = useAuth()
+  const [remoteOrganizations, setRemoteOrganizations] = useState(null)
+  const [organizationTenants, setOrganizationTenants] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState(null)
+  const [tenantListLoading, setTenantListLoading] = useState(false)
 
-  const [remoteOrgs,  setRemoteOrgs]  = useState(null)
-  const [loading,     setLoading]     = useState(true)
-  const [refreshing,  setRefreshing]  = useState(false)
-  const [switching,   setSwitching]   = useState(null)
-  const [showCreate,  setShowCreate]  = useState(false)
+  const loadOrganizations = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true)
+    } else {
+      setLoading(true)
+    }
 
-  const navigate = useNavigate()
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true)
-    else setLoading(true)
     try {
       const data = await fetchOrganizations()
-      setRemoteOrgs(Array.isArray(data) ? data : null)
+      setRemoteOrganizations(Array.isArray(data) ? data : null)
     } catch {
-      setRemoteOrgs(null)
+      setRemoteOrganizations(null)
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    loadOrganizations()
+  }, [loadOrganizations])
 
-  const orgList = remoteOrgs || authOrgs || []
+  const tenantCount = useCallback(
+    (organization) => {
+      if (organization.tenant_count != null) {
+        return organization.tenant_count
+      }
+      return tenants?.filter((tenant) => String(tenant.organization_id) === String(organization.id)).length ?? 0
+    },
+    [tenants]
+  )
 
-  const isActiveOrg   = org => String(org.id) === String(activeOrganization?.id)
-  const tenantCount   = org => {
-    if (org.tenant_count != null) return org.tenant_count
-    return tenants?.filter(t => String(t.organization_id) === String(org.id)).length ?? 0
-  }
+  const organizations = remoteOrganizations || authOrganizations || []
+  const totalTenantSpaces = useMemo(
+    () => organizations.reduce((sum, organization) => sum + tenantCount(organization), 0),
+    [organizations, tenantCount]
+  )
+  const selectedOrganization = organizations.find((organization) => String(organization.id) === String(selectedOrganizationId)) || organizations[0] || null
+  const selectedOrganizationTenantList = organizationTenants[String(selectedOrganization?.id)] || null
+  const selectedOrganizationTenants = useMemo(
+    () => selectedOrganizationTenantList || (tenants || []).filter((tenant) => String(tenant.organization_id) === String(selectedOrganization?.id)),
+    [selectedOrganization?.id, selectedOrganizationTenantList, tenants]
+  )
 
-  const handleSwitch = async (org) => {
-    const match = tenants?.find(t => String(t.organization_id) === String(org.id))
-    if (!match) return
-    setSwitching(org.id)
-    try {
-      await switchTenant(match.id)
-      navigate('/dashboard', { replace: false })
-    } finally {
-      setSwitching(null)
+  useEffect(() => {
+    if (!organizations.length) {
+      setSelectedOrganizationId(null)
+      return
     }
-  }
+    setSelectedOrganizationId((current) => (
+      organizations.some((organization) => String(organization.id) === String(current))
+        ? current
+        : organizations[0].id
+    ))
+  }, [organizations])
+
+  useEffect(() => {
+    if (!selectedOrganization?.id) {
+      return
+    }
+    const organizationId = String(selectedOrganization.id)
+    if (organizationTenants[organizationId]) {
+      return
+    }
+
+    let cancelled = false
+    setTenantListLoading(true)
+    fetchOrganizationTenants(selectedOrganization.id)
+      .then((data) => {
+        if (cancelled) return
+        setOrganizationTenants((current) => ({
+          ...current,
+          [organizationId]: Array.isArray(data) ? data : [],
+        }))
+      })
+      .catch(() => {
+        if (cancelled) return
+        setOrganizationTenants((current) => ({
+          ...current,
+          [organizationId]: [],
+        }))
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setTenantListLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [organizationTenants, selectedOrganization?.id, selectedOrganization])
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Organizations</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Manage and switch between organizations you have access to.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Manage organization records and onboard tenants into the correct customer workspace.</p>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => load(true)}
+            onClick={() => loadOrganizations(true)}
             disabled={refreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
             style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
@@ -305,98 +629,109 @@ function OrganizationsSection() {
         </div>
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Organizations"   value={loading ? '…' : orgList.length}           color="#22d3ee"             icon={Globe} />
-        <StatCard label="Active Org"      value={activeOrganization?.name || '—'}           color="var(--neon-indigo)"  icon={CheckCircle} sub={activeOrganization?.slug} />
-        <StatCard label="Tenant Spaces"   value={tenants?.length ?? '—'}                    color="var(--brand-orange)" icon={Layers} />
+      <div className="grid grid-cols-2 gap-4">
+        <StatCard label="Organizations" value={loading ? '…' : organizations.length} color="#22d3ee" icon={Globe} />
+        <StatCard label="Tenant Spaces" value={loading ? '…' : totalTenantSpaces} color="var(--brand-orange)" icon={Layers} />
       </div>
 
-      {/* Org list */}
       <div>
         <SectionTitle>All Organizations</SectionTitle>
-
         {loading ? (
           <div className="space-y-3">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="glass rounded-xl animate-pulse" style={{ border: '1px solid var(--border)', height: 76 }} />
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="glass rounded-xl animate-pulse" style={{ border: '1px solid var(--border)', height: 76 }} />
             ))}
           </div>
-        ) : orgList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 rounded-xl"
-            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+        ) : organizations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-14 rounded-xl" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
             <Building2 size={28} style={{ opacity: 0.3, marginBottom: 10 }} />
             <p style={{ fontSize: 13 }}>No organizations found</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {orgList.map(org => {
-              const active    = isActiveOrg(org)
-              const tCount    = tenantCount(org)
-              const canSwitch = tenants?.some(t => String(t.organization_id) === String(org.id))
-
+          <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
+            <div className="space-y-2">
+            {organizations.map((organization) => {
+              const totalTenants = tenantCount(organization)
+              const isSelected = String(selectedOrganizationId) === String(organization.id)
               return (
-                <div
-                  key={org.id}
-                  className="glass rounded-xl p-4 flex items-center justify-between gap-4"
+                <button
+                  key={organization.id}
+                  type="button"
+                  onClick={() => setSelectedOrganizationId(organization.id)}
+                  className="glass rounded-xl p-4 flex items-center justify-between gap-4 w-full text-left transition-all"
                   style={{
-                    border: active ? '1px solid rgba(34,211,238,0.45)' : '1px solid var(--border)',
-                    background: active ? 'rgba(34,211,238,0.04)' : undefined,
+                    border: isSelected ? '1px solid rgba(34,211,238,0.35)' : '1px solid var(--border)',
+                    boxShadow: isSelected ? '0 0 0 1px rgba(34,211,238,0.08)' : 'none',
                   }}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className="flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0"
-                      style={{ background: active ? 'rgba(34,211,238,0.12)' : 'var(--bg-input)', border: '1px solid var(--border)' }}
-                    >
-                      <Building2 size={16} style={{ color: active ? '#22d3ee' : 'var(--text-muted)' }} />
+                    <div className="flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                      <Building2 size={16} style={{ color: 'var(--text-muted)' }} />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>{org.name}</span>
-                        {active && (
-                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full"
-                            style={{ fontSize: 9, fontWeight: 700, background: 'rgba(34,211,238,0.12)', color: '#22d3ee', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            <CheckCircle size={8} /> Current
-                          </span>
-                        )}
-                        {org.status && <StatusBadge status={org.status} />}
+                        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>{organization.name}</span>
+                        {organization.status && <StatusBadge status={organization.status} />}
                       </div>
-                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 1 }}>{org.slug}</div>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 1 }}>{organization.slug}</div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4 flex-shrink-0">
                     <div className="hidden sm:flex items-center gap-1.5" style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                       <Layers size={12} />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{tCount}</span>
-                      <span>tenant{tCount !== 1 ? 's' : ''}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{totalTenants}</span>
+                      <span>tenant{totalTenants !== 1 ? 's' : ''}</span>
                     </div>
-                    {active ? (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
-                        style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)', fontSize: 12, fontWeight: 600, color: '#22d3ee' }}>
-                        <CheckCircle size={12} /> Active
-                      </div>
-                    ) : canSwitch ? (
-                      <button
-                        onClick={() => handleSwitch(org)}
-                        disabled={switching === org.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover-lift"
-                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer', opacity: switching === org.id ? 0.6 : 1 }}
-                      >
-                        {switching === org.id ? <RefreshCcw size={12} className="animate-spin" /> : <ArrowRightCircle size={12} />}
-                        Switch
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
-                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)', opacity: 0.5 }}>
-                        <XCircle size={12} /> No tenants
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', fontSize: 12, color: isSelected ? '#22d3ee' : 'var(--text-muted)' }}>
+                      <Settings size={12} />
+                      {isSelected ? 'Viewing tenants' : 'View tenants'}
+                    </div>
                   </div>
-                </div>
+                </button>
               )
             })}
+            </div>
+
+            <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
+              <SectionTitle>{selectedOrganization ? `${selectedOrganization.name} Tenants` : 'Organization Tenants'}</SectionTitle>
+              {!selectedOrganization ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select an organization to view its tenant spaces.</div>
+              ) : tenantListLoading && !selectedOrganizationTenantList ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading tenant spaces…</div>
+              ) : selectedOrganizationTenants.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No tenant spaces are assigned to this organization yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedOrganizationTenants.map((tenant) => (
+                    <div key={tenant.id} className="rounded-xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{tenant.display_name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>{tenant.name}</div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <StatusBadge status={tenant.is_active === false ? 'disabled' : 'active'} />
+                          <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 999, border: '1px solid var(--border)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            {tenant.cloud || 'unknown'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Credential Status</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-heading)', marginTop: 4 }}>{tenant.credential_status || 'Not configured'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Escalation Email</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-heading)', marginTop: 4 }}>{tenant.escalation_email || 'Not configured'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -404,7 +739,10 @@ function OrganizationsSection() {
       {showCreate && (
         <CreateOrgModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); load(true) }}
+          onCreated={() => {
+            setShowCreate(false)
+            loadOrganizations(true)
+          }}
         />
       )}
     </div>
@@ -417,22 +755,23 @@ function CreateOrgModal({ onClose, onCreated }) {
   const [slug, setSlug] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const autoSlug = v => v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-
-  const handleNameChange = v => {
-    setName(v)
-    setSlug(autoSlug(v))
-  }
+  const autoSlug = useCallback(
+    (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    []
+  )
 
   const handleSave = async () => {
-    if (!name.trim() || !slug.trim()) { toast('Name and slug are required', 'error'); return }
+    if (!name.trim() || !slug.trim()) {
+      toast('Name and slug are required', 'error')
+      return
+    }
     setSaving(true)
     try {
       await createOrganization({ name: name.trim(), slug: slug.trim() })
       toast('Organization created')
       onCreated()
-    } catch (err) {
-      toast(extractErrorMessage(err) || 'Create failed', 'error')
+    } catch (error) {
+      toast(extractErrorMessage(error) || 'Create failed', 'error')
     } finally {
       setSaving(false)
     }
@@ -441,18 +780,18 @@ function CreateOrgModal({ onClose, onCreated }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
-      <div className="relative w-full max-w-md mx-4 glass rounded-2xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+      <div className="relative w-full max-w-md mx-4 glass rounded-2xl p-6 space-y-4" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>Create Organization</h3>
           <button onClick={onClose}><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
         </div>
         <div>
           <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Organization Name</label>
-          <input value={name} onChange={e => handleNameChange(e.target.value)} placeholder="Acme Corp" style={inputCls} />
+          <input value={name} onChange={(event) => { setName(event.target.value); setSlug(autoSlug(event.target.value)) }} placeholder="Acme Corp" style={inputCls} />
         </div>
         <div>
           <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug (URL-safe)</label>
-          <input value={slug} onChange={e => setSlug(autoSlug(e.target.value))} placeholder="acme-corp" style={{ ...inputCls, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
+          <input value={slug} onChange={(event) => setSlug(autoSlug(event.target.value))} placeholder="acme-corp" style={{ ...inputCls, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
         </div>
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
@@ -465,144 +804,494 @@ function CreateOrgModal({ onClose, onCreated }) {
   )
 }
 
-// ── Settings Section ──────────────────────────────────────────────────────────
+function IntegrationCatalogSection() {
+  const toast = useToast()
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [form, setForm] = useState({
+    key: '',
+    display_name: '',
+    category: 'monitoring',
+    enabled: true,
+    supports_webhook: true,
+    supports_polling: false,
+    supports_sync: true,
+    config_schema_json: '{\n  "type": "object",\n  "properties": {},\n  "required": []\n}',
+  })
+
+  const loadItems = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true)
+    } else {
+      setLoading(true)
+    }
+    try {
+      const response = await fetchIntegrationTypes({ includeDisabled: true })
+      setItems(Array.isArray(response) ? response : [])
+    } catch (error) {
+      setItems([])
+      toast(extractErrorMessage(error) || 'Failed to load integration catalog', 'error')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    loadItems()
+  }, [loadItems])
+
+  const enabledCount = useMemo(() => items.filter((item) => item.enabled).length, [items])
+
+  const resetForm = useCallback(() => {
+    setEditingId(null)
+    setForm({
+      key: '',
+      display_name: '',
+      category: 'monitoring',
+      enabled: true,
+      supports_webhook: true,
+      supports_polling: false,
+      supports_sync: true,
+      config_schema_json: '{\n  "type": "object",\n  "properties": {},\n  "required": []\n}',
+    })
+  }, [])
+
+  const parseSchema = () => {
+    try {
+      const parsed = JSON.parse(form.config_schema_json || '{}')
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Schema must be a JSON object')
+      }
+      return parsed
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Invalid schema JSON')
+    }
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    let schema
+    try {
+      schema = parseSchema()
+    } catch (error) {
+      toast(error.message, 'error')
+      return
+    }
+
+    const payload = {
+      key: form.key.trim().toLowerCase(),
+      display_name: form.display_name.trim(),
+      category: form.category.trim().toLowerCase(),
+      enabled: form.enabled,
+      supports_webhook: form.supports_webhook,
+      supports_polling: form.supports_polling,
+      supports_sync: form.supports_sync,
+      config_schema_json: schema,
+    }
+
+    if (!payload.key || !payload.display_name || !payload.category) {
+      toast('Key, display name, and category are required', 'error')
+      return
+    }
+
+    setSaving(true)
+    try {
+      if (editingId) {
+        await updateIntegrationType(editingId, payload)
+        toast('Integration type updated')
+      } else {
+        await createIntegrationType(payload)
+        toast('Integration type created')
+      }
+      resetForm()
+      await loadItems(true)
+    } catch (error) {
+      toast(extractErrorMessage(error) || 'Failed to save integration type', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEdit = (item) => {
+    setEditingId(item.id)
+    setForm({
+      key: item.key || '',
+      display_name: item.display_name || '',
+      category: item.category || 'monitoring',
+      enabled: Boolean(item.enabled),
+      supports_webhook: Boolean(item.supports_webhook),
+      supports_polling: Boolean(item.supports_polling),
+      supports_sync: Boolean(item.supports_sync),
+      config_schema_json: JSON.stringify(item.config_schema_json || {}, null, 2),
+    })
+  }
+
+  const handleDisable = async (item) => {
+    if (!window.confirm(`Disable ${item.display_name}? Existing tenant integrations will remain, but the catalog entry will stop being offered for new setup.`)) {
+      return
+    }
+    try {
+      await deleteIntegrationType(item.id)
+      toast('Integration type disabled')
+      if (editingId === item.id) {
+        resetForm()
+      }
+      await loadItems(true)
+    } catch (error) {
+      toast(extractErrorMessage(error) || 'Failed to disable integration type', 'error')
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Integration Catalog</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Create and manage the global integration type definitions used by tenant workspaces.</p>
+        </div>
+        <button
+          onClick={() => loadItems(true)}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+        >
+          <RefreshCcw size={11} className={refreshing ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Catalog Entries" value={loading ? '…' : items.length} color="var(--neon-indigo)" icon={Zap} />
+        <StatCard label="Enabled" value={loading ? '…' : enabledCount} color="var(--neon-green)" icon={CheckCircle} />
+        <StatCard label="Webhook Ready" value={loading ? '…' : items.filter((item) => item.supports_webhook).length} color="var(--neon-cyan)" icon={Globe} />
+        <StatCard label="Sync Ready" value={loading ? '…' : items.filter((item) => item.supports_sync).length} color="var(--brand-orange)" icon={Layers} />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
+        <div className="glass rounded-xl p-5" style={{ border: '1px solid var(--border)' }}>
+          <SectionTitle>Catalog Entries</SectionTitle>
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((item) => (
+                <div key={item} className="rounded-lg animate-pulse" style={{ height: 74, background: 'var(--bg-input)', border: '1px solid var(--border)' }} />
+              ))}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-10 text-center" style={{ color: 'var(--text-muted)' }}>
+              No integration types defined.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {items.map((item) => (
+                <div key={item.id} className="rounded-xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>{item.display_name}</span>
+                        <StatusBadge status={item.enabled ? 'active' : 'disabled'} />
+                        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{item.category}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>{item.key}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button onClick={() => handleEdit(item)} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ background: 'var(--glow-indigo)', border: '1px solid rgba(99,102,241,0.25)', color: 'var(--neon-indigo)' }}>
+                        Edit
+                      </button>
+                      <button onClick={() => handleDisable(item)} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ background: 'rgba(244,63,94,0.10)', border: '1px solid rgba(244,63,94,0.22)', color: 'var(--color-accent-red)' }}>
+                        Disable
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap mt-3">
+                    {[
+                      ['Webhook', item.supports_webhook],
+                      ['Polling', item.supports_polling],
+                      ['Sync', item.supports_sync],
+                    ].map(([label, enabled]) => (
+                      <span key={label} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 999, border: '1px solid var(--border)', color: enabled ? 'var(--neon-cyan)' : 'var(--text-muted)', background: enabled ? 'rgba(34,211,238,0.08)' : 'transparent' }}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <SectionTitle>{editingId ? 'Edit Entry' : 'New Entry'}</SectionTitle>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {editingId ? 'Update the catalog definition and schema used for new tenant integrations.' : 'Add a new integration type to the global catalog.'}
+              </p>
+            </div>
+            {editingId && (
+              <button type="button" onClick={resetForm} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                Cancel edit
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Key</div>
+              <input value={form.key} onChange={(event) => setForm((current) => ({ ...current, key: event.target.value }))} placeholder="site24x7" style={{ ...inputCls, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
+            </label>
+            <label>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Display Name</div>
+              <input value={form.display_name} onChange={(event) => setForm((current) => ({ ...current, display_name: event.target.value }))} placeholder="Site24x7" style={inputCls} />
+            </label>
+          </div>
+
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Category</div>
+            <input value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} placeholder="monitoring" style={{ ...inputCls, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              ['enabled', 'Enabled'],
+              ['supports_webhook', 'Webhook'],
+              ['supports_polling', 'Polling'],
+              ['supports_sync', 'Sync'],
+            ].map(([field, label]) => (
+              <label key={field} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-secondary)' }}>
+                <input type="checkbox" checked={Boolean(form[field])} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.checked }))} />
+                {label}
+              </label>
+            ))}
+          </div>
+
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Config Schema JSON</div>
+            <textarea value={form.config_schema_json} onChange={(event) => setForm((current) => ({ ...current, config_schema_json: event.target.value }))} style={textareaCls} spellCheck={false} />
+          </label>
+
+          <button type="submit" disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+            {saving ? 'Saving…' : editingId ? 'Update Integration Type' : 'Create Integration Type'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 function SettingsSection() {
   const toast = useToast()
-  const [settings,  setSettings]  = useState(null)
-  const [dlq,       setDlq]       = useState([])
-  const [loading,   setLoading]   = useState(true)
+  const [settings, setSettingsState] = useState(null)
+  const [form, setForm] = useState(null)
+  const [dlq, setDlq] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [dlqLoading, setDlqLoading] = useState(false)
-  const [replayingIdx, setReplayingIdx] = useState(null)
-  const [clearing,  setClearing]  = useState(false)
+  const [replayingIndex, setReplayingIndex] = useState(null)
+  const [clearing, setClearing] = useState(false)
 
-  useEffect(() => {
-    Promise.all([
+  const syncForm = useCallback((source) => {
+    if (!source) {
+      setForm(null)
+      return
+    }
+    setForm({
+      llm_provider: source.llm_provider ?? '',
+      llm_primary_model: source.llm_primary_model ?? '',
+      llm_fallback_model: source.llm_fallback_model ?? '',
+      llm_circuit_breaker_threshold: String(source.llm_circuit_breaker_threshold ?? ''),
+      llm_circuit_breaker_cooldown: String(source.llm_circuit_breaker_cooldown ?? ''),
+      investigation_timeout: String(source.investigation_timeout ?? ''),
+      execution_timeout: String(source.execution_timeout ?? ''),
+      verification_timeout: String(source.verification_timeout ?? ''),
+      max_investigation_retries: String(source.max_investigation_retries ?? ''),
+      max_execution_retries: String(source.max_execution_retries ?? ''),
+      max_verification_retries: String(source.max_verification_retries ?? ''),
+      lock_ttl: String(source.lock_ttl ?? ''),
+    })
+  }, [])
+
+  const loadData = useCallback(async () => {
+    const [settingsResponse, dlqResponse] = await Promise.all([
       fetchSettings().catch(() => null),
       fetchDLQ({ limit: 50 }).catch(() => ({ items: [] })),
-    ]).then(([s, d]) => {
-      setSettings(s)
-      setDlq(d?.items || [])
-    }).finally(() => setLoading(false))
-  }, [])
+    ])
+    setSettingsState(settingsResponse)
+    syncForm(settingsResponse)
+    setDlq(dlqResponse?.items || [])
+  }, [syncForm])
+
+  useEffect(() => {
+    loadData().finally(() => setLoading(false))
+  }, [loadData])
 
   const reloadDlq = async () => {
     setDlqLoading(true)
     try {
-      const d = await fetchDLQ({ limit: 50 })
-      setDlq(d?.items || [])
+      const response = await fetchDLQ({ limit: 50 })
+      setDlq(response?.items || [])
     } finally {
       setDlqLoading(false)
     }
   }
 
-  const handleReplay = async (idx) => {
-    setReplayingIdx(idx)
+  const handleFormChange = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const handleSave = async () => {
+    if (!form) {
+      return
+    }
+
+    const numberFields = [
+      'llm_circuit_breaker_threshold',
+      'llm_circuit_breaker_cooldown',
+      'investigation_timeout',
+      'execution_timeout',
+      'verification_timeout',
+      'max_investigation_retries',
+      'max_execution_retries',
+      'max_verification_retries',
+      'lock_ttl',
+    ]
+
+    const payload = {
+      llm_provider: form.llm_provider.trim(),
+      llm_primary_model: form.llm_primary_model.trim(),
+      llm_fallback_model: form.llm_fallback_model.trim(),
+    }
+
+    for (const field of numberFields) {
+      const value = Number(form[field])
+      if (!Number.isFinite(value)) {
+        toast(`Invalid value for ${field.replaceAll('_', ' ')}`, 'error')
+        return
+      }
+      payload[field] = value
+    }
+
+    setSaving(true)
     try {
-      await replayDLQEntry(idx)
-      toast('Entry replayed')
-      reloadDlq()
-    } catch (err) {
-      toast(extractErrorMessage(err) || 'Replay failed', 'error')
+      await updateSettings(payload)
+      const nextSettings = {
+        ...settings,
+        ...payload,
+      }
+      setSettingsState(nextSettings)
+      syncForm(nextSettings)
+      toast('Platform settings updated')
+    } catch (error) {
+      toast(extractErrorMessage(error) || 'Failed to update settings', 'error')
     } finally {
-      setReplayingIdx(null)
+      setSaving(false)
+    }
+  }
+
+  const handleReplay = async (index) => {
+    setReplayingIndex(index)
+    try {
+      await replayDLQEntry(index)
+      toast('DLQ entry replayed')
+      await reloadDlq()
+    } catch (error) {
+      toast(extractErrorMessage(error) || 'Replay failed', 'error')
+    } finally {
+      setReplayingIndex(null)
     }
   }
 
   const handleClearDlq = async () => {
-    if (!window.confirm('Clear all DLQ entries? This cannot be undone.')) return
+    if (!window.confirm('Clear all DLQ entries? This cannot be undone.')) {
+      return
+    }
     setClearing(true)
     try {
       await clearDLQ()
       setDlq([])
       toast('DLQ cleared')
-    } catch (err) {
-      toast(extractErrorMessage(err) || 'Clear failed', 'error')
+    } catch (error) {
+      toast(extractErrorMessage(error) || 'Clear failed', 'error')
     } finally {
       setClearing(false)
     }
   }
 
-  const ConfigRow = ({ label, value, mono = false }) => (
-    <div className="flex items-center justify-between py-2.5 border-b" style={{ borderColor: 'var(--border)' }}>
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{label}</span>
-      <span style={{ fontSize: 12, fontFamily: mono ? 'var(--font-mono)' : 'inherit', color: 'var(--text-heading)', fontWeight: 600, maxWidth: '55%', textAlign: 'right', wordBreak: 'break-all' }}>
-        {value ?? '—'}
-      </span>
-    </div>
-  )
-
   return (
     <div className="space-y-8">
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Settings</h2>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Platform configuration, AI models, and pipeline tuning.</p>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Tune AI providers, pipeline limits, and runtime safety thresholds for the active API process.</p>
       </div>
 
-      {loading ? (
+      {loading || !form ? (
         <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="glass rounded-xl h-20 skeleton" style={{ border: '1px solid var(--border)' }} />)}
+          {[1, 2, 3].map((item) => <div key={item} className="glass rounded-xl h-20 skeleton" style={{ border: '1px solid var(--border)' }} />)}
         </div>
       ) : (
         <>
-          {/* AI / LLM */}
-          <div>
-            <SectionTitle>AI Engine</SectionTitle>
-            <div className="glass rounded-xl p-5" style={{ border: '1px solid var(--border)' }}>
-              <div className="flex items-center gap-2 mb-4">
-                <Brain size={15} style={{ color: 'var(--neon-purple)' }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>LLM Configuration</span>
+          <div className="glass rounded-xl p-5 space-y-5" style={{ border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <SectionTitle>Runtime Controls</SectionTitle>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>These values are applied in-memory for the running API process so platform admins can tune behavior without editing env vars first.</p>
               </div>
-              <ConfigRow label="Provider"         value={settings?.llm_provider}         mono />
-              <ConfigRow label="Primary Model"    value={settings?.llm_primary_model}    mono />
-              <ConfigRow label="Fallback Model"   value={settings?.llm_fallback_model}   mono />
-              <ConfigRow label="Circuit Breaker Threshold" value={settings?.llm_circuit_breaker_threshold} />
-              <ConfigRow label="Circuit Breaker Cooldown"  value={settings?.llm_circuit_breaker_cooldown != null ? `${settings.llm_circuit_breaker_cooldown}s` : null} />
+              <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+                {saving ? 'Saving…' : 'Save Settings'}
+              </button>
             </div>
-          </div>
 
-          {/* Pipeline timeouts */}
-          <div>
-            <SectionTitle>Pipeline Timeouts &amp; Retries</SectionTitle>
-            <div className="glass rounded-xl p-5" style={{ border: '1px solid var(--border)' }}>
-              <div className="flex items-center gap-2 mb-4">
-                <Clock size={15} style={{ color: 'var(--neon-cyan)' }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Execution Limits</span>
-              </div>
-              <ConfigRow label="Investigation Timeout"  value={settings?.investigation_timeout  != null ? `${settings.investigation_timeout}s`  : null} />
-              <ConfigRow label="Execution Timeout"      value={settings?.execution_timeout      != null ? `${settings.execution_timeout}s`      : null} />
-              <ConfigRow label="Verification Timeout"   value={settings?.verification_timeout   != null ? `${settings.verification_timeout}s`   : null} />
-              <ConfigRow label="Max Investigation Retries" value={settings?.max_investigation_retries} />
-              <ConfigRow label="Max Execution Retries"     value={settings?.max_execution_retries} />
-              <ConfigRow label="Max Verification Retries"  value={settings?.max_verification_retries} />
-              <ConfigRow label="Redis Lock TTL"         value={settings?.lock_ttl != null ? `${settings.lock_ttl}s` : null} />
-            </div>
-          </div>
-
-          {/* Notifications */}
-          {(settings?.slack_webhook_url || settings?.email_smtp_host) && (
             <div>
-              <SectionTitle>Notifications</SectionTitle>
-              <div className="glass rounded-xl p-5" style={{ border: '1px solid var(--border)' }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Zap size={15} style={{ color: 'var(--neon-green)' }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Notification Channels</span>
-                </div>
-                {settings?.slack_webhook_url && (
-                  <ConfigRow label="Slack Webhook" value="Configured" />
-                )}
-                {settings?.email_smtp_host && (
-                  <>
-                    <ConfigRow label="SMTP Host" value={settings.email_smtp_host} mono />
-                    <ConfigRow label="SMTP Port" value={settings.email_smtp_port} />
-                    <ConfigRow label="From Email" value={settings.email_from} />
-                  </>
-                )}
+              <SectionTitle>AI Engine</SectionTitle>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Provider</div>
+                  <input value={form.llm_provider} onChange={(event) => handleFormChange('llm_provider', event.target.value)} style={inputCls} />
+                </label>
+                <label>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Primary Model</div>
+                  <input value={form.llm_primary_model} onChange={(event) => handleFormChange('llm_primary_model', event.target.value)} style={{ ...inputCls, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
+                </label>
+                <label>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Fallback Model</div>
+                  <input value={form.llm_fallback_model} onChange={(event) => handleFormChange('llm_fallback_model', event.target.value)} style={{ ...inputCls, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
+                </label>
+                <label>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Circuit Breaker Threshold</div>
+                  <input value={form.llm_circuit_breaker_threshold} onChange={(event) => handleFormChange('llm_circuit_breaker_threshold', event.target.value)} style={inputCls} inputMode="numeric" />
+                </label>
+                <label>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Circuit Breaker Cooldown (s)</div>
+                  <input value={form.llm_circuit_breaker_cooldown} onChange={(event) => handleFormChange('llm_circuit_breaker_cooldown', event.target.value)} style={inputCls} inputMode="numeric" />
+                </label>
               </div>
             </div>
-          )}
 
-          {/* DLQ */}
+            <div>
+              <SectionTitle>Pipeline Limits</SectionTitle>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  ['investigation_timeout', 'Investigation Timeout (s)'],
+                  ['execution_timeout', 'Execution Timeout (s)'],
+                  ['verification_timeout', 'Verification Timeout (s)'],
+                  ['max_investigation_retries', 'Max Investigation Retries'],
+                  ['max_execution_retries', 'Max Execution Retries'],
+                  ['max_verification_retries', 'Max Verification Retries'],
+                  ['lock_ttl', 'Redis Lock TTL (s)'],
+                ].map(([field, label]) => (
+                  <label key={field}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{label}</div>
+                    <input value={form[field]} onChange={(event) => handleFormChange(field, event.target.value)} style={inputCls} inputMode="numeric" />
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div>
             <SectionTitle>Dead Letter Queue</SectionTitle>
             <div className="glass rounded-xl p-5" style={{ border: '1px solid var(--border)' }}>
@@ -619,9 +1308,9 @@ function SettingsSection() {
                     <RefreshCcw size={12} style={{ color: 'var(--text-muted)' }} className={dlqLoading ? 'animate-spin' : ''} />
                   </button>
                   {dlq.length > 0 && (
-                    <button onClick={handleClearDlq} disabled={clearing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: 'rgba(244,63,94,0.10)', border: '1px solid rgba(244,63,94,0.25)', color: 'var(--color-accent-red)' }}>
-                      <Trash2 size={11} /> {clearing ? 'Clearing…' : 'Clear All'}
+                    <button onClick={handleClearDlq} disabled={clearing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ background: 'rgba(244,63,94,0.10)', border: '1px solid rgba(244,63,94,0.25)', color: 'var(--color-accent-red)' }}>
+                      <Trash2 size={11} />
+                      {clearing ? 'Clearing…' : 'Clear All'}
                     </button>
                   )}
                 </div>
@@ -634,11 +1323,11 @@ function SettingsSection() {
                 </div>
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {dlq.map((entry, idx) => (
-                    <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  {dlq.map((entry, index) => (
+                    <div key={index} className="flex items-center justify-between gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
                       <div className="min-w-0">
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)', fontFamily: 'var(--font-mono)' }}>
-                          {entry.function || entry.job_id || `Entry #${idx}`}
+                          {entry.function || entry.job_id || `Entry #${index}`}
                         </div>
                         {entry.error && (
                           <div style={{ fontSize: 11, color: 'var(--color-accent-red)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 400 }}>
@@ -649,13 +1338,8 @@ function SettingsSection() {
                           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{formatRelativeTime(entry.enqueue_time)}</div>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleReplay(idx)}
-                        disabled={replayingIdx === idx}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0"
-                        style={{ background: 'var(--glow-indigo)', border: '1px solid rgba(99,102,241,0.25)', color: 'var(--neon-indigo)' }}
-                      >
-                        {replayingIdx === idx ? <RefreshCcw size={11} className="animate-spin" /> : <ArrowRightCircle size={11} />}
+                      <button onClick={() => handleReplay(index)} disabled={replayingIndex === index} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0" style={{ background: 'var(--glow-indigo)', border: '1px solid rgba(99,102,241,0.25)', color: 'var(--neon-indigo)' }}>
+                        {replayingIndex === index ? <RefreshCcw size={11} className="animate-spin" /> : <ArrowRightCircle size={11} />}
                         Replay
                       </button>
                     </div>
@@ -670,63 +1354,55 @@ function SettingsSection() {
   )
 }
 
-// ── Page Shell ────────────────────────────────────────────────────────────────
-
 export default function PlatformAdminPage() {
   const { user, logout } = useAuth()
+  const { isDark, toggle: toggleTheme } = useTheme()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const activeSection = searchParams.get('section') || 'overview'
-
   const setSection = useCallback((id) => {
     setSearchParams({ section: id }, { replace: true })
   }, [setSearchParams])
 
-  const displayRole = (user?.role || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  const displayRole = (user?.role || '').replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase())
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-base, #0f1117)', color: 'var(--text-primary, #e2e8f0)' }}>
-      {/* Topbar */}
-      <div
-        className="flex items-center justify-between px-6 py-3 border-b sticky top-0 z-40"
-        style={{ background: 'var(--bg-surface, #1a1d27)', borderColor: 'var(--border, rgba(255,255,255,0.08))' }}
-      >
+    <div className="min-h-screen" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
+      {/* ── Top Bar ── */}
+      <div className="flex items-center justify-between px-6 py-3 border-b sticky top-0 z-40" style={{ background: 'var(--bg-sidebar)', borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 text-sm font-semibold transition-opacity hover:opacity-70"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            <ArrowLeft size={15} />
-            Dashboard
-          </button>
-          <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
           <div className="flex items-center gap-2">
             <Globe size={15} style={{ color: '#22d3ee' }} />
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>Platform Admin</span>
           </div>
           {user?.role && (
-            <span
-              className="px-2 py-0.5 rounded-full"
-              style={{ fontSize: 10, fontWeight: 700, background: 'rgba(34,211,238,0.10)', color: '#22d3ee', border: '1px solid rgba(34,211,238,0.22)', textTransform: 'uppercase', letterSpacing: '0.05em' }}
-            >
+            <span className="px-2 py-0.5 rounded-full" style={{ fontSize: 10, fontWeight: 700, background: 'rgba(34,211,238,0.10)', color: '#22d3ee', border: '1px solid rgba(34,211,238,0.22)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {displayRole}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <ShieldCheck size={12} style={{ color: 'var(--color-accent-green)' }} />
             <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>PLATFORM SCOPE</span>
           </div>
-          {user?.display_name && (
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{user.display_name}</span>
+          {user?.displayName && (
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{user.displayName}</span>
           )}
+          {/* ── Theme Toggle ── */}
+          <button
+            onClick={toggleTheme}
+            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="p-2 rounded-lg transition-all hover:opacity-80"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+          >
+            {isDark ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
           {logout && (
             <button
-              onClick={() => { logout(); navigate('/login') }}
+              onClick={() => { logout(); navigate('/admin/login') }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-70"
               style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
             >
@@ -737,19 +1413,15 @@ export default function PlatformAdminPage() {
         </div>
       </div>
 
-      {/* Body */}
       <div className="flex min-h-[calc(100vh-49px)]">
-        {/* Left nav */}
-        <nav
-          className="w-56 flex-shrink-0 border-r py-6 px-3 space-y-1"
-          style={{ borderColor: 'var(--border)', background: 'var(--bg-surface, #1a1d27)' }}
-        >
-          {SECTIONS.map(sec => {
-            const isActive = activeSection === sec.id
+        {/* ── Sidebar ── */}
+        <nav className="w-56 flex-shrink-0 border-r py-6 px-3 space-y-1" style={{ borderColor: 'var(--border)', background: 'var(--bg-sidebar)' }}>
+          {SECTIONS.map((section) => {
+            const isActive = activeSection === section.id
             return (
               <button
-                key={sec.id}
-                onClick={() => setSection(sec.id)}
+                key={section.id}
+                onClick={() => setSection(section.id)}
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all"
                 style={{
                   background: isActive ? 'rgba(34,211,238,0.08)' : 'transparent',
@@ -759,37 +1431,30 @@ export default function PlatformAdminPage() {
                   fontSize: 13,
                 }}
               >
-                <sec.icon size={14} style={{ flexShrink: 0 }} />
-                {sec.label}
+                <section.icon size={14} style={{ flexShrink: 0 }} />
+                {section.label}
               </button>
             )
           })}
         </nav>
 
-        {/* Content */}
+        {/* ── Main Content ── */}
         <main className="flex-1 overflow-auto">
           <div className="max-w-5xl mx-auto px-8 py-8 animate-fade-in">
-            {activeSection === 'overview'      && <OverviewSection      onNavigate={setSection} />}
+            {activeSection === 'overview' && <OverviewSection onNavigate={setSection} />}
             {activeSection === 'organizations' && <OrganizationsSection />}
-            {activeSection === 'workspaces'    && (
+            {activeSection === 'workspaces' && (
               <div className="space-y-4">
                 <div>
                   <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Workspaces</h2>
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Manage tenant workspaces, projects, and organization mappings.</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Manage tenant inventory, onboarding, and organization mappings without crossing into tenant-owned project data.</p>
                 </div>
-                <TenantWorkspaceManager mode="organizations" />
+                <TenantWorkspaceManager mode="platform" />
               </div>
             )}
-            {activeSection === 'integrations'  && (
-              <div className="space-y-4">
-                <div>
-                  <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Integrations</h2>
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Configure monitoring integrations, sync external monitors, and bind to projects.</p>
-                </div>
-                <TenantWorkspaceManager mode="integrations" />
-              </div>
-            )}
-            {activeSection === 'settings'      && <SettingsSection />}
+            {activeSection === 'users' && <UsersSection />}
+            {activeSection === 'integrations' && <IntegrationCatalogSection />}
+            {activeSection === 'settings' && <SettingsSection />}
           </div>
         </main>
       </div>

@@ -155,8 +155,9 @@ describe('HealthChecksPage', () => {
   })
 
   it('renders loading state initially', () => {
-    // Make the fetch never resolve to keep loading state
+    // Keep both async loads pending so the page stays in its initial loading phase.
     mockFetchDashboard = vi.fn().mockReturnValue(new Promise(() => {}))
+    mockFetchMonitorInventory = vi.fn().mockReturnValue(new Promise(() => {}))
     renderPage()
     expect(screen.getByText('Loading health checks...')).toBeInTheDocument()
   })
