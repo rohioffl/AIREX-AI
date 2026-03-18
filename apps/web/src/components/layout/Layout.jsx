@@ -11,15 +11,12 @@ import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { fetchIncidents } from '../../services/api'
 import { createSSEConnection } from '../../services/sse'
+import {
+  canAccessRoute,
+  normalizeRole,
+} from '../../utils/accessControl'
 import ToastContainer from '../common/ToastContainer'
 import LeadApprovalPanel from './LeadApprovalPanel'
-
-function normalizeRole(role) {
-  const normalized = (role || 'operator').toLowerCase()
-  if (normalized.startsWith('org_')) return normalized.replace(/^org_/, '')
-  if (normalized.startsWith('tenant_')) return normalized.replace(/^tenant_/, '')
-  return normalized
-}
 
 const ACTIVE_STATES = [
   'RECEIVED', 'INVESTIGATING', 'RECOMMENDATION_READY',
@@ -37,7 +34,10 @@ const NAV_ITEMS = [
   { label: 'Proactive', path: '/patterns', icon: Layers, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin', 'operator'] },
   { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
-  { label: 'Platform Admin', path: '/admin', icon: ShieldCheck, roles: ['platform_admin'] },
+  { label: 'Platform Admin', path: '/admin', icon: ShieldCheck, access: 'platform_admin' },
+  { label: 'Org Admin', path: '/org-admin', icon: Building2, access: 'organizations_admin' },
+  { label: 'Tenant Workspaces', path: '/admin/workspaces', icon: Layers, access: 'tenant_admin' },
+  { label: 'Integrations', path: '/admin/integrations', icon: Zap, access: 'tenant_admin' },
 ]
 
 const ROUTE_TITLES = {
@@ -53,11 +53,11 @@ const ROUTE_TITLES = {
   '/patterns':               { label: 'Proactive',        parent: null },
   '/reports':                { label: 'Reports',          parent: null },
   '/settings':               { label: 'Settings',         parent: null },
-  '/admin/legacy':           { label: 'System Admin',     parent: null },
+  '/org-admin':              { label: 'Org Admin',        parent: null },
   '/admin':                  { label: 'Platform Admin',   parent: null },
-  '/admin/organizations':    { label: 'Organizations',    parent: 'System Admin' },
-  '/admin/workspaces':       { label: 'Tenant Workspaces', parent: 'System Admin' },
-  '/admin/integrations':     { label: 'Integrations',     parent: 'System Admin' },
+  '/admin/organizations':    { label: 'Organizations',    parent: null },
+  '/admin/workspaces':       { label: 'Tenant Workspaces', parent: null },
+  '/admin/integrations':     { label: 'Integrations',     parent: null },
   '/profile':               { label: 'Profile',           parent: 'Account' },
 }
 
@@ -65,7 +65,17 @@ export default function Layout({ children }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { isDark, toggle } = useTheme()
-  const { user, logout, tenants, activeTenant, activeOrganization, switchTenant, organizations } = useAuth()
+  const {
+    user,
+    logout,
+    tenants,
+    activeTenant,
+    activeOrganization,
+    switchTenant,
+    organizations,
+    organizationMemberships,
+    tenantMemberships,
+  } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [activeAlertIds, setActiveAlertIds] = useState(new Set())
@@ -215,6 +225,13 @@ export default function Layout({ children }) {
     || (user?.email
       ? user.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
       : 'Operator')
+  const accessContext = {
+    user,
+    activeOrganization,
+    activeTenantId: activeTenant?.id,
+    organizationMemberships,
+    tenantMemberships,
+  }
 
   return (
     <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
@@ -248,6 +265,9 @@ export default function Layout({ children }) {
             <span className="sidebar-label">Navigation</span>
           </div>
           {NAV_ITEMS.filter(item => {
+            if (item.access) {
+              return canAccessRoute(accessContext, item.access)
+            }
             // Filter by role if roles are specified
             if (item.roles && user) {
               const userRole = normalizeRole(user.role || 'operator')

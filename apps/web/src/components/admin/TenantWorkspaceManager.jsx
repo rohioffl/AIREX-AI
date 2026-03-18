@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import ModalShell from '../common/ModalShell'
+import { useAuth } from '../../context/AuthContext'
 import { useToasts } from '../../context/ToastContext'
 import {
   createProjectMonitorBinding,
@@ -38,6 +39,7 @@ import {
 } from '../../services/api'
 import { useTenantWorkspace } from '../../hooks/useTenantWorkspace'
 import { extractErrorMessage } from '../../utils/errorHandler'
+import { normalizeRole } from '../../utils/accessControl'
 
 function StatCard({ label, value, color = 'var(--neon-indigo)', icon: Icon, sub }) {
   return (
@@ -113,8 +115,20 @@ function CredBadge({ status }) {
   )
 }
 
+function DetailField({ label, value, mono = false, tone = 'var(--text-heading)' }) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+      <div style={{ fontSize: 13, color: tone, marginTop: 5, fontFamily: mono ? 'var(--font-mono)' : 'inherit', wordBreak: 'break-word' }}>
+        {value || 'Not configured'}
+      </div>
+    </div>
+  )
+}
+
 export default function TenantWorkspaceManager({ mode = 'workspace' }) {
   const { addToast } = useToasts()
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
   const [showOnboard, setShowOnboard] = useState(false)
   const [editingTenant, setEditingTenant] = useState(null)
@@ -128,6 +142,7 @@ export default function TenantWorkspaceManager({ mode = 'workspace' }) {
   const [selectedProjectByMonitor, setSelectedProjectByMonitor] = useState({})
   const [bindingBusyKey, setBindingBusyKey] = useState(null)
 
+  const isPlatformInventoryMode = mode === 'platform'
   const toast = useCallback(
     (msg, type = 'success') => {
       addToast({
@@ -155,6 +170,7 @@ export default function TenantWorkspaceManager({ mode = 'workspace' }) {
     reloadWorkspace,
   } = useTenantWorkspace({
     onError: (message) => toast(message, 'error'),
+    loadDetails: !isPlatformInventoryMode,
   })
 
   const filtered = useMemo(() => {
@@ -176,11 +192,19 @@ export default function TenantWorkspaceManager({ mode = 'workspace' }) {
         subtitle: 'Configure tenant-owned monitoring integrations, webhook endpoints, and sync status.',
       }
     }
+    if (mode === 'platform') {
+      return {
+        title: 'Tenant Workspaces',
+        subtitle: 'Manage tenant inventory, onboarding, and organization placement without loading tenant-owned projects or integrations.',
+      }
+    }
     return {
       title: 'Tenant Workspaces',
       subtitle: 'Manage tenants, projects, and workspace-level SaaS configuration.',
     }
   }, [mode])
+
+  const canManageOrganizations = normalizeRole(user?.role) === 'platform_admin'
 
   const refreshProjectBindings = useCallback(async () => {
     if (!selectedTenant || projects.length === 0) {
@@ -364,9 +388,11 @@ export default function TenantWorkspaceManager({ mode = 'workspace' }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowCreateOrganization(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-            <ShieldCheck size={14} /> Add Organization
-          </button>
+          {canManageOrganizations && (
+            <button onClick={() => setShowCreateOrganization(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+              <ShieldCheck size={14} /> Add Organization
+            </button>
+          )}
           <button onClick={handleReload} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
             <RefreshCcw size={14} /> Reload Config
           </button>
@@ -412,20 +438,93 @@ export default function TenantWorkspaceManager({ mode = 'workspace' }) {
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>servers</div>
                 </div>
                 <CloudBadge cloud={t.cloud} />
-                <div className="flex items-center gap-1">
-                  <button onClick={(event) => { event.stopPropagation(); openEdit(t) }} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Edit">
-                    <Edit size={14} style={{ color: 'var(--text-muted)' }} />
-                  </button>
-                  <button onClick={(event) => { event.stopPropagation(); setDeletingTenant(t) }} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Delete">
-                    <Trash2 size={14} style={{ color: 'var(--color-accent-amber)' }} />
-                  </button>
-                </div>
+                {!isPlatformInventoryMode && (
+                  <div className="flex items-center gap-1">
+                    <button onClick={(event) => { event.stopPropagation(); openEdit(t) }} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Edit">
+                      <Edit size={14} style={{ color: 'var(--text-muted)' }} />
+                    </button>
+                    <button onClick={(event) => { event.stopPropagation(); setDeletingTenant(t) }} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Delete">
+                      <Trash2 size={14} style={{ color: 'var(--color-accent-amber)' }} />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {isPlatformInventoryMode && (
+        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
+          <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
+            <SectionHeader
+              title={selectedTenant ? `Tenant Profile · ${selectedTenant.display_name}` : 'Tenant Profile'}
+            />
+
+            {!selectedTenant ? (
+              <div className="rounded-xl p-5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Select a tenant</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                  Pick a tenant from the inventory above to review its SaaS profile, ownership, cloud placement, and onboarding readiness.
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(34,211,238,0.08))', border: '1px solid rgba(99,102,241,0.18)' }}>
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>{selectedTenant.display_name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                        SaaS workspace record for onboarding, ownership, and operational routing.
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CloudBadge cloud={selectedTenant.cloud} />
+                      <CredBadge status={selectedTenant.credential_status} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <DetailField label="Tenant Slug" value={selectedTenant.name} mono />
+                  <DetailField label="Organization" value={selectedTenant.organization_name || organizations.find((org) => org.id === activeOrganizationId)?.name} />
+                  <DetailField label="Escalation Email" value={selectedTenant.escalation_email} />
+                  <DetailField label="Slack Channel" value={selectedTenant.slack_channel} mono />
+                  <DetailField label="SSH User" value={selectedTenant.ssh_user} mono />
+                  <DetailField label="Servers" value={String(selectedTenant.server_count ?? 0)} tone="var(--neon-cyan)" mono />
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
+            <SectionHeader title="SaaS Admin Guardrails" />
+            <div className="space-y-3">
+              {[
+                {
+                  title: 'Tenant onboarding belongs here',
+                  body: 'Provision new customer environments, attach them to the right organization, and maintain customer-facing workspace metadata from this page.',
+                },
+                {
+                  title: 'Tenant internals stay scoped',
+                  body: 'Project catalogs, tenant integrations, and monitor bindings remain in organization or tenant admin surfaces so platform admins do not operate inside shared tenant context by accident.',
+                },
+                {
+                  title: 'Profiles are view-only here',
+                  body: 'Platform admins can review tenant metadata from this inventory view, while tenant profile changes remain in the scoped admin workflows.',
+                },
+              ].map((item) => (
+                <div key={item.title} className="rounded-xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)' }}>{item.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>{item.body}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isPlatformInventoryMode && (
       <div className={`grid grid-cols-1 ${mode === 'organizations' ? 'xl:grid-cols-1' : 'xl:grid-cols-2'} gap-6`}>
         <div className="glass rounded-xl p-5 space-y-4">
           <SectionHeader
@@ -617,10 +716,11 @@ export default function TenantWorkspaceManager({ mode = 'workspace' }) {
         </div>
         )}
       </div>
+      )}
 
       {showOnboard && <TenantOnboardModal organizationId={activeOrganizationId} onClose={() => setShowOnboard(false)} onSaved={() => { setShowOnboard(false); reloadWorkspace() }} />}
       {editingTenant && <TenantEditDrawer tenant={editingTenant} onClose={() => setEditingTenant(null)} onSaved={() => { setEditingTenant(null); reloadWorkspace() }} />}
-      {showCreateOrganization && <OrganizationCreateModal onClose={() => setShowCreateOrganization(false)} onSaved={() => { setShowCreateOrganization(false); reloadWorkspace() }} />}
+      {canManageOrganizations && showCreateOrganization && <OrganizationCreateModal onClose={() => setShowCreateOrganization(false)} onSaved={() => { setShowCreateOrganization(false); reloadWorkspace() }} />}
       {showCreateProject && selectedTenant && <ProjectCreateModal tenant={selectedTenant} onClose={() => setShowCreateProject(false)} onSaved={() => { setShowCreateProject(false); loadWorkspace(selectedTenant.id) }} />}
       {showCreateIntegration && selectedTenant && <IntegrationCreateModal tenant={selectedTenant} onClose={() => setShowCreateIntegration(false)} onSaved={() => { setShowCreateIntegration(false); loadWorkspace(selectedTenant.id) }} />}
       {deletingTenant && (

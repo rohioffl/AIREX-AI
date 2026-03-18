@@ -1,13 +1,21 @@
-import { useState, useEffect } from 'react'
-import { X, Plus, FileText } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Plus } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { fetchTemplates, createIncident } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
 
+const MotionDiv = motion.div
+const MotionSpan = motion.span
+
 export default function CreateIncidentModal({ onClose, onSuccess }) {
   const navigate = useNavigate()
+  const modalRef = useRef(null)
+  const previousFocusRef = useRef(null)
   const [templates, setTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState({})
+  const [submitError, setSubmitError] = useState(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -16,6 +24,15 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
     host_key: '',
     meta: null,
   })
+
+  // Focus management
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement
+    modalRef.current?.focus()
+    return () => {
+      previousFocusRef.current?.focus()
+    }
+  }, [])
 
   useEffect(() => {
     // Load active templates
@@ -40,14 +57,37 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
     }
   }, [selectedTemplate, templates])
 
+  const validate = () => {
+    const newErrors = {}
+    if (!formData.title.trim()) {
+      newErrors.title = 'Title is required'
+    }
+    if (!formData.alert_type.trim()) {
+      newErrors.alert_type = 'Alert Type is required'
+    }
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleFieldChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear field error on change
+    if (errors[field]) {
+      setErrors(prev => {
+        const next = { ...prev }
+        delete next[field]
+        return next
+      })
+    }
+    setSubmitError(null)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!formData.title || !formData.alert_type) {
-      alert('Title and Alert Type are required')
-      return
-    }
+    if (!validate()) return
 
     setLoading(true)
+    setSubmitError(null)
     try {
       const data = {
         title: formData.title,
@@ -63,23 +103,42 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
       if (onSuccess) {
         onSuccess(result)
       } else {
-        // Navigate to the new incident
         navigate(`/incidents/${result.incident_id}`)
       }
       onClose()
     } catch (error) {
       console.error('Failed to create incident:', error)
-      alert(error.response?.data?.detail || 'Failed to create incident')
+      setSubmitError(error.response?.data?.detail || 'Failed to create incident')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div
-        className="glass rounded-xl p-6 w-full max-w-2xl shadow-2xl border border-border max-h-[90vh] overflow-y-auto"
+    <div
+      ref={modalRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Create Incident"
+      className="fixed inset-0 flex items-center justify-center z-50"
+      onKeyDown={(e) => { if (e.key === 'Escape' && !loading) onClose() }}
+    >
+      <MotionDiv
+        className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)' }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={() => { if (!loading) onClose() }}
+      />
+      <MotionDiv
+        className="glass rounded-xl p-6 w-full max-w-2xl shadow-2xl border border-border max-h-[90vh] overflow-y-auto relative"
         onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="flex items-center gap-2" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}>
@@ -88,12 +147,24 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
           </h2>
           <button
             onClick={onClose}
+            disabled={loading}
             className="p-1 rounded-lg hover:bg-input transition-colors"
             style={{ color: 'var(--text-muted)' }}
           >
             <X size={20} />
           </button>
         </div>
+
+        {submitError && (
+          <MotionDiv
+            className="mb-4 p-3 rounded-lg text-sm"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            {submitError}
+          </MotionDiv>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Template Selection */}
@@ -126,13 +197,28 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
             <label className="block text-sm font-medium mb-1">Title *</label>
             <input
               type="text"
-              required
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-input"
-              style={{ fontSize: 13 }}
+              onChange={(e) => handleFieldChange('title', e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border bg-input"
+              style={{ 
+                fontSize: 13,
+                borderColor: errors.title ? '#f87171' : 'var(--border)',
+              }}
               placeholder="e.g., High CPU usage on web-server-01"
             />
+            <AnimatePresence>
+              {errors.title && (
+                <MotionSpan
+                  className="text-xs mt-1 block"
+                  style={{ color: '#f87171' }}
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                >
+                  {errors.title}
+                </MotionSpan>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Description */}
@@ -140,7 +226,7 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
             <label className="block text-sm font-medium mb-1">Description</label>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => handleFieldChange('description', e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-border bg-input"
               style={{ fontSize: 13, minHeight: 100 }}
               rows={4}
@@ -153,9 +239,8 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
             <div>
               <label className="block text-sm font-medium mb-1">Severity *</label>
               <select
-                required
                 value={formData.severity}
-                onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
+                onChange={(e) => handleFieldChange('severity', e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-border bg-input"
                 style={{ fontSize: 13 }}
               >
@@ -170,13 +255,28 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
               <label className="block text-sm font-medium mb-1">Alert Type *</label>
               <input
                 type="text"
-                required
                 value={formData.alert_type}
-                onChange={(e) => setFormData({ ...formData, alert_type: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-input"
-                style={{ fontSize: 13 }}
+                onChange={(e) => handleFieldChange('alert_type', e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border bg-input"
+                style={{ 
+                  fontSize: 13,
+                  borderColor: errors.alert_type ? '#f87171' : 'var(--border)',
+                }}
                 placeholder="e.g., cpu_high, memory_high"
               />
+              <AnimatePresence>
+                {errors.alert_type && (
+                  <MotionSpan
+                    className="text-xs mt-1 block"
+                    style={{ color: '#f87171' }}
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                  >
+                    {errors.alert_type}
+                  </MotionSpan>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -186,7 +286,7 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
             <input
               type="text"
               value={formData.host_key}
-              onChange={(e) => setFormData({ ...formData, host_key: e.target.value })}
+              onChange={(e) => handleFieldChange('host_key', e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-border bg-input"
               style={{ fontSize: 13 }}
               placeholder="e.g., web-server-01, 192.168.1.100"
@@ -206,11 +306,10 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-lg text-white transition-colors"
+              className="px-4 py-2 rounded-lg text-white transition-all hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ 
                 fontSize: 13,
                 background: loading ? 'var(--text-muted)' : 'var(--neon-green)',
-                cursor: loading ? 'not-allowed' : 'pointer'
               }}
               disabled={loading}
             >
@@ -218,7 +317,7 @@ export default function CreateIncidentModal({ onClose, onSuccess }) {
             </button>
           </div>
         </form>
-      </div>
+      </MotionDiv>
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Zap, RefreshCw, Trash2, AlertCircle, CheckCircle, Clock, Plug } from 'lucide-react'
+import { Plus, Zap, RefreshCw, Trash2, AlertCircle, CheckCircle, Clock, Plug, List, RotateCcw, Copy, X, KeyRound } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { isPlatformAdmin } from '../../utils/accessControl'
 import {
   fetchIntegrationTypes,
   fetchIntegrations,
@@ -9,6 +10,9 @@ import {
   deleteIntegration,
   testIntegration,
   syncIntegrationMonitors,
+  fetchWebhookEvents,
+  replayWebhookEvent,
+  rotateIntegrationSecret,
 } from '../../services/api'
 import IntegrationConfigWizard from '../../components/admin/IntegrationConfigWizard'
 
@@ -45,10 +49,267 @@ function DeliveryBadge({ label, active }) {
   )
 }
 
-function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefresh }) {
+const EVENT_STATUS_COLOR = {
+  processed: 'var(--neon-green)',
+  error: '#ef4444',
+  duplicate: 'var(--text-muted)',
+  queued: 'var(--neon-cyan)',
+}
+
+function WebhookEventsPanel({ integration, onClose }) {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [replayingId, setReplayingId] = useState(null)
+  const [rotatingSecret, setRotatingSecret] = useState(false)
+  const [newToken, setNewToken] = useState(null)
+  const [copied, setCopied] = useState(false)
+
+  const webhookUrl = `${window.location.origin}/api/v1/webhooks/site24x7/${integration.id}`
+
+  const loadEvents = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchWebhookEvents(integration.id, 50)
+      setEvents(data || [])
+    } catch {
+      setEvents([])
+    } finally {
+      setLoading(false)
+    }
+  }, [integration.id])
+
+  useEffect(() => {
+    loadEvents()
+  }, [loadEvents])
+
+  async function handleCopyUrl() {
+    try {
+      await navigator.clipboard.writeText(webhookUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // fallback: select text
+    }
+  }
+
+  async function handleReplay(integrationId, eventId) {
+    setReplayingId(eventId)
+    try {
+      await replayWebhookEvent(integrationId, eventId)
+      loadEvents()
+    } catch {
+      // ignore
+    } finally {
+      setReplayingId(null)
+    }
+  }
+
+  async function handleRotateSecret() {
+    if (!window.confirm('Rotate webhook secret? The old token will stop working immediately.')) return
+    setRotatingSecret(true)
+    try {
+      const res = await rotateIntegrationSecret(integration.id)
+      setNewToken(res.webhook_token)
+    } catch {
+      // ignore
+    } finally {
+      setRotatingSecret(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'flex-end',
+      }}
+    >
+      {/* Overlay */}
+      <div
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }}
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div
+        className="glass flex flex-col"
+        style={{
+          position: 'relative',
+          width: 520,
+          maxWidth: '100vw',
+          height: '100vh',
+          borderLeft: '1px solid var(--border)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between"
+          style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}
+        >
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)' }}>
+              Webhook Events
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              {integration.name}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Webhook URL copy block */}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Webhook URL
+          </div>
+          <div
+            className="flex items-center gap-2"
+            style={{
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: '8px 12px',
+            }}
+          >
+            <code style={{ fontSize: 11, color: 'var(--neon-cyan)', flex: 1, wordBreak: 'break-all' }}>
+              {webhookUrl}
+            </code>
+            <button
+              onClick={handleCopyUrl}
+              title="Copy URL"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? 'var(--neon-green)' : 'var(--text-muted)', flexShrink: 0, padding: 2 }}
+            >
+              <Copy size={13} />
+            </button>
+          </div>
+
+          {/* Rotate secret */}
+          <div className="flex items-center justify-between mt-3">
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              {newToken
+                ? <span style={{ color: 'var(--neon-green)' }}>New token: <code style={{ fontSize: 11 }}>{newToken}</code></span>
+                : 'Webhook token stored securely.'}
+            </span>
+            <button
+              onClick={handleRotateSecret}
+              disabled={rotatingSecret}
+              className="flex items-center gap-1.5"
+              style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', cursor: 'pointer' }}
+            >
+              {rotatingSecret ? <RefreshCw size={11} className="animate-spin" /> : <KeyRound size={11} />}
+              Rotate Token
+            </button>
+          </div>
+        </div>
+
+        {/* Events list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
+          <div className="flex items-center justify-between" style={{ padding: '12px 0 8px' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Recent Events ({events.length})
+            </span>
+            <button
+              onClick={loadEvents}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
+
+          {loading && (
+            <div className="flex items-center justify-center py-10">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+            </div>
+          )}
+
+          {!loading && events.length === 0 && (
+            <div className="text-center py-10">
+              <List size={20} style={{ color: 'var(--text-muted)', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No webhook events recorded yet.</p>
+            </div>
+          )}
+
+          {!loading && events.map((ev) => (
+            <div
+              key={ev.id}
+              className="flex items-start gap-3"
+              style={{
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                marginBottom: 8,
+                background: ev.is_replay ? 'rgba(99,102,241,0.05)' : 'transparent',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      background: `${EVENT_STATUS_COLOR[ev.status] || 'var(--text-muted)'}22`,
+                      color: EVENT_STATUS_COLOR[ev.status] || 'var(--text-muted)',
+                      border: `1px solid ${EVENT_STATUS_COLOR[ev.status] || 'var(--text-muted)'}44`,
+                    }}
+                  >
+                    {ev.status}
+                  </span>
+                  {ev.event_type && (
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{ev.event_type}</span>
+                  )}
+                  {ev.is_replay && (
+                    <span style={{ fontSize: 10, color: 'var(--neon-indigo)', fontWeight: 600 }}>REPLAY</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {new Date(ev.received_at).toLocaleString()}
+                  {ev.incident_id && (
+                    <span style={{ marginLeft: 8, color: 'var(--neon-cyan)' }}>
+                      → incident
+                    </span>
+                  )}
+                </div>
+                {ev.dedup_key && (
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'monospace' }}>
+                    {ev.dedup_key.length > 40 ? ev.dedup_key.slice(0, 40) + '…' : ev.dedup_key}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => handleReplay(integration.id, ev.id)}
+                disabled={replayingId === ev.id}
+                title="Replay event"
+                style={{ padding: '5px 8px', borderRadius: 6, background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--neon-indigo)', cursor: 'pointer', flexShrink: 0 }}
+              >
+                {replayingId === ev.id
+                  ? <RefreshCw size={11} className="animate-spin" />
+                  : <RotateCcw size={11} />}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefresh, onShowEvents }) {
   const [actionLoading, setActionLoading] = useState(null)
   const statusMeta = integration ? (STATUS_META[integration.status] || STATUS_META.unknown) : null
   const StatusIcon = statusMeta?.icon
+  const supportsWebhook = integrationType.supports_webhook
 
   async function handleTest() {
     setActionLoading('test')
@@ -182,6 +443,15 @@ function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefres
             >
               Edit
             </button>
+            {supportsWebhook && (
+              <button
+                onClick={() => onShowEvents(integration)}
+                title="Webhook events"
+                style={{ padding: '6px 8px', borderRadius: 8, background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--neon-purple)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              >
+                <List size={13} />
+              </button>
+            )}
             <button
               onClick={handleTest}
               disabled={actionLoading === 'test'}
@@ -229,13 +499,17 @@ function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefres
 }
 
 export default function IntegrationsAdminPage() {
-  const { activeTenantId, projects: ctxProjects } = useAuth()
+  const auth = useAuth()
+  const { activeTenantId, projects: ctxProjects } = auth
+  const backTarget = isPlatformAdmin(auth) ? '/admin' : '/admin/workspaces'
+  const backLabel = isPlatformAdmin(auth) ? 'Back to Platform Admin' : 'Back to Workspaces'
   const [integrationTypes, setIntegrationTypes] = useState([])
   const [integrations, setIntegrations] = useState([])
   const [projects, setProjects] = useState(ctxProjects || [])
   const [isLoading, setIsLoading] = useState(true)
   const [wizardType, setWizardType] = useState(null)
   const [wizardIntegration, setWizardIntegration] = useState(null)
+  const [eventsIntegration, setEventsIntegration] = useState(null)
 
   const loadData = useCallback(async () => {
     if (!activeTenantId) return
@@ -295,11 +569,11 @@ export default function IntegrationsAdminPage() {
           </p>
         </div>
         <Link
-          to="/admin"
+          to={backTarget}
           className="px-4 py-2 rounded-lg text-sm font-semibold"
           style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
         >
-          Back to Admin
+          {backLabel}
         </Link>
       </div>
 
@@ -335,6 +609,7 @@ export default function IntegrationsAdminPage() {
                     onAdd={handleAdd}
                     onEdit={handleEdit}
                     onRefresh={loadData}
+                    onShowEvents={setEventsIntegration}
                   />
                 ))}
               </div>
@@ -356,6 +631,7 @@ export default function IntegrationsAdminPage() {
                     onAdd={handleAdd}
                     onEdit={handleEdit}
                     onRefresh={loadData}
+                    onShowEvents={setEventsIntegration}
                   />
                 ))}
               </div>
@@ -382,6 +658,13 @@ export default function IntegrationsAdminPage() {
           projects={projects}
           onClose={closeWizard}
           onSaved={loadData}
+        />
+      )}
+
+      {eventsIntegration && (
+        <WebhookEventsPanel
+          integration={eventsIntegration}
+          onClose={() => setEventsIntegration(null)}
         />
       )}
     </div>

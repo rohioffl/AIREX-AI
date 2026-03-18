@@ -1,5 +1,6 @@
 """Focused API route tests for critical HTTP surfaces."""
 
+import json
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -56,8 +57,25 @@ def mock_session():
     return session
 
 
+@pytest.fixture
+def mock_platform_admin_session():
+    session = AsyncMock()
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+
+    def add_instance(instance):
+        if getattr(instance, "id", None) is None:
+            instance.id = uuid.uuid4()
+
+    session.add = MagicMock(side_effect=add_instance)
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
+    return session
+
+
 @pytest_asyncio.fixture
-async def client(mock_redis, mock_session):
+async def client(mock_redis, mock_session, mock_platform_admin_session):
+    from airex_core.core.platform_admin_db import get_platform_admin_session
     from app.api.dependencies import get_auth_session, get_db_session, get_redis
 
     async def override_redis():
@@ -66,9 +84,13 @@ async def client(mock_redis, mock_session):
     async def override_session():
         yield mock_session
 
+    async def override_platform_admin_session():
+        yield mock_platform_admin_session
+
     app.dependency_overrides[get_redis] = override_redis
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[get_auth_session] = override_session
+    app.dependency_overrides[get_platform_admin_session] = override_platform_admin_session
     app.state.redis = mock_redis
 
     async with AsyncClient(
@@ -466,13 +488,296 @@ async def test_auth_me_rejects_malformed_active_tenant_id(client):
     assert response.json()["detail"] == "Invalid active tenant identifier"
 
 
+@pytest.mark.asyncio
+async def test_list_accessible_tenants_requires_shared_admin_org(client, mock_session):
+    requester_org_id = uuid.uuid4()
+    target_org_id = uuid.uuid4()
+    target_user_id = uuid.uuid4()
+    target_home_tenant_id = uuid.uuid4()
+
+    requester_home_org = MagicMock()
+    requester_home_org.scalar_one_or_none = MagicMock(return_value=requester_org_id)
+    requester_org_memberships = MagicMock()
+    requester_org_memberships.all = MagicMock(return_value=[])
+
+    target_user = MagicMock()
+    target_user.one_or_none = MagicMock(
+        return_value=SimpleNamespace(id=target_user_id, tenant_id=target_home_tenant_id)
+    )
+
+    target_home_tenant = MagicMock()
+    target_home_tenant.scalar_one_or_none = MagicMock(
+        return_value=SimpleNamespace(
+            id=target_home_tenant_id,
+            name="foreign-home",
+            display_name="Foreign Home",
+            cloud="aws",
+            is_active=True,
+            organization_id=target_org_id,
+        )
+    )
+
+    target_org_memberships = MagicMock()
+    target_org_memberships.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[]))
+    )
+    target_tenant_memberships = MagicMock()
+    target_tenant_memberships.all = MagicMock(return_value=[])
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            requester_home_org,
+            requester_org_memberships,
+            target_user,
+            target_home_tenant,
+            target_org_memberships,
+            target_tenant_memberships,
+        ]
+    )
+
+    response = await client.get(
+        f"/api/v1/users/{target_user_id}/accessible-tenants",
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not authorized to view this user's tenant access"
+
+
+@pytest.mark.asyncio
+async def test_list_accessible_tenants_filters_to_requester_admin_orgs(client, mock_session):
+    shared_org_id = uuid.uuid4()
+    other_org_id = uuid.uuid4()
+    target_user_id = uuid.uuid4()
+    shared_tenant_id = uuid.uuid4()
+    other_tenant_id = uuid.uuid4()
+
+    requester_home_org = MagicMock()
+    requester_home_org.scalar_one_or_none = MagicMock(return_value=shared_org_id)
+    requester_org_memberships = MagicMock()
+    requester_org_memberships.all = MagicMock(return_value=[])
+
+    target_user = MagicMock()
+    target_user.one_or_none = MagicMock(
+        return_value=SimpleNamespace(id=target_user_id, tenant_id=shared_tenant_id)
+    )
+
+    target_home_tenant = MagicMock()
+    target_home_tenant.scalar_one_or_none = MagicMock(
+        return_value=SimpleNamespace(
+            id=shared_tenant_id,
+            name="shared-home",
+            display_name="Shared Home",
+            cloud="aws",
+            is_active=True,
+            organization_id=shared_org_id,
+        )
+    )
+
+    target_org_memberships = MagicMock()
+    target_org_memberships.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[shared_org_id, other_org_id]))
+    )
+
+    org_tenants = MagicMock()
+    org_tenants.scalars = MagicMock(
+        return_value=MagicMock(
+            all=MagicMock(
+                return_value=[
+                    SimpleNamespace(
+                        id=shared_tenant_id,
+                        name="shared-home",
+                        display_name="Shared Home",
+                        cloud="aws",
+                        is_active=True,
+                        organization_id=shared_org_id,
+                    ),
+                    SimpleNamespace(
+                        id=other_tenant_id,
+                        name="other-org",
+                        display_name="Other Org",
+                        cloud="gcp",
+                        is_active=True,
+                        organization_id=other_org_id,
+                    ),
+                ]
+            )
+        )
+    )
+
+    explicit_memberships = MagicMock()
+    explicit_memberships.all = MagicMock(
+        return_value=[SimpleNamespace(tenant_id=other_tenant_id, role="tenant_admin")]
+    )
+
+    explicit_tenants = MagicMock()
+    explicit_tenants.scalars = MagicMock(
+        return_value=MagicMock(
+            all=MagicMock(
+                return_value=[
+                    SimpleNamespace(
+                        id=other_tenant_id,
+                        name="other-org",
+                        display_name="Other Org",
+                        cloud="gcp",
+                        is_active=True,
+                        organization_id=other_org_id,
+                    )
+                ]
+            )
+        )
+    )
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            requester_home_org,
+            requester_org_memberships,
+            target_user,
+            target_home_tenant,
+            target_org_memberships,
+            org_tenants,
+            explicit_memberships,
+            explicit_tenants,
+        ]
+    )
+
+    response = await client.get(
+        f"/api/v1/users/{target_user_id}/accessible-tenants",
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": str(shared_tenant_id),
+            "name": "shared-home",
+            "display_name": "Shared Home",
+            "cloud": "aws",
+            "is_active": True,
+            "organization_id": str(shared_org_id),
+            "membership_role": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_org_analytics_filters_non_admin_to_visible_tenants(client, mock_session):
+    organization_id = uuid.uuid4()
+    explicit_tenant_id = uuid.uuid4()
+    home_tenant_row = MagicMock()
+    home_tenant_row.scalar_one_or_none = MagicMock(return_value=organization_id)
+    no_org_admin_membership = MagicMock()
+    no_org_admin_membership.scalar_one_or_none = MagicMock(return_value=None)
+
+    visible_tenants = MagicMock()
+    visible_tenants.all = MagicMock(
+        return_value=[
+            SimpleNamespace(id=uuid.UUID(TENANT_ID), is_active=True),
+            SimpleNamespace(id=explicit_tenant_id, is_active=False),
+        ]
+    )
+    home_members = MagicMock()
+    home_members.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[uuid.uuid4(), uuid.uuid4()]))
+    )
+    explicit_members = MagicMock()
+    shared_user_id = uuid.uuid4()
+    explicit_members.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[shared_user_id]))
+    )
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            home_tenant_row,
+            no_org_admin_membership,
+            visible_tenants,
+            home_members,
+            explicit_members,
+        ]
+    )
+
+    response = await client.get(
+        f"/api/v1/organizations/{organization_id}/analytics",
+        headers=_auth_headers(role="operator"),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "organization_id": str(organization_id),
+        "tenant_count": 2,
+        "active_tenant_count": 1,
+        "member_count": 3,
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_org_analytics_org_admin_sees_full_org_scope(client, mock_session):
+    organization_id = uuid.uuid4()
+
+    home_org_lookup = MagicMock()
+    home_org_lookup.scalar_one_or_none = MagicMock(return_value=organization_id)
+    home_org_lookup_again = MagicMock()
+    home_org_lookup_again.scalar_one_or_none = MagicMock(return_value=organization_id)
+
+    visible_tenants = MagicMock()
+    visible_tenants.all = MagicMock(
+        return_value=[
+            SimpleNamespace(id=uuid.uuid4(), is_active=True),
+            SimpleNamespace(id=uuid.uuid4(), is_active=True),
+            SimpleNamespace(id=uuid.uuid4(), is_active=False),
+        ]
+    )
+    home_members = MagicMock()
+    repeated_user_id = uuid.uuid4()
+    home_members.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[uuid.uuid4(), repeated_user_id]))
+    )
+    explicit_members = MagicMock()
+    explicit_members.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[repeated_user_id, uuid.uuid4()]))
+    )
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            home_org_lookup,
+            home_org_lookup_again,
+            visible_tenants,
+            home_members,
+            explicit_members,
+        ]
+    )
+
+    response = await client.get(
+        f"/api/v1/organizations/{organization_id}/analytics",
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "organization_id": str(organization_id),
+        "tenant_count": 3,
+        "active_tenant_count": 2,
+        "member_count": 3,
+    }
+
+
 class _FakeExecuteResult:
-    def __init__(self, first_row=None, rowcount=1):
+    def __init__(self, first_row=None, rowcount=1, scalar_rows=None, scalar_one_or_none=None):
         self._first_row = first_row
         self.rowcount = rowcount
+        self._scalar_rows = list(scalar_rows or [])
+        self._scalar_one_or_none = scalar_one_or_none
 
     def first(self):
         return self._first_row
+
+    def scalar_one_or_none(self):
+        if self._scalar_one_or_none is not None:
+            return self._scalar_one_or_none
+        return self._first_row
+
+    def scalars(self):
+        return MagicMock(all=MagicMock(return_value=self._scalar_rows))
 
 
 class _FakeConnection:
@@ -563,6 +868,7 @@ async def test_tenant_update_uses_cast_for_jsonb(client, monkeypatch):
             "display_name": "Updated Tenant",
             "aws_config": {"secret_access_key": "updated-secret"},
         },
+        headers=_auth_headers(role="platform_admin"),
     )
 
     assert response.status_code == 200
@@ -658,7 +964,7 @@ async def test_create_organization_returns_created_org(client, mock_session):
     response = await client.post(
         "/api/v1/organizations",
         json={"name": "Ankercloud", "slug": "ankercloud"},
-        headers=_auth_headers(role="org_admin"),
+        headers=_auth_headers(role="platform_admin"),
     )
 
     assert response.status_code == 201
@@ -1254,3 +1560,541 @@ async def test_create_project_monitor_binding_rejects_malformed_external_monitor
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_platform_analytics_returns_platform_summary(
+    client, mock_session, mock_platform_admin_session, mock_redis
+):
+    def count_result(value):
+        result = MagicMock()
+        result.scalar_one = MagicMock(return_value=value)
+        return result
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            count_result(12),
+            count_result(9),
+            count_result(5),
+            count_result(4),
+            count_result(11),
+            count_result(8),
+            count_result(6),
+            count_result(2),
+            count_result(3),
+            count_result(15),
+        ]
+    )
+    mock_platform_admin_session.execute = AsyncMock(
+        side_effect=[count_result(2), count_result(1)]
+    )
+    mock_redis.llen = AsyncMock(return_value=4)
+    mock_redis.get = AsyncMock(return_value=b'{"is_open": true}')
+
+    response = await client.get(
+        "/api/v1/platform/analytics",
+        headers=_auth_headers(role="platform_admin"),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_users": 12,
+        "active_users": 9,
+        "total_platform_admins": 2,
+        "active_platform_admins": 1,
+        "total_organizations": 5,
+        "active_organizations": 4,
+        "total_tenants": 11,
+        "active_tenants": 8,
+        "active_incidents": 6,
+        "critical_incidents": 2,
+        "failed_incidents_24h": 3,
+        "total_incidents_24h": 15,
+        "platform_error_rate_24h": 0.2,
+        "dlq_entries": 4,
+        "llm_circuit_breaker_open": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_platform_admins_returns_isolated_accounts(client, mock_platform_admin_session):
+    admin_id = uuid.uuid4()
+    result = MagicMock()
+    result.scalars = MagicMock(
+        return_value=MagicMock(
+            all=MagicMock(
+                return_value=[
+                    SimpleNamespace(
+                        id=admin_id,
+                        email="airex@ankercloud.com",
+                        display_name="Platform Admin",
+                        is_active=True,
+                    )
+                ]
+            )
+        )
+    )
+    mock_platform_admin_session.execute = AsyncMock(return_value=result)
+
+    response = await client.get(
+        "/api/v1/platform/admins",
+        headers=_auth_headers(role="platform_admin", user_id=admin_id),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "id": str(admin_id),
+                "email": "airex@ankercloud.com",
+                "display_name": "Platform Admin",
+                "is_active": True,
+                "role": "platform_admin",
+            }
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_platform_admin_hashes_password(client, mock_platform_admin_session, monkeypatch):
+    from app.api.routes import platform_admin as platform_admin_routes
+
+    empty_lookup = MagicMock()
+    empty_lookup.scalar_one_or_none = MagicMock(return_value=None)
+    mock_platform_admin_session.execute = AsyncMock(return_value=empty_lookup)
+    monkeypatch.setattr(
+        platform_admin_routes,
+        "hash_password",
+        lambda password: f"hashed::{password}",
+    )
+
+    response = await client.post(
+        "/api/v1/platform/admins",
+        json={
+            "email": "OPS@Example.com",
+            "display_name": "Ops Admin",
+            "password": "StrongPass123",
+        },
+        headers=_auth_headers(role="platform_admin"),
+    )
+
+    assert response.status_code == 201
+    created_admin = mock_platform_admin_session.add.call_args[0][0]
+    assert created_admin.email == "ops@example.com"
+    assert created_admin.display_name == "Ops Admin"
+    assert created_admin.hashed_password == "hashed::StrongPass123"
+    assert response.json()["email"] == "ops@example.com"
+
+
+@pytest.mark.asyncio
+async def test_update_platform_admin_blocks_self_deactivate(client, mock_platform_admin_session):
+    admin_id = uuid.uuid4()
+    admin = SimpleNamespace(
+        id=admin_id,
+        email="airex@ankercloud.com",
+        display_name="Platform Admin",
+        hashed_password="hashed",
+        is_active=True,
+    )
+    lookup = MagicMock()
+    lookup.scalar_one_or_none = MagicMock(return_value=admin)
+    mock_platform_admin_session.execute = AsyncMock(return_value=lookup)
+
+    response = await client.patch(
+        f"/api/v1/platform/admins/{admin_id}",
+        json={"is_active": False},
+        headers=_auth_headers(role="platform_admin", user_id=admin_id),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "You cannot deactivate your own platform admin account"
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_updates_runtime_values_for_platform_admin(client, monkeypatch):
+    from app.api.routes import settings as settings_routes
+
+    calls = []
+    monkeypatch.setattr(settings_routes, "_update_llm_clients", lambda: calls.append("updated"))
+    monkeypatch.setattr(settings_routes.settings, "LLM_PROVIDER", "vertex_ai")
+    monkeypatch.setattr(settings_routes.settings, "LLM_CIRCUIT_BREAKER_THRESHOLD", 3)
+    monkeypatch.setattr(settings_routes.settings, "LOCK_TTL", 120)
+
+    response = await client.patch(
+        "/api/v1/settings/",
+        json={
+            "llm_provider": "openai",
+            "llm_circuit_breaker_threshold": 5,
+            "lock_ttl": 180,
+        },
+        headers=_auth_headers(role="platform_admin"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["applied_updates"] == {
+        "llm_provider": "openai",
+        "llm_circuit_breaker_threshold": 5,
+        "lock_ttl": 180,
+    }
+    assert settings_routes.settings.LLM_PROVIDER == "openai"
+    assert settings_routes.settings.LLM_CIRCUIT_BREAKER_THRESHOLD == 5
+    assert settings_routes.settings.LOCK_TTL == 180
+    assert calls == ["updated"]
+
+
+@pytest.mark.asyncio
+async def test_create_integration_type_uses_jsonb_cast(client, monkeypatch):
+    from app.api.routes import integrations as integration_routes
+
+    fake_conn = _FakeConnection(
+        responses=[
+            _FakeExecuteResult(first_row=None),
+            _FakeExecuteResult(),
+        ]
+    )
+    monkeypatch.setattr(
+        integration_routes,
+        "async_engine",
+        _FakeEngine(begin_conn=fake_conn),
+    )
+
+    response = await client.post(
+        "/api/v1/integration-types",
+        json={
+            "key": "pingdom",
+            "display_name": "Pingdom",
+            "category": "monitoring",
+            "supports_webhook": True,
+            "supports_polling": False,
+            "supports_sync": True,
+            "config_schema_json": {
+                "type": "object",
+                "properties": {
+                    "base_url": {"type": "string"},
+                },
+                "required": ["base_url"],
+            },
+        },
+        headers=_auth_headers(role="platform_admin"),
+    )
+
+    assert response.status_code == 201
+    insert_sql, insert_params = fake_conn.statements[1]
+    assert "CAST(:config_schema_json AS jsonb)" in insert_sql
+    assert insert_params["key"] == "pingdom"
+
+
+@pytest.mark.asyncio
+async def test_test_integration_reports_missing_required_fields(client, mock_session, monkeypatch):
+    from app.api.routes import integrations as integration_routes
+
+    integration_id = uuid.uuid4()
+    tenant_id = uuid.UUID(TENANT_ID)
+
+    monkeypatch.setattr(
+        integration_routes,
+        "_get_integration_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(
+        integration_routes,
+        "_require_tenant_admin",
+        AsyncMock(return_value=None),
+    )
+
+    fake_conn = _FakeConnection(
+        responses=[
+            _FakeExecuteResult(
+                first_row=SimpleNamespace(
+                    id=integration_id,
+                    tenant_id=tenant_id,
+                    config_json={},
+                    secret_ref=None,
+                    webhook_token_ref=None,
+                    integration_type_key="site24x7",
+                    supports_webhook=True,
+                    config_schema_json={
+                        "type": "object",
+                        "properties": {
+                            "api_key": {"type": "string"},
+                        },
+                        "required": ["api_key"],
+                    },
+                )
+            ),
+            _FakeExecuteResult(),
+        ]
+    )
+    monkeypatch.setattr(
+        integration_routes,
+        "async_engine",
+        _FakeEngine(begin_conn=fake_conn),
+    )
+
+    response = await client.post(
+        f"/api/v1/integrations/{integration_id}/test",
+        headers=_auth_headers(role="tenant_admin", tenant_id=str(tenant_id)),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "error"
+    assert body["success"] is False
+    assert "Missing required integration fields" in body["detail"]
+    assert any(check["code"] == "required:api_key" and check["status"] == "failed" for check in body["checks"])
+
+
+@pytest.mark.asyncio
+async def test_org_admin_cannot_access_dlq(client):
+    response = await client.get(
+        "/api/v1/dlq/",
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Platform admin access required"
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_can_access_dlq(client, mock_redis):
+    tenant_id = uuid.UUID(TENANT_ID)
+    mock_redis.lrange = AsyncMock(
+        return_value=[
+            json.dumps(
+                {
+                    "task": "reconcile_incident",
+                    "tenant_id": str(tenant_id),
+                    "incident_id": str(uuid.uuid4()),
+                    "error": "boom",
+                    "failed_at": "2026-03-18T00:00:00Z",
+                }
+            ).encode()
+        ]
+    )
+
+    response = await client.get(
+        "/api/v1/dlq/",
+        headers=_auth_headers(role="platform_admin", tenant_id=str(tenant_id)),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["task"] == "reconcile_incident"
+
+
+@pytest.mark.asyncio
+async def test_org_admin_cannot_reload_tenant_config(client):
+    response = await client.post(
+        "/api/v1/tenants/reload",
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Platform admin access required"
+
+
+@pytest.mark.asyncio
+async def test_top_level_tenant_create_requires_platform_admin(client):
+    response = await client.post(
+        "/api/v1/tenants/",
+        json={
+            "name": "org-scoped-attempt",
+            "display_name": "Org Scoped Attempt",
+            "cloud": "aws",
+        },
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Platform admin access required"
+
+
+@pytest.mark.asyncio
+async def test_list_all_tenants_scopes_non_platform_users(client, mock_session, monkeypatch):
+    from app.api.routes import tenants as tenant_routes
+
+    org_id = uuid.uuid4()
+    explicit_tenant_id = uuid.uuid4()
+
+    home_org_result = MagicMock()
+    home_org_result.scalar_one_or_none = MagicMock(return_value=org_id)
+
+    org_memberships_result = MagicMock()
+    org_memberships_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[]))
+    )
+
+    tenant_memberships_result = MagicMock()
+    tenant_memberships_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[explicit_tenant_id]))
+    )
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            home_org_result,
+            org_memberships_result,
+            tenant_memberships_result,
+        ]
+    )
+
+    fake_conn = _FakeConnection(
+        responses=[
+            _FakeExecuteResult(
+                scalar_rows=[
+                    SimpleNamespace(
+                        id=uuid.UUID(TENANT_ID),
+                        name="home-tenant",
+                        display_name="Home Tenant",
+                        cloud="aws",
+                        organization_id=org_id,
+                        servers=[{"name": "app-1"}],
+                        escalation_email="home@example.com",
+                        is_active=True,
+                        aws_config={},
+                        gcp_config={},
+                    ),
+                    SimpleNamespace(
+                        id=explicit_tenant_id,
+                        name="member-tenant",
+                        display_name="Member Tenant",
+                        cloud="gcp",
+                        organization_id=uuid.uuid4(),
+                        servers=[],
+                        escalation_email="member@example.com",
+                        is_active=True,
+                        aws_config={},
+                        gcp_config={"project_id": "member-project"},
+                    ),
+                ]
+            )
+        ]
+    )
+    monkeypatch.setattr(
+        tenant_routes,
+        "async_engine",
+        _FakeEngine(connect_conn=fake_conn),
+    )
+
+    response = await client.get(
+        "/api/v1/tenants/",
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 200
+    assert [tenant["name"] for tenant in response.json()] == [
+        "home-tenant",
+        "member-tenant",
+    ]
+    assert mock_session.execute.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_update_tenant_rejects_cross_org_admin(client, monkeypatch):
+    from app.api.routes import tenants as tenant_routes
+
+    tenant_org_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        tenant_routes,
+        "authorize_org_admin",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        tenant_routes,
+        "async_engine",
+        _FakeEngine(
+            connect_conn=_FakeConnection(
+                responses=[_FakeExecuteResult(scalar_one_or_none=tenant_org_id)]
+            )
+        ),
+    )
+
+    response = await client.put(
+        "/api/v1/tenants/cross-org-tenant",
+        json={"display_name": "Blocked Update"},
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Organization admin required for this tenant"
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_rejects_cross_org_admin(client, monkeypatch):
+    from app.api.routes import tenants as tenant_routes
+
+    tenant_org_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        tenant_routes,
+        "authorize_org_admin",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        tenant_routes,
+        "async_engine",
+        _FakeEngine(
+            connect_conn=_FakeConnection(
+                responses=[_FakeExecuteResult(scalar_one_or_none=tenant_org_id)]
+            )
+        ),
+    )
+
+    response = await client.delete(
+        "/api/v1/tenants/cross-org-tenant",
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Organization admin required for this tenant"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path", "json_body"),
+    [
+        ("get", "/api/v1/users/", None),
+        ("get", f"/api/v1/users/{uuid.uuid4()}", None),
+        (
+            "post",
+            "/api/v1/users/",
+            {
+                "email": "new-user@example.com",
+                "display_name": "New User",
+                "role": "viewer",
+            },
+        ),
+        (
+            "patch",
+            f"/api/v1/users/{uuid.uuid4()}",
+            {
+                "display_name": "Updated Name",
+            },
+        ),
+        ("delete", f"/api/v1/users/{uuid.uuid4()}", None),
+        ("post", f"/api/v1/users/{uuid.uuid4()}/resend-invitation", None),
+    ],
+)
+async def test_user_management_routes_reject_out_of_scope_org_admin(
+    client,
+    monkeypatch,
+    method,
+    path,
+    json_body,
+):
+    from app.api.routes import users as user_routes
+
+    monkeypatch.setattr(
+        user_routes,
+        "authorize_tenant_admin",
+        AsyncMock(return_value=False),
+    )
+
+    request_kwargs = {"headers": _auth_headers(role="org_admin")}
+    if json_body is not None:
+        request_kwargs["json"] = json_body
+
+    response = await getattr(client, method)(path, **request_kwargs)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Tenant admin required"

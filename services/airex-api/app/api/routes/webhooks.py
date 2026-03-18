@@ -35,6 +35,8 @@ from airex_core.core.state_machine import transition_state
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
+from airex_core.models.webhook_event import WebhookEvent
+
 logger = structlog.get_logger()
 
 router = APIRouter()
@@ -531,6 +533,11 @@ async def _ingest_site24x7_request(
     )
 
     payload = await _parse_site24x7_payload(request)
+    raw_payload: dict | None = (
+        payload.model_dump(mode='json', exclude_none=True)
+        if integration_context is not None
+        else None
+    )
     monitor_name = payload.get_monitor_name()
     status_str = payload.get_status()
     monitor_type = payload.get_monitor_type()
@@ -601,11 +608,35 @@ async def _ingest_site24x7_request(
                 )
             except Exception:
                 pass
+            if integration_context is not None:
+                session.add(WebhookEvent(
+                    tenant_id=tenant_id,
+                    integration_id=integration_context.integration_id,
+                    source="site24x7",
+                    event_type="recovery",
+                    payload=raw_payload,
+                    status="processed",
+                    incident_id=active.id,
+                    processed_at=datetime.now(timezone.utc),
+                ))
+                await session.flush()
             return IncidentCreatedResponse(incident_id=active.id)
 
         # No active incident to resolve — return a dummy response
         import uuid as _uuid
 
+        if integration_context is not None:
+            session.add(WebhookEvent(
+                tenant_id=tenant_id,
+                integration_id=integration_context.integration_id,
+                source="site24x7",
+                event_type="recovery",
+                payload=raw_payload,
+                status="processed",
+                incident_id=None,
+                processed_at=datetime.now(timezone.utc),
+            ))
+            await session.flush()
         return IncidentCreatedResponse(
             incident_id=_uuid.UUID("00000000-0000-0000-0000-000000000000")
         )
@@ -683,6 +714,19 @@ async def _ingest_site24x7_request(
             incident_id=str(existing_id),
             idempotency_key=idem_key,
         )
+        if integration_context is not None:
+            session.add(WebhookEvent(
+                tenant_id=tenant_id,
+                integration_id=integration_context.integration_id,
+                source="site24x7",
+                event_type=alert_type,
+                payload=raw_payload,
+                status="processed",
+                incident_id=existing_id,
+                dedup_key=idem_key,
+                processed_at=datetime.now(timezone.utc),
+            ))
+            await session.flush()
         return IncidentCreatedResponse(incident_id=existing_id)
 
     # Check for active incident on same monitor AND same host.
@@ -733,6 +777,18 @@ async def _ingest_site24x7_request(
                 tenant_id=str(tenant_id),
                 incident_id=str(active.id),
             )
+            if integration_context is not None:
+                session.add(WebhookEvent(
+                    tenant_id=tenant_id,
+                    integration_id=integration_context.integration_id,
+                    source="site24x7",
+                    event_type=alert_type,
+                    payload=raw_payload,
+                    status="processed",
+                    incident_id=active.id,
+                    processed_at=datetime.now(timezone.utc),
+                ))
+                await session.flush()
             return IncidentCreatedResponse(incident_id=active.id)
 
         try:
@@ -916,6 +972,20 @@ async def _ingest_site24x7_request(
         logger.info("investigation_task_enqueued", incident_id=str(incident.id))
     except Exception as exc:
         logger.error("investigation_enqueue_failed", error=str(exc))
+
+    if integration_context is not None:
+        session.add(WebhookEvent(
+            tenant_id=tenant_id,
+            integration_id=integration_context.integration_id,
+            source="site24x7",
+            event_type=alert_type,
+            payload=raw_payload,
+            status="processed",
+            incident_id=incident.id,
+            dedup_key=idem_key,
+            processed_at=datetime.now(timezone.utc),
+        ))
+        await session.flush()
 
     return IncidentCreatedResponse(incident_id=incident.id)
 

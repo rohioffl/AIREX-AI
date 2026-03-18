@@ -58,7 +58,9 @@ async def client(mock_redis, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_reject_incident_success(client, mock_session):
+async def test_reject_incident_success(client, mock_session, monkeypatch):
+    import airex_core.services.notification_service as notification_service
+
     # Setup mock incident
     incident_id = uuid.uuid4()
     mock_incident = Incident(
@@ -83,6 +85,11 @@ async def test_reject_incident_success(client, mock_session):
             mock_result,  # fetch incident
             mock_prev_transition,  # fetch prev transition
         ]
+    )
+    monkeypatch.setattr(
+        notification_service,
+        "notify_incident_state_change",
+        AsyncMock(return_value=None),
     )
 
     note = "False alarm; handled manually"
@@ -120,7 +127,9 @@ async def test_reject_nonexistent_incident(client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_reject_incident_without_note_uses_default(client, mock_session):
+async def test_reject_incident_without_note_uses_default(client, mock_session, monkeypatch):
+    import airex_core.services.notification_service as notification_service
+
     incident_id = uuid.uuid4()
     mock_incident = Incident(
         id=incident_id,
@@ -137,6 +146,11 @@ async def test_reject_incident_without_note_uses_default(client, mock_session):
     mock_prev_transition = MagicMock()
     mock_prev_transition.scalar_one_or_none = MagicMock(return_value=None)
     mock_session.execute = AsyncMock(side_effect=[mock_result, mock_prev_transition])
+    monkeypatch.setattr(
+        notification_service,
+        "notify_incident_state_change",
+        AsyncMock(return_value=None),
+    )
 
     response = await client.post(f"/api/v1/incidents/{incident_id}/reject", json={})
 

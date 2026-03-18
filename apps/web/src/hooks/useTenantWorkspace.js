@@ -8,7 +8,7 @@ import {
   fetchTenants,
 } from '../services/api'
 
-export function useTenantWorkspace({ onError }) {
+export function useTenantWorkspace({ onError, loadDetails = true }) {
   const onErrorRef = useRef(onError)
   const [organizations, setOrganizations] = useState([])
   const [activeOrganizationId, setActiveOrganizationId] = useState(null)
@@ -41,6 +41,12 @@ export function useTenantWorkspace({ onError }) {
   }, [])
 
   const loadWorkspace = useCallback(async (tenantId) => {
+    if (!loadDetails) {
+      setProjects([])
+      setIntegrations([])
+      setDetailLoading(false)
+      return
+    }
     if (!tenantId) {
       setProjects([])
       setIntegrations([])
@@ -60,7 +66,7 @@ export function useTenantWorkspace({ onError }) {
     } finally {
       setDetailLoading(false)
     }
-  }, [reportError])
+  }, [loadDetails, reportError])
 
   const bootstrapWorkspace = useCallback(async () => {
     try {
@@ -113,8 +119,11 @@ export function useTenantWorkspace({ onError }) {
   }, [bootstrapWorkspace])
 
   useEffect(() => {
+    if (!loadDetails) {
+      return
+    }
     loadWorkspace(selectedTenantId)
-  }, [loadWorkspace, selectedTenantId])
+  }, [loadDetails, loadWorkspace, selectedTenantId])
 
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === selectedTenantId) || null,

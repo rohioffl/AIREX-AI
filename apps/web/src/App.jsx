@@ -8,6 +8,7 @@ import RequireRole from './components/common/RequireRole'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
+import AdminLoginPage from './pages/AdminLoginPage'
 import IncidentDetail from './pages/IncidentDetail'
 import AlertsPage from './pages/AlertsPage'
 import RejectedPage from './pages/RejectedPage'
@@ -28,7 +29,6 @@ import ProfilePage from './pages/ProfilePage'
 import OrganizationsAdminPage from './pages/admin/OrganizationsAdminPage'
 import TenantWorkspaceAdminPage from './pages/admin/TenantWorkspaceAdminPage'
 import IntegrationsAdminPage from './pages/admin/IntegrationsAdminPage'
-import UsersAdminPage from './pages/admin/UsersAdminPage'
 import PlatformAdminPage from './pages/PlatformAdminPage'
 
 export default function App() {
@@ -40,10 +40,11 @@ export default function App() {
             <Routes>
               <Route path="/" element={<ErrorBoundary><LandingPage /></ErrorBoundary>} />
               <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
+              <Route path="/admin/login" element={<ErrorBoundary><AdminLoginPage /></ErrorBoundary>} />
               <Route path="/set-password" element={<ErrorBoundary><SetPasswordPage /></ErrorBoundary>} />
               <Route path="/admin" element={
                 <PrivateRoute>
-                  <RequireRole roles="admin">
+                  <RequireRole access="platform_admin">
                     <ErrorBoundary><PlatformAdminPage /></ErrorBoundary>
                   </RequireRole>
                 </PrivateRoute>
@@ -68,28 +69,23 @@ export default function App() {
                       <Route path="/profile" element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
                       <Route path="/health-checks" element={<ErrorBoundary><LiveMonitoringPage /></ErrorBoundary>} />
                       <Route path="/health-checks/site24x7" element={<ErrorBoundary><HealthChecksPage /></ErrorBoundary>} />
-                      <Route path="/admin/users" element={
-                        <RequireRole roles="admin">
-                          <ErrorBoundary><UsersAdminPage /></ErrorBoundary>
-                        </RequireRole>
-                      } />
-                      <Route path="/admin/legacy" element={
-                        <RequireRole roles="admin">
+                      <Route path="/org-admin" element={
+                        <RequireRole access="organizations_admin">
                           <ErrorBoundary><SuperAdminPage /></ErrorBoundary>
                         </RequireRole>
                       } />
                       <Route path="/admin/organizations" element={
-                        <RequireRole roles="admin">
+                        <RequireRole access="organizations_admin">
                           <ErrorBoundary><OrganizationsAdminPage /></ErrorBoundary>
                         </RequireRole>
                       } />
                       <Route path="/admin/workspaces" element={
-                        <RequireRole roles="admin">
+                        <RequireRole access="tenant_admin">
                           <ErrorBoundary><TenantWorkspaceAdminPage /></ErrorBoundary>
                         </RequireRole>
                       } />
                       <Route path="/admin/integrations" element={
-                        <RequireRole roles="admin">
+                        <RequireRole access="tenant_admin">
                           <ErrorBoundary><IntegrationsAdminPage /></ErrorBoundary>
                         </RequireRole>
                       } />

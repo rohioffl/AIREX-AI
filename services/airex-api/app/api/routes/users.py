@@ -14,13 +14,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import (
-    CurrentUser,
     TenantId,
     TenantSession,
+    authorize_tenant_admin,
     get_auth_session,
     get_authenticated_user,
-    require_role,
 )
+from airex_core.core.rbac import normalize_role_name
 from airex_core.core.security import (
     TokenData,
     UserResponse,
@@ -35,6 +35,49 @@ from airex_core.models.user import User
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+def _is_admin_like_role(role: str | None) -> bool:
+    return normalize_role_name(role or "") in {"admin", "platform_admin"}
+
+
+async def _require_tenant_admin_scope(
+    auth_session: AsyncSession,
+    current_user: TokenData,
+    tenant_id: uuid.UUID,
+) -> None:
+    if not await authorize_tenant_admin(auth_session, current_user, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant admin required",
+        )
+
+
+async def _get_requester_admin_org_ids(
+    session: AsyncSession,
+    current_user: TokenData,
+) -> set[uuid.UUID]:
+    admin_org_ids: set[uuid.UUID] = set()
+
+    if normalize_role_name(current_user.role) == "admin":
+        home_org_result = await session.execute(
+            select(Tenant.organization_id).where(Tenant.id == current_user.tenant_id)
+        )
+        home_org_id = home_org_result.scalar_one_or_none()
+        if home_org_id is not None:
+            admin_org_ids.add(home_org_id)
+
+    membership_result = await session.execute(
+        select(
+            OrganizationMembership.organization_id,
+            OrganizationMembership.role,
+        ).where(OrganizationMembership.user_id == current_user.user_id)
+    )
+    for row in membership_result.all():
+        if _is_admin_like_role(getattr(row, "role", None)):
+            admin_org_ids.add(row.organization_id)
+
+    return admin_org_ids
 
 
 class UserUpdateRequest(BaseModel):
@@ -56,20 +99,22 @@ class UserListResponse(BaseModel):
     total: int
 
 
-@router.get(
-    "/", response_model=UserListResponse, dependencies=[Depends(require_role("admin"))]
-)
+@router.get("/", response_model=UserListResponse)
 async def list_users(
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0, ge=0),
     include_inactive: bool = Query(default=False, description="Include inactive (deleted) users"),
 ) -> UserListResponse:
     """List all users in the tenant (admin only).
-    
+
     By default, only active users are returned. Set include_inactive=true to see deleted users.
     """
+    await _require_tenant_admin_scope(auth_session, current_user, tenant_id)
+
     # Build base query conditions
     query_filter = User.tenant_id == tenant_id
     if not include_inactive:
@@ -124,17 +169,17 @@ async def list_users(
     return UserListResponse(items=items, total=total)
 
 
-@router.get(
-    "/{user_id}",
-    response_model=UserResponse,
-    dependencies=[Depends(require_role("admin"))],
-)
+@router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
 ) -> UserResponse:
     """Get user details (admin only)."""
+    await _require_tenant_admin_scope(auth_session, current_user, tenant_id)
+
     result = await session.execute(
         select(User).where(
             User.tenant_id == tenant_id,
@@ -175,18 +220,17 @@ async def get_user(
     )
 
 
-@router.post(
-    "/",
-    status_code=status.HTTP_201_CREATED,
-    response_model=UserResponse,
-    dependencies=[Depends(require_role("admin"))],
-)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 async def create_user(
     body: UserCreateRequest,
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
 ) -> UserResponse:
     """Create a new user (admin only)."""
+    await _require_tenant_admin_scope(auth_session, current_user, tenant_id)
+
     # Validate role
     try:
         UserRole(body.role.lower())
@@ -338,19 +382,18 @@ async def create_user(
     )
 
 
-@router.patch(
-    "/{user_id}",
-    response_model=UserResponse,
-    dependencies=[Depends(require_role("admin"))],
-)
+@router.patch("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: uuid.UUID,
     body: UserUpdateRequest,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser,
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
 ) -> UserResponse:
     """Update user (admin only). Cannot change own role or deactivate self."""
+    await _require_tenant_admin_scope(auth_session, current_user, tenant_id)
+
     result = await session.execute(
         select(User).where(
             User.tenant_id == tenant_id,
@@ -429,18 +472,17 @@ async def update_user(
     )
 
 
-@router.delete(
-    "/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_role("admin"))],
-)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
-    current_user: CurrentUser,
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
 ) -> None:
     """Delete (deactivate) a user (admin only). Cannot delete self."""
+    await _require_tenant_admin_scope(auth_session, current_user, tenant_id)
+
     result = await session.execute(
         select(User).where(
             User.tenant_id == tenant_id,
@@ -468,17 +510,17 @@ async def delete_user(
     logger.info("user_deactivated_by_admin", user_id=str(user_id))
 
 
-@router.post(
-    "/{user_id}/resend-invitation",
-    status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin"))],
-)
+@router.post("/{user_id}/resend-invitation", status_code=status.HTTP_200_OK)
 async def resend_invitation(
     user_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
 ) -> dict:
     """Resend invitation email to a user (admin only)."""
+    await _require_tenant_admin_scope(auth_session, current_user, tenant_id)
+
     from airex_core.core.security import generate_invitation_token
     from airex_core.services.notification_service import send_user_invitation_email
     from airex_core.core.config import settings
@@ -533,7 +575,6 @@ class AccessibleTenantResponse(BaseModel):
 @router.get(
     "/{user_id}/accessible-tenants",
     response_model=list[AccessibleTenantResponse],
-    dependencies=[Depends(require_role("admin"))],
 )
 async def list_accessible_tenants(
     user_id: uuid.UUID,
@@ -545,19 +586,38 @@ async def list_accessible_tenants(
     Returns tenants the user can access via: home tenant, org membership, or
     explicit tenant membership.
     """
+    is_platform_admin = normalize_role_name(current_user.role) == "platform_admin"
+    visible_org_ids: set[uuid.UUID] | None = None
+    if not is_platform_admin:
+        visible_org_ids = await _get_requester_admin_org_ids(session, current_user)
+        if not visible_org_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization admin or platform admin required",
+            )
+
     results: dict[uuid.UUID, AccessibleTenantResponse] = {}
 
     # 1. Home tenant (from the user's own tenant_id on the User record)
     user_result = await session.execute(
-        select(User.tenant_id).where(User.id == user_id)
+        select(User.id, User.tenant_id).where(User.id == user_id)
     )
-    home_tenant_id = user_result.scalar_one_or_none()
+    user_row = user_result.one_or_none()
+    if user_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    home_tenant_id = user_row.tenant_id
     if home_tenant_id is not None:
         tenant_result = await session.execute(
             select(Tenant).where(Tenant.id == home_tenant_id)
         )
         home_tenant = tenant_result.scalar_one_or_none()
-        if home_tenant is not None:
+        if home_tenant is not None and (
+            is_platform_admin or home_tenant.organization_id in visible_org_ids
+        ):
             results[home_tenant.id] = AccessibleTenantResponse(
                 id=home_tenant.id,
                 name=home_tenant.name,
@@ -580,6 +640,8 @@ async def list_accessible_tenants(
             select(Tenant).where(Tenant.organization_id.in_(org_ids))
         )
         for tenant in org_tenants_result.scalars().all():
+            if not is_platform_admin and tenant.organization_id not in visible_org_ids:
+                continue
             if tenant.id not in results:
                 results[tenant.id] = AccessibleTenantResponse(
                     id=tenant.id,
@@ -605,7 +667,12 @@ async def list_accessible_tenants(
         )
         tenant_map = {t.id: t for t in explicit_tenants_result.scalars().all()}
         for row in explicit_memberships:
-            if row.tenant_id not in results and row.tenant_id in tenant_map:
+            if row.tenant_id not in tenant_map:
+                continue
+            tenant = tenant_map[row.tenant_id]
+            if not is_platform_admin and tenant.organization_id not in visible_org_ids:
+                continue
+            if row.tenant_id not in results:
                 tenant = tenant_map[row.tenant_id]
                 results[row.tenant_id] = AccessibleTenantResponse(
                     id=tenant.id,
@@ -616,5 +683,11 @@ async def list_accessible_tenants(
                     organization_id=tenant.organization_id,
                     membership_role=row.role,
                 )
+
+    if not is_platform_admin and not results:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this user's tenant access",
+        )
 
     return sorted(results.values(), key=lambda t: t.display_name)

@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
-import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken, googleLogin as apiGoogleLogin } from '../services/auth'
+import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken, googleLogin as apiGoogleLogin, platformAdminLogin as apiPlatformAdminLogin, platformAdminGoogleLogin as apiPlatformAdminGoogleLogin } from '../services/auth'
 import { getRefreshToken, getValidAccessToken } from '../services/tokenStorage'
 import { fetchAuthMe, getActiveTenantId, setActiveTenantId as persistActiveTenantId } from '../services/api'
+import { deriveOrganizations } from '../utils/accessControl'
 
 const AuthContext = createContext()
 
@@ -68,6 +69,20 @@ export function AuthProvider({ children }) {
 
   const loginWithGoogle = useCallback(async (idToken) => {
     const res = await apiGoogleLogin(idToken)
+    setToken(res.access_token)
+    await hydrateSession(res.access_token)
+    return res
+  }, [hydrateSession])
+
+  const loginAsPlatformAdmin = useCallback(async ({ email, password }) => {
+    const res = await apiPlatformAdminLogin({ email, password })
+    setToken(res.access_token)
+    await hydrateSession(res.access_token)
+    return res
+  }, [hydrateSession])
+
+  const loginWithGoogleAsAdmin = useCallback(async (idToken) => {
+    const res = await apiPlatformAdminGoogleLogin(idToken)
     setToken(res.access_token)
     await hydrateSession(res.access_token)
     return res
@@ -161,24 +176,34 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('session-expired', handleSessionExpired)
   }, [logout])
 
-  const value = useMemo(() => ({
-    user,
-    token,
-    loading,
-    login,
-    loginWithGoogle,
-    logout,
-    refresh,
-    switchTenant,
-    isAuthenticated: !!token,
-    sessionContext,
-    organizations: sessionContext?.organization_memberships || [],
-    tenants: sessionContext?.tenants || [],
-    projects: sessionContext?.projects || [],
-    activeOrganization: sessionContext?.active_organization || null,
-    activeTenant: sessionContext?.active_tenant || null,
-    activeTenantId: sessionContext?.active_tenant?.id || user?.tenantId || null,
-  }), [user, token, loading, login, loginWithGoogle, logout, refresh, switchTenant, sessionContext])
+  const value = useMemo(() => {
+    const organizationMemberships = sessionContext?.organization_memberships || []
+    const tenantMemberships = sessionContext?.tenant_memberships || []
+    const organizations = deriveOrganizations(sessionContext)
+
+    return {
+      user,
+      token,
+      loading,
+      login,
+      loginWithGoogle,
+      loginAsPlatformAdmin,
+      loginWithGoogleAsAdmin,
+      logout,
+      refresh,
+      switchTenant,
+      isAuthenticated: !!token,
+      sessionContext,
+      organizationMemberships,
+      tenantMemberships,
+      organizations,
+      tenants: sessionContext?.tenants || [],
+      projects: sessionContext?.projects || [],
+      activeOrganization: sessionContext?.active_organization || null,
+      activeTenant: sessionContext?.active_tenant || null,
+      activeTenantId: sessionContext?.active_tenant?.id || user?.tenantId || null,
+    }
+  }, [user, token, loading, login, loginWithGoogle, loginAsPlatformAdmin, loginWithGoogleAsAdmin, logout, refresh, switchTenant, sessionContext])
 
   return (
     <AuthContext.Provider value={value}>

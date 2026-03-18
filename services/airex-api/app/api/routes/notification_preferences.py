@@ -7,11 +7,15 @@ Allows users to manage their notification preferences for email and Slack.
 import uuid
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.api.dependencies import CurrentUser, TenantId, TenantSession
+from airex_core.models.notification_delivery_log import NotificationDeliveryLog
 from airex_core.models.notification_preference import NotificationPreference
+from airex_core.models.enums import IncidentState, SeverityLevel
+from airex_core.models.user import User
+from airex_core.services.notification_service import send_email_notification, _send_slack_to_url
 from sqlalchemy import select
 
 logger = structlog.get_logger()
@@ -202,3 +206,127 @@ async def update_my_preferences(
         created_at=pref.created_at.isoformat(),
         updated_at=pref.updated_at.isoformat(),
     )
+
+
+class DeliveryLogEntry(BaseModel):
+    id: uuid.UUID
+    incident_id: uuid.UUID | None
+    channel: str
+    state_transition: str | None
+    status: str
+    error_message: str | None
+    delivered_at: str
+
+
+@router.post("/me/test", status_code=status.HTTP_200_OK)
+async def test_notification(
+    tenant_id: TenantId,
+    session: TenantSession,
+    current_user: CurrentUser,
+) -> dict:
+    """Send a test notification using the current user's saved preferences."""
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    result = await session.execute(
+        select(NotificationPreference, User)
+        .join(User, (User.tenant_id == NotificationPreference.tenant_id) & (User.id == NotificationPreference.user_id))
+        .where(
+            NotificationPreference.tenant_id == tenant_id,
+            NotificationPreference.user_id == current_user.user_id,
+        )
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No notification preferences saved. Save preferences first.",
+        )
+
+    pref, user = row
+    channels_attempted: list[str] = []
+    channels_sent: list[str] = []
+
+    if pref.email_enabled:
+        channels_attempted.append("email")
+        ok = await send_email_notification(
+            incident_id="00000000-0000-0000-0000-000000000000",
+            tenant_id=str(tenant_id),
+            state=IncidentState.RESOLVED,
+            severity=SeverityLevel.LOW,
+            title="Test Notification",
+            recipient=user.email,
+            message="This is a test notification from AIREX. Your email notifications are working correctly.",
+        )
+        if ok:
+            channels_sent.append("email")
+
+    if pref.slack_enabled and pref.slack_webhook_url:
+        channels_attempted.append("slack")
+        ok = await _send_slack_to_url(
+            webhook_url=pref.slack_webhook_url,
+            incident_id="00000000-0000-0000-0000-000000000000",
+            tenant_id=str(tenant_id),
+            state=IncidentState.RESOLVED,
+            severity=SeverityLevel.LOW,
+            title="Test Notification",
+            message="This is a test notification from AIREX. Your Slack notifications are working correctly.",
+        )
+        if ok:
+            channels_sent.append("slack")
+
+    logger.info(
+        "test_notification_sent",
+        tenant_id=str(tenant_id),
+        user_id=str(current_user.user_id),
+        channels_attempted=channels_attempted,
+        channels_sent=channels_sent,
+    )
+
+    return {
+        "channels_attempted": channels_attempted,
+        "channels_sent": channels_sent,
+        "message": f"Test sent on {len(channels_sent)}/{len(channels_attempted)} channel(s).",
+    }
+
+
+@router.get("/me/delivery-log", response_model=list[DeliveryLogEntry])
+async def get_delivery_log(
+    tenant_id: TenantId,
+    session: TenantSession,
+    current_user: CurrentUser,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[DeliveryLogEntry]:
+    """Return the most recent notification delivery attempts for the current user."""
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    result = await session.execute(
+        select(NotificationDeliveryLog)
+        .where(
+            NotificationDeliveryLog.tenant_id == tenant_id,
+            NotificationDeliveryLog.user_id == current_user.user_id,
+        )
+        .order_by(NotificationDeliveryLog.delivered_at.desc())
+        .limit(limit)
+    )
+    logs = result.scalars().all()
+
+    return [
+        DeliveryLogEntry(
+            id=log.id,
+            incident_id=log.incident_id,
+            channel=log.channel,
+            state_transition=log.state_transition,
+            status=log.status,
+            error_message=log.error_message,
+            delivered_at=log.delivered_at.isoformat(),
+        )
+        for log in logs
+    ]

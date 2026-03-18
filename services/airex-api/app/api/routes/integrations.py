@@ -1,20 +1,22 @@
-"""Tenant-owned monitoring integration APIs."""
+"""Platform and tenant-owned monitoring integration APIs."""
 
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import (
+    RequirePlatformAdmin,
     authorize_tenant_access,
     authorize_tenant_admin,
     get_auth_session,
     get_authenticated_user,
 )
 from airex_core.core.database import engine as async_engine
+from airex_core.core.rbac import normalize_role_name
 from airex_core.core.security import TokenData
 
 router = APIRouter()
@@ -29,6 +31,18 @@ class IntegrationTypeResponse(BaseModel):
     supports_webhook: bool
     supports_polling: bool
     supports_sync: bool
+    config_schema_json: dict = {}
+
+
+class IntegrationTypeRequest(BaseModel):
+    key: str = Field(..., min_length=2, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    display_name: str = Field(..., min_length=2, max_length=255)
+    category: str = Field(..., min_length=2, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    enabled: bool = True
+    supports_webhook: bool = True
+    supports_polling: bool = False
+    supports_sync: bool = True
+    config_schema_json: dict = {}
 
 
 class MonitoringIntegrationRequest(BaseModel):
@@ -57,6 +71,22 @@ class MonitoringIntegrationResponse(BaseModel):
     status: str
     last_tested_at: str | None = None
     last_sync_at: str | None = None
+
+
+class IntegrationConnectionCheck(BaseModel):
+    code: str
+    status: str
+    detail: str
+
+
+class IntegrationConnectionTestResponse(BaseModel):
+    status: str
+    integration_id: str
+    tenant_id: str
+    integration_type_key: str
+    success: bool
+    detail: str
+    checks: list[IntegrationConnectionCheck]
 
 
 class ExternalMonitorResponse(BaseModel):
@@ -198,34 +228,281 @@ def _build_webhook_path(integration_type_key: str | None, integration_id: str) -
     return f"/api/v1/webhooks/{integration_type_key}/{integration_id}"
 
 
+def _serialize_integration_type(row) -> IntegrationTypeResponse:
+    return IntegrationTypeResponse(
+        id=str(row.id),
+        key=row.key,
+        display_name=row.display_name,
+        category=row.category,
+        enabled=row.enabled,
+        supports_webhook=row.supports_webhook,
+        supports_polling=row.supports_polling,
+        supports_sync=row.supports_sync,
+        config_schema_json=dict(row.config_schema_json or {}),
+    )
+
+
+def _validate_integration_configuration(row) -> tuple[bool, list[IntegrationConnectionCheck], str]:
+    config = dict(row.config_json or {})
+    schema = dict(row.config_schema_json or {})
+    properties = schema.get("properties") or {}
+    required_fields = schema.get("required") or []
+    checks: list[IntegrationConnectionCheck] = []
+    missing_required: list[str] = []
+
+    for field_name in required_fields:
+        field_meta = properties.get(field_name) or {}
+        field_value = config.get(field_name)
+        has_value = field_value not in (None, "", [], {})
+        secret_backed = bool(field_meta.get("secret")) and bool(row.secret_ref)
+        if has_value or secret_backed:
+            checks.append(
+                IntegrationConnectionCheck(
+                    code=f"required:{field_name}",
+                    status="passed",
+                    detail=f"{field_name} is configured",
+                )
+            )
+            continue
+        missing_required.append(field_name)
+        checks.append(
+            IntegrationConnectionCheck(
+                code=f"required:{field_name}",
+                status="failed",
+                detail=f"{field_name} is required by the integration schema",
+            )
+        )
+
+    for field_name, value in config.items():
+        if field_name.endswith("_url") or field_name == "base_url":
+            valid = isinstance(value, str) and value.startswith(("http://", "https://"))
+            checks.append(
+                IntegrationConnectionCheck(
+                    code=f"url:{field_name}",
+                    status="passed" if valid else "failed",
+                    detail=(
+                        f"{field_name} uses a valid HTTP(S) URL"
+                        if valid
+                        else f"{field_name} must start with http:// or https://"
+                    ),
+                )
+            )
+
+    if row.supports_webhook:
+        has_webhook_secret = bool(row.webhook_token_ref) or bool(config.get("webhook_secret")) or bool(config.get("hmac_secret"))
+        checks.append(
+            IntegrationConnectionCheck(
+                code="webhook:secret",
+                status="passed" if has_webhook_secret else "warning",
+                detail=(
+                    "Webhook secret is configured"
+                    if has_webhook_secret
+                    else "No webhook secret configured; webhook validation may be weaker than intended"
+                ),
+            )
+        )
+
+    failed_checks = [check for check in checks if check.status == "failed"]
+    success = not missing_required and not failed_checks
+    if success:
+        detail = "Connection configuration validated for the active tenant workspace"
+    elif missing_required:
+        detail = f"Missing required integration fields: {', '.join(missing_required)}"
+    else:
+        detail = "Integration configuration failed validation checks"
+
+    return success, checks, detail
+
+
 @router.get("/integration-types", response_model=list[IntegrationTypeResponse])
 async def list_integration_types(
-    _: TokenData = Depends(get_authenticated_user),
+    current_user: TokenData = Depends(get_authenticated_user),
+    include_disabled: bool = Query(default=False),
 ) -> list[IntegrationTypeResponse]:
     async with async_engine.connect() as conn:
+        if include_disabled and normalize_role_name(current_user.role) != "platform_admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Platform admin required to view disabled integration types",
+            )
         rows = await conn.execute(
             sa_text(
                 """
-                SELECT id, key, display_name, category, enabled, supports_webhook, supports_polling, supports_sync
+                SELECT id, key, display_name, category, enabled, supports_webhook, supports_polling, supports_sync, config_schema_json
                 FROM integration_types
-                WHERE enabled = true
+                WHERE (:include_disabled = true OR enabled = true)
                 ORDER BY display_name
                 """
-            )
+            ),
+            {"include_disabled": include_disabled},
         )
-        return [
-            IntegrationTypeResponse(
-                id=str(row.id),
-                key=row.key,
-                display_name=row.display_name,
-                category=row.category,
-                enabled=row.enabled,
-                supports_webhook=row.supports_webhook,
-                supports_polling=row.supports_polling,
-                supports_sync=row.supports_sync,
+        return [_serialize_integration_type(row) for row in rows]
+
+
+@router.get("/integration-types/{integration_type_id}", response_model=IntegrationTypeResponse)
+async def get_integration_type(
+    integration_type_id: uuid.UUID,
+    _: RequirePlatformAdmin,
+    __: TokenData = Depends(get_authenticated_user),
+) -> IntegrationTypeResponse:
+    async with async_engine.connect() as conn:
+        row = (
+            await conn.execute(
+                sa_text(
+                    """
+                    SELECT id, key, display_name, category, enabled, supports_webhook, supports_polling, supports_sync, config_schema_json
+                    FROM integration_types
+                    WHERE id = :integration_type_id
+                    """
+                ),
+                {"integration_type_id": str(integration_type_id)},
             )
-            for row in rows
-        ]
+        ).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration type not found")
+    return _serialize_integration_type(row)
+
+
+@router.post("/integration-types", response_model=IntegrationTypeResponse, status_code=status.HTTP_201_CREATED)
+async def create_integration_type(
+    body: IntegrationTypeRequest,
+    _: RequirePlatformAdmin,
+    __: TokenData = Depends(get_authenticated_user),
+) -> IntegrationTypeResponse:
+    integration_type_id = uuid.uuid4()
+    async with async_engine.begin() as conn:
+        existing = (
+            await conn.execute(
+                sa_text("SELECT id FROM integration_types WHERE lower(key) = :key"),
+                {"key": body.key.lower()},
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Integration type key already exists")
+        await conn.execute(
+            sa_text(
+                """
+                INSERT INTO integration_types (
+                    id, key, display_name, category, enabled, supports_webhook,
+                    supports_polling, supports_sync, config_schema_json
+                ) VALUES (
+                    :id, :key, :display_name, :category, :enabled, :supports_webhook,
+                    :supports_polling, :supports_sync, CAST(:config_schema_json AS jsonb)
+                )
+                """
+            ),
+            {
+                "id": str(integration_type_id),
+                "key": body.key.lower(),
+                "display_name": body.display_name,
+                "category": body.category.lower(),
+                "enabled": body.enabled,
+                "supports_webhook": body.supports_webhook,
+                "supports_polling": body.supports_polling,
+                "supports_sync": body.supports_sync,
+                "config_schema_json": json.dumps(body.config_schema_json),
+            },
+        )
+    return IntegrationTypeResponse(
+        id=str(integration_type_id),
+        key=body.key.lower(),
+        display_name=body.display_name,
+        category=body.category.lower(),
+        enabled=body.enabled,
+        supports_webhook=body.supports_webhook,
+        supports_polling=body.supports_polling,
+        supports_sync=body.supports_sync,
+        config_schema_json=body.config_schema_json,
+    )
+
+
+@router.put("/integration-types/{integration_type_id}", response_model=IntegrationTypeResponse)
+async def update_integration_type(
+    integration_type_id: uuid.UUID,
+    body: IntegrationTypeRequest,
+    _: RequirePlatformAdmin,
+    __: TokenData = Depends(get_authenticated_user),
+) -> IntegrationTypeResponse:
+    async with async_engine.begin() as conn:
+        existing = (
+            await conn.execute(
+                sa_text("SELECT id FROM integration_types WHERE id = :integration_type_id"),
+                {"integration_type_id": str(integration_type_id)},
+            )
+        ).first()
+        if existing is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration type not found")
+        conflict = (
+            await conn.execute(
+                sa_text(
+                    "SELECT id FROM integration_types WHERE lower(key) = :key AND id <> :integration_type_id"
+                ),
+                {"key": body.key.lower(), "integration_type_id": str(integration_type_id)},
+            )
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Integration type key already exists")
+        await conn.execute(
+            sa_text(
+                """
+                UPDATE integration_types
+                SET key = :key,
+                    display_name = :display_name,
+                    category = :category,
+                    enabled = :enabled,
+                    supports_webhook = :supports_webhook,
+                    supports_polling = :supports_polling,
+                    supports_sync = :supports_sync,
+                    config_schema_json = CAST(:config_schema_json AS jsonb),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :integration_type_id
+                """
+            ),
+            {
+                "integration_type_id": str(integration_type_id),
+                "key": body.key.lower(),
+                "display_name": body.display_name,
+                "category": body.category.lower(),
+                "enabled": body.enabled,
+                "supports_webhook": body.supports_webhook,
+                "supports_polling": body.supports_polling,
+                "supports_sync": body.supports_sync,
+                "config_schema_json": json.dumps(body.config_schema_json),
+            },
+        )
+    return IntegrationTypeResponse(
+        id=str(integration_type_id),
+        key=body.key.lower(),
+        display_name=body.display_name,
+        category=body.category.lower(),
+        enabled=body.enabled,
+        supports_webhook=body.supports_webhook,
+        supports_polling=body.supports_polling,
+        supports_sync=body.supports_sync,
+        config_schema_json=body.config_schema_json,
+    )
+
+
+@router.delete("/integration-types/{integration_type_id}")
+async def delete_integration_type(
+    integration_type_id: uuid.UUID,
+    _: RequirePlatformAdmin,
+    __: TokenData = Depends(get_authenticated_user),
+) -> dict[str, str]:
+    async with async_engine.begin() as conn:
+        result = await conn.execute(
+            sa_text(
+                """
+                UPDATE integration_types
+                SET enabled = false, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :integration_type_id
+                """
+            ),
+            {"integration_type_id": str(integration_type_id)},
+        )
+        if result.rowcount == 0:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration type not found")
+    return {"status": "disabled"}
 
 
 @router.get("/tenants/{tenant_id}/integrations", response_model=list[MonitoringIntegrationResponse])
@@ -476,22 +753,23 @@ async def delete_monitoring_integration(
     return {"status": "deleted"}
 
 
-@router.post("/integrations/{integration_id}/test")
+@router.post("/integrations/{integration_id}/test", response_model=IntegrationConnectionTestResponse)
 async def test_monitoring_integration(
     integration_id: uuid.UUID,
     current_user: TokenData = Depends(get_authenticated_user),
     session: AsyncSession = Depends(get_auth_session),
-) -> dict[str, object]:
+) -> IntegrationConnectionTestResponse:
     tenant_id = await _get_integration_tenant_id(session, integration_id)
     await _require_tenant_admin(session, current_user, tenant_id)
     async with async_engine.begin() as conn:
         result = await conn.execute(
             sa_text(
                 """
-                UPDATE monitoring_integrations
-                SET status = 'verified', last_tested_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                WHERE id = :integration_id
-                RETURNING tenant_id
+                SELECT mi.id, mi.tenant_id, mi.config_json, mi.secret_ref, mi.webhook_token_ref,
+                       it.key AS integration_type_key, it.supports_webhook, it.config_schema_json
+                FROM monitoring_integrations mi
+                JOIN integration_types it ON it.id = mi.integration_type_id
+                WHERE mi.id = :integration_id
                 """
             ),
             {"integration_id": str(integration_id)},
@@ -499,7 +777,29 @@ async def test_monitoring_integration(
         row = result.first()
         if not row:
             raise HTTPException(status_code=404, detail="Integration not found")
-    return {"status": "verified", "integration_id": str(integration_id), "tenant_id": str(row.tenant_id)}
+        success, checks, detail = _validate_integration_configuration(row)
+        await conn.execute(
+            sa_text(
+                """
+                UPDATE monitoring_integrations
+                SET status = :status, last_tested_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :integration_id
+                """
+            ),
+            {
+                "status": "verified" if success else "error",
+                "integration_id": str(integration_id),
+            },
+        )
+    return IntegrationConnectionTestResponse(
+        status="verified" if success else "error",
+        integration_id=str(integration_id),
+        tenant_id=str(row.tenant_id),
+        integration_type_key=row.integration_type_key,
+        success=success,
+        detail=detail,
+        checks=checks,
+    )
 
 
 @router.post("/integrations/{integration_id}/sync-monitors")
@@ -711,6 +1011,158 @@ async def create_project_binding(
         resource_mapping_json=body.resource_mapping_json,
         routing_tags_json=body.routing_tags_json,
     )
+
+
+class WebhookEventResponse(BaseModel):
+    id: str
+    integration_id: str
+    source: str
+    event_type: str | None
+    payload: dict | None
+    status: str
+    incident_id: str | None
+    dedup_key: str | None
+    is_replay: bool
+    original_event_id: str | None
+    received_at: str
+    processed_at: str | None
+
+
+@router.get("/integrations/{integration_id}/webhook-events", response_model=list[WebhookEventResponse])
+async def list_webhook_events(
+    integration_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+    limit: int = 50,
+) -> list[WebhookEventResponse]:
+    tenant_id = await _get_integration_tenant_id(session, integration_id)
+    await _require_tenant_access(session, current_user, tenant_id)
+    async with async_engine.connect() as conn:
+        await conn.execute(
+            sa_text("SET LOCAL app.tenant_id = :tenant_id"),
+            {"tenant_id": str(tenant_id)},
+        )
+        rows = await conn.execute(
+            sa_text(
+                """
+                SELECT id, integration_id, source, event_type, payload, status,
+                       incident_id, dedup_key, is_replay, original_event_id,
+                       received_at, processed_at
+                FROM webhook_events
+                WHERE tenant_id = :tenant_id AND integration_id = :integration_id
+                ORDER BY received_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"tenant_id": str(tenant_id), "integration_id": str(integration_id), "limit": limit},
+        )
+        return [
+            WebhookEventResponse(
+                id=str(row.id),
+                integration_id=str(row.integration_id),
+                source=row.source,
+                event_type=row.event_type,
+                payload=dict(row.payload) if row.payload else None,
+                status=row.status,
+                incident_id=str(row.incident_id) if row.incident_id else None,
+                dedup_key=row.dedup_key,
+                is_replay=row.is_replay,
+                original_event_id=str(row.original_event_id) if row.original_event_id else None,
+                received_at=str(row.received_at),
+                processed_at=str(row.processed_at) if row.processed_at else None,
+            )
+            for row in rows
+        ]
+
+
+@router.post(
+    "/integrations/{integration_id}/webhook-events/{event_id}/replay",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def replay_webhook_event(
+    integration_id: uuid.UUID,
+    event_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> dict[str, str]:
+    tenant_id = await _get_integration_tenant_id(session, integration_id)
+    await _require_tenant_admin(session, current_user, tenant_id)
+    new_event_id = uuid.uuid4()
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            sa_text("SET LOCAL app.tenant_id = :tenant_id"),
+            {"tenant_id": str(tenant_id)},
+        )
+        original = (
+            await conn.execute(
+                sa_text(
+                    """
+                    SELECT id, source, event_type, payload, headers
+                    FROM webhook_events
+                    WHERE tenant_id = :tenant_id AND integration_id = :integration_id AND id = :event_id
+                    """
+                ),
+                {
+                    "tenant_id": str(tenant_id),
+                    "integration_id": str(integration_id),
+                    "event_id": str(event_id),
+                },
+            )
+        ).first()
+        if not original:
+            raise HTTPException(status_code=404, detail="Webhook event not found")
+        await conn.execute(
+            sa_text(
+                """
+                INSERT INTO webhook_events (
+                    tenant_id, id, integration_id, source, event_type, payload, headers,
+                    status, is_replay, original_event_id, received_at
+                )
+                VALUES (
+                    :tenant_id, :id, :integration_id, :source, :event_type,
+                    CAST(:payload AS jsonb), CAST(:headers AS jsonb),
+                    'queued', true, :original_event_id, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {
+                "tenant_id": str(tenant_id),
+                "id": str(new_event_id),
+                "integration_id": str(integration_id),
+                "source": original.source,
+                "event_type": original.event_type,
+                "payload": json.dumps(dict(original.payload) if original.payload else {}),
+                "headers": json.dumps({}),
+                "original_event_id": str(event_id),
+            },
+        )
+    return {"status": "queued", "replay_event_id": str(new_event_id), "original_event_id": str(event_id)}
+
+
+@router.post("/integrations/{integration_id}/rotate-secret")
+async def rotate_integration_secret(
+    integration_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> dict[str, str]:
+    tenant_id = await _get_integration_tenant_id(session, integration_id)
+    await _require_tenant_admin(session, current_user, tenant_id)
+    new_token = str(uuid.uuid4())
+    async with async_engine.begin() as conn:
+        result = await conn.execute(
+            sa_text(
+                """
+                UPDATE monitoring_integrations
+                SET webhook_token_ref = :new_token, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :integration_id
+                RETURNING id
+                """
+            ),
+            {"integration_id": str(integration_id), "new_token": new_token},
+        )
+        if not result.first():
+            raise HTTPException(status_code=404, detail="Integration not found")
+    return {"status": "rotated", "webhook_token": new_token, "integration_id": str(integration_id)}
 
 
 @router.delete("/project-monitor-bindings/{binding_id}")

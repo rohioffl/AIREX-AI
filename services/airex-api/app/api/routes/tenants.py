@@ -22,12 +22,26 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import bindparam, column, func, table, text as sa_text, update
+from sqlalchemy import bindparam, column, false, func, or_, select, table, text as sa_text, update
 from sqlalchemy.dialects.postgresql import JSONB
 
-from app.api.dependencies import require_role
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import (
+    RequirePlatformAdmin,
+    authorize_org_admin,
+    get_auth_session,
+    get_authenticated_user,
+    get_home_organization_id,
+    require_role,
+)
 from airex_core.cloud import tenant_config
 from airex_core.core.database import engine as async_engine
+from airex_core.core.rbac import normalize_role_name
+from airex_core.core.security import TokenData
+from airex_core.models.organization_membership import OrganizationMembership
+from airex_core.models.tenant import Tenant
+from airex_core.models.tenant_membership import TenantMembership
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -137,6 +151,53 @@ def _invalidate_cache() -> None:
         logger.warning("cache_invalidation_failed", error=str(exc))
 
 
+async def _get_visible_org_ids(
+    session: AsyncSession,
+    current_user: TokenData,
+) -> set[uuid.UUID]:
+    org_ids: set[uuid.UUID] = set()
+    home_org_id = await get_home_organization_id(session, current_user)
+    if home_org_id is not None:
+        org_ids.add(home_org_id)
+
+    membership_result = await session.execute(
+        select(OrganizationMembership.organization_id).where(
+            OrganizationMembership.user_id == current_user.user_id
+        )
+    )
+    org_ids.update(membership_result.scalars().all())
+    return org_ids
+
+
+async def _get_visible_tenant_ids(
+    session: AsyncSession,
+    current_user: TokenData,
+) -> set[uuid.UUID]:
+    tenant_ids = {current_user.tenant_id}
+    membership_result = await session.execute(
+        select(TenantMembership.tenant_id).where(
+            TenantMembership.user_id == current_user.user_id
+        )
+    )
+    tenant_ids.update(membership_result.scalars().all())
+    return tenant_ids
+
+
+async def _get_tenant_organization_id(
+    tenant_name: str,
+) -> uuid.UUID:
+    async with async_engine.connect() as conn:
+        result = await conn.execute(
+            select(Tenant.organization_id).where(
+                func.lower(Tenant.name) == tenant_name.lower().strip()
+            )
+        )
+        organization_id = result.scalar_one_or_none()
+    if organization_id is None:
+        raise HTTPException(status_code=404, detail=f"Tenant '{tenant_name}' not found")
+    return organization_id
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  Routes
 # ═══════════════════════════════════════════════════════════════════
@@ -145,36 +206,64 @@ def _invalidate_cache() -> None:
 @router.get(
     "/",
     response_model=list[TenantSummary],
-    dependencies=[Depends(require_role("viewer", "operator", "admin"))],
+    dependencies=[Depends(require_role("viewer", "operator", "admin", "platform_admin"))],
 )
-async def list_all_tenants() -> list[TenantSummary]:
-    """List all active tenants from the database."""
+async def list_all_tenants(
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
+) -> list[TenantSummary]:
+    """List active tenants visible to the current user."""
+    is_platform_admin = normalize_role_name(current_user.role) == "platform_admin"
+
     result: list[TenantSummary] = []
     async with async_engine.connect() as conn:
-        rows = await conn.execute(
-            sa_text(
-                """
-                SELECT id, organization_id, name, display_name, cloud, is_active,
-                       escalation_email, aws_config, gcp_config, servers
-                FROM tenants
-                WHERE is_active = true
-                ORDER BY name
-                """
+        if is_platform_admin:
+            rows = await conn.execute(
+                select(Tenant)
+                .where(Tenant.is_active.is_(True))
+                .order_by(Tenant.name.asc())
             )
-        )
-        for row in rows:
-            tenant_id, organization_id, name, display_name, cloud, is_active, email, aws_cfg, gcp_cfg, servers = row
+            tenants = rows.scalars().all()
+        else:
+            visible_org_ids = await _get_visible_org_ids(auth_session, current_user)
+            visible_tenant_ids = await _get_visible_tenant_ids(auth_session, current_user)
+
+            if not visible_org_ids and not visible_tenant_ids:
+                return []
+
+            rows = await conn.execute(
+                select(Tenant)
+                .where(
+                    Tenant.is_active.is_(True),
+                    or_(
+                        Tenant.organization_id.in_(list(visible_org_ids))
+                        if visible_org_ids
+                        else false(),
+                        Tenant.id.in_(list(visible_tenant_ids))
+                        if visible_tenant_ids
+                        else false(),
+                    ),
+                )
+                .order_by(Tenant.name.asc())
+            )
+            tenants = rows.scalars().all()
+
+        for tenant in tenants:
             result.append(
                 TenantSummary(
-                    id=str(tenant_id),
-                    name=name,
-                    display_name=display_name,
-                    cloud=cloud,
-                    organization_id=str(organization_id),
-                    server_count=len(servers) if isinstance(servers, list) else 0,
-                    escalation_email=email or "",
-                    is_active=is_active,
-                    credential_status=_credential_status(cloud, aws_cfg or {}, gcp_cfg or {}),
+                    id=str(tenant.id),
+                    name=tenant.name,
+                    display_name=tenant.display_name,
+                    cloud=tenant.cloud,
+                    organization_id=str(tenant.organization_id) if tenant.organization_id else None,
+                    server_count=len(tenant.servers) if isinstance(tenant.servers, list) else 0,
+                    escalation_email=tenant.escalation_email or "",
+                    is_active=tenant.is_active,
+                    credential_status=_credential_status(
+                        tenant.cloud,
+                        tenant.aws_config or {},
+                        tenant.gcp_config or {},
+                    ),
                 )
             )
     return result
@@ -231,8 +320,8 @@ async def get_tenant_detail(tenant_name: str) -> TenantDetailResponse:
     )
 
 
-@router.post("/", dependencies=[Depends(require_role("admin"))], status_code=201)
-async def create_tenant(req: TenantCreateRequest) -> dict:
+@router.post("/", status_code=201)
+async def create_tenant(req: TenantCreateRequest, _: RequirePlatformAdmin) -> dict:
     """Create a new tenant (admin only)."""
     tenant_id = uuid.uuid4()
 
@@ -283,9 +372,22 @@ async def create_tenant(req: TenantCreateRequest) -> dict:
     return {"status": "created", "name": req.name, "id": str(tenant_id)}
 
 
-@router.put("/{tenant_name}", dependencies=[Depends(require_role("admin"))])
-async def update_tenant(tenant_name: str, req: TenantUpdateRequest) -> dict:
-    """Update an existing tenant (admin only). Only provided fields are updated."""
+@router.put("/{tenant_name}")
+async def update_tenant(
+    tenant_name: str,
+    req: TenantUpdateRequest,
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
+) -> dict:
+    """Update an existing tenant. Platform admin or org admin required."""
+    if normalize_role_name(current_user.role) != "platform_admin":
+        organization_id = await _get_tenant_organization_id(tenant_name)
+        if not await authorize_org_admin(auth_session, current_user, organization_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Organization admin required for this tenant",
+            )
+
     scalar_updates: dict[str, Any] = {}
     if req.display_name is not None:
         scalar_updates["display_name"] = req.display_name
@@ -344,9 +446,21 @@ async def update_tenant(tenant_name: str, req: TenantUpdateRequest) -> dict:
     return {"status": "updated", "name": tenant_name}
 
 
-@router.delete("/{tenant_name}", dependencies=[Depends(require_role("admin"))])
-async def delete_tenant(tenant_name: str) -> dict:
-    """Soft-delete a tenant by setting is_active=false (admin only)."""
+@router.delete("/{tenant_name}")
+async def delete_tenant(
+    tenant_name: str,
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
+) -> dict:
+    """Soft-delete a tenant. Platform admin or org admin required."""
+    if normalize_role_name(current_user.role) != "platform_admin":
+        organization_id = await _get_tenant_organization_id(tenant_name)
+        if not await authorize_org_admin(auth_session, current_user, organization_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Organization admin required for this tenant",
+            )
+
     async with async_engine.begin() as conn:
         result = await conn.execute(
             sa_text(
@@ -370,8 +484,8 @@ async def delete_tenant(tenant_name: str) -> dict:
     return {"status": "deleted", "name": tenant_name}
 
 
-@router.post("/reload", dependencies=[Depends(require_role("admin"))])
-async def reload_tenant_config() -> dict:
+@router.post("/reload")
+async def reload_tenant_config(_: RequirePlatformAdmin) -> dict:
     """Reload tenant config cache (admin only)."""
     _invalidate_cache()
     names = tenant_config.list_tenants()

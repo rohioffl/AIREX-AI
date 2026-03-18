@@ -11,6 +11,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 
 from app.api.routes import (
+    admin_auth,
     analytics,
     anomalies,
     auth,
@@ -24,6 +25,7 @@ from app.api.routes import (
     notification_preferences,
     organizations,
     patterns,
+    platform_admin,
     predictions,
     projects,
     reports,
@@ -138,6 +140,11 @@ app.include_router(
     tags=["auth"],
 )
 app.include_router(
+    admin_auth.router,
+    prefix=f"{settings.API_V1_STR}/auth",
+    tags=["auth"],
+)
+app.include_router(
     webhooks.router,
     prefix=f"{settings.API_V1_STR}/webhooks",
     tags=["webhooks"],
@@ -166,6 +173,11 @@ app.include_router(
     organizations.router,
     prefix=f"{settings.API_V1_STR}",
     tags=["organizations"],
+)
+app.include_router(
+    platform_admin.router,
+    prefix=f"{settings.API_V1_STR}/platform",
+    tags=["platform-admin"],
 )
 app.include_router(
     tenant_members.router,

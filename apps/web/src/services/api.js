@@ -139,6 +139,21 @@ export async function fetchUsers({ limit = 100, offset = 0 } = {}) {
   return res.data
 }
 
+export async function fetchPlatformAdmins() {
+  const res = await api.get('/platform/admins')
+  return res.data
+}
+
+export async function createPlatformAdmin(data) {
+  const res = await api.post('/platform/admins', data)
+  return res.data
+}
+
+export async function updatePlatformAdmin(id, data) {
+  const res = await api.patch(`/platform/admins/${id}`, data)
+  return res.data
+}
+
 export async function fetchUser(id) {
   const res = await api.get(`/users/${id}`)
   return res.data
@@ -172,6 +187,11 @@ export async function acknowledgeIncident(id) {
 // Metrics
 export async function fetchMetrics() {
   const res = await api.get('/metrics/')
+  return res.data
+}
+
+export async function fetchPlatformAnalytics() {
+  const res = await api.get('/platform/analytics')
   return res.data
 }
 
@@ -276,8 +296,23 @@ export async function deleteProject(projectId) {
   await api.delete(`/projects/${projectId}`)
 }
 
-export async function fetchIntegrationTypes() {
-  const res = await api.get('/integration-types')
+export async function fetchIntegrationTypes({ includeDisabled = false } = {}) {
+  const res = await api.get('/integration-types', { params: { include_disabled: includeDisabled } })
+  return res.data
+}
+
+export async function createIntegrationType(data) {
+  const res = await api.post('/integration-types', data)
+  return res.data
+}
+
+export async function updateIntegrationType(id, data) {
+  const res = await api.put(`/integration-types/${id}`, data)
+  return res.data
+}
+
+export async function deleteIntegrationType(id) {
+  const res = await api.delete(`/integration-types/${id}`)
   return res.data
 }
 

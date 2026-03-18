@@ -37,12 +37,16 @@ from airex_core.core.security import (
     hash_password,
     verify_password,
 )
+from airex_core.core.platform_admin_db import get_platform_admin_session
 from airex_core.models.organization import Organization
 from airex_core.models.organization_membership import OrganizationMembership
+from airex_core.models.platform_admin import PlatformAdmin
 from airex_core.models.project import Project
 from airex_core.models.tenant import Tenant
 from airex_core.models.tenant_membership import TenantMembership
 from airex_core.models.user import User
+
+_PLATFORM_SENTINEL_TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 logger = structlog.get_logger()
 
@@ -101,12 +105,12 @@ class ProjectSummary(BaseModel):
 
 class AuthMeResponse(BaseModel):
     user: UserResponse
-    active_organization: OrganizationSummary
-    active_tenant: TenantSummary
-    organization_memberships: list[OrganizationSummary]
-    tenant_memberships: list[TenantSummary]
-    tenants: list[TenantSummary]
-    projects: list[ProjectSummary]
+    active_organization: OrganizationSummary | None = None
+    active_tenant: TenantSummary | None = None
+    organization_memberships: list[OrganizationSummary] = []
+    tenant_memberships: list[TenantSummary] = []
+    tenants: list[TenantSummary] = []
+    projects: list[ProjectSummary] = []
 
 
 @router.post(
@@ -205,6 +209,7 @@ async def login(
 async def auth_me(
     current_user=Depends(get_current_user),
     session: AsyncSession = Depends(get_auth_session),
+    platform_admin_session: AsyncSession = Depends(get_platform_admin_session),
     x_active_tenant_id: str | None = Header(None, alias="X-Active-Tenant-Id"),
     x_tenant_id: str | None = Header(None, alias="X-Tenant-Id"),
 ) -> AuthMeResponse:
@@ -213,6 +218,30 @@ async def auth_me(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
+        )
+
+    # Platform admin fast-path — no tenant context, no RLS session needed
+    if (current_user.role or "").lower() == "platform_admin":
+        pa_result = await platform_admin_session.execute(
+            select(PlatformAdmin).where(PlatformAdmin.id == current_user.user_id)
+        )
+        pa = pa_result.scalar_one_or_none()
+        if pa is None or not pa.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Platform admin not found or disabled",
+            )
+        return AuthMeResponse(
+            user=UserResponse(
+                id=pa.id,
+                tenant_id=_PLATFORM_SENTINEL_TENANT_ID,
+                email=pa.email,
+                display_name=pa.display_name,
+                role="platform_admin",
+                is_active=pa.is_active,
+                created_at=pa.created_at,
+                updated_at=pa.updated_at,
+            ),
         )
 
     active_tenant_id = await resolve_active_tenant_id(
@@ -299,6 +328,14 @@ async def auth_me(
         )
         for row in tenant_membership_result.all()
     ]
+    active_tenant_membership = next(
+        (
+            membership
+            for membership in tenant_memberships
+            if membership.id == active_tenant.id
+        ),
+        None,
+    )
 
     if active_org_membership is not None:
         accessible_tenant_query = (
@@ -390,7 +427,7 @@ async def auth_me(
             organization_id=active_tenant.organization_id,
             organization_name=_row_optional_str(active_tenant, "organization_name"),
             organization_slug=_row_optional_str(active_tenant, "organization_slug"),
-            role=user.role,
+            role=active_tenant_membership.role if active_tenant_membership else user.role,
         ),
         organization_memberships=organization_memberships,
         tenant_memberships=tenant_memberships,

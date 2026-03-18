@@ -251,17 +251,12 @@ function RunbookVersionsPanel({ runbook, onClose }) {
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
     fetchRunbookVersions(runbook.id)
       .then((data) => {
-        if (!cancelled) setVersions(data.versions || [])
+        if (!cancelled) { setLoading(false); setVersions(data.versions || []) }
       })
       .catch(() => {
-        if (!cancelled) setError('Failed to load version history')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) { setLoading(false); setError('Failed to load version history') }
       })
     return () => { cancelled = true }
   }, [runbook.id])

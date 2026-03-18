@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import (
@@ -24,6 +24,7 @@ from airex_core.models.organization import Organization
 from airex_core.models.organization_membership import OrganizationMembership
 from airex_core.models.tenant import Tenant
 from airex_core.models.tenant_membership import TenantMembership
+from airex_core.models.user import User
 
 router = APIRouter()
 
@@ -491,23 +492,46 @@ async def get_org_analytics(
     if not await authorize_org_access(session, current_user, organization_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for organization")
 
-    tenant_total = await session.execute(
-        select(func.count(Tenant.id)).where(Tenant.organization_id == organization_id)
+    has_full_org_access = (
+        normalize_role_name(current_user.role) == "platform_admin"
+        or await authorize_org_admin(session, current_user, organization_id)
     )
-    active_total = await session.execute(
-        select(func.count(Tenant.id)).where(
-            Tenant.organization_id == organization_id, Tenant.is_active.is_(True)
+
+    visible_tenant_query = select(Tenant.id, Tenant.is_active).where(
+        Tenant.organization_id == organization_id
+    )
+    if not has_full_org_access:
+        visible_tenant_query = visible_tenant_query.where(
+            or_(
+                Tenant.id == current_user.tenant_id,
+                Tenant.id.in_(
+                    select(TenantMembership.tenant_id).where(
+                        TenantMembership.user_id == current_user.user_id
+                    )
+                ),
+            )
         )
-    )
-    member_total = await session.execute(
-        select(func.count(OrganizationMembership.id)).where(
-            OrganizationMembership.organization_id == organization_id
+
+    visible_tenants_result = await session.execute(visible_tenant_query)
+    visible_tenant_rows = visible_tenants_result.all()
+    visible_tenant_ids = [row.id for row in visible_tenant_rows]
+
+    member_ids: set[uuid.UUID] = set()
+    if visible_tenant_ids:
+        home_members_result = await session.execute(
+            select(User.id).where(User.tenant_id.in_(visible_tenant_ids))
         )
-    )
+        explicit_members_result = await session.execute(
+            select(TenantMembership.user_id).where(
+                TenantMembership.tenant_id.in_(visible_tenant_ids)
+            )
+        )
+        member_ids.update(home_members_result.scalars().all())
+        member_ids.update(explicit_members_result.scalars().all())
 
     return OrgAnalyticsResponse(
         organization_id=organization_id,
-        tenant_count=tenant_total.scalar_one(),
-        active_tenant_count=active_total.scalar_one(),
-        member_count=member_total.scalar_one(),
+        tenant_count=len(visible_tenant_ids),
+        active_tenant_count=sum(1 for row in visible_tenant_rows if row.is_active),
+        member_count=len(member_ids),
     )

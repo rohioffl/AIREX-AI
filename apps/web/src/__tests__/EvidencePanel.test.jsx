@@ -1,9 +1,17 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import EvidencePanel from '../components/incident/EvidencePanel'
 
 describe('EvidencePanel', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      value: vi.fn(),
+      writable: true,
+    })
+  })
+
   it('shows empty message when no evidence', () => {
     render(<EvidencePanel evidence={[]} />)
     expect(screen.getByText('No diagnostic artifacts collected.')).toBeInTheDocument()
