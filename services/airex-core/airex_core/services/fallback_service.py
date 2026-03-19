@@ -191,53 +191,16 @@ async def attempt_fallback(
         fallback_number=len(fallback_history),
     )
 
-    # 6. Transition to AWAITING_APPROVAL
-    if decision.requires_human:
-        await transition_state(
-            session,
-            incident,
-            IncidentState.AWAITING_APPROVAL,
-            reason=(
-                f"Fallback to alternative action '{alt_action}' after "
-                f"'{failed_action}' verification failed: {decision.reason}"
-            ),
-            actor="fallback_engine",
-        )
-    else:
-        # Auto-approve: go through AWAITING_APPROVAL → EXECUTING
-        await transition_state(
-            session,
-            incident,
-            IncidentState.AWAITING_APPROVAL,
-            reason=(
-                f"Fallback to alternative action '{alt_action}' after "
-                f"'{failed_action}' verification failed: {decision.reason}"
-            ),
-            actor="fallback_engine",
-        )
-        await transition_state(
-            session,
-            incident,
-            IncidentState.EXECUTING,
-            reason=f"Auto-approved fallback action: {alt_action}",
-            actor="auto_approval",
-        )
-
-        # Enqueue execution task
-        try:
-            from arq import create_pool
-            from arq.connections import RedisSettings
-
-            pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
-            await pool.enqueue_job(
-                "execute_action_task",
-                str(incident.tenant_id),
-                str(incident.id),
-                alt_action,
-            )
-            await pool.aclose()
-            log.info("fallback_execution_enqueued", action=alt_action)
-        except Exception as exc:
-            log.error("fallback_execution_enqueue_failed", error=str(exc))
+    # 6. All actions require human approval — transition to AWAITING_APPROVAL
+    await transition_state(
+        session,
+        incident,
+        IncidentState.AWAITING_APPROVAL,
+        reason=(
+            f"Fallback to alternative action '{alt_action}' after "
+            f"'{failed_action}' verification failed: {decision.reason}"
+        ),
+        actor="fallback_engine",
+    )
 
     return True

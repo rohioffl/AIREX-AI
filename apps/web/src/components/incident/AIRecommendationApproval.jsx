@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Sparkles, ShieldCheck, Loader, AlertCircle, CheckCircle2, XCircle, Info, ShieldAlert, Zap } from 'lucide-react'
+import { Sparkles, ShieldCheck, Loader, AlertCircle, CheckCircle2, Info, ShieldAlert } from 'lucide-react'
 import { approveIncident } from '../../services/api'
 import ConfirmationModal from '../common/ConfirmationModal'
 import { extractErrorMessage } from '../../utils/errorHandler'
@@ -11,7 +11,6 @@ const RISK_THEME = {
 }
 
 const APPROVAL_LEVEL_THEME = {
-  auto: { label: 'Auto-Approved', color: 'var(--color-accent-green)', bg: 'rgba(16,185,129,0.1)', icon: Zap },
   operator: { label: 'Operator Approval', color: 'var(--neon-indigo)', bg: 'rgba(99,102,241,0.1)', icon: ShieldCheck },
   senior: { label: 'Senior / Admin Approval Required', color: 'var(--color-accent-red)', bg: 'rgba(244,63,94,0.1)', icon: ShieldAlert },
 }

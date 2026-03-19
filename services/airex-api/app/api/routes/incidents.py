@@ -3,6 +3,7 @@ Incident CRUD + approval endpoint.
 """
 
 import csv
+import hashlib
 import io
 import json
 import uuid
@@ -645,6 +646,20 @@ async def approve_incident(
             detail=f"Unknown action: {body.action}. Must be one of: {', '.join(ACTION_REGISTRY.keys())}",
         )
 
+    # Freeze execution params at approval time (Phase 3d: Execution Plan Snapshot)
+    meta = incident.meta or {}
+    rec_params = meta.get("recommendation", {}).get("params", {}) or {}
+    snapshot: dict = {
+        "action_type": body.action,
+        "params": rec_params,
+        "approved_by": actor_email,
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    snapshot["snapshot_hash"] = hashlib.sha256(
+        json.dumps(snapshot, sort_keys=True).encode()
+    ).hexdigest()
+    incident.meta = {**meta, "execution_snapshot": snapshot}
+
     # Transition to EXECUTING
     try:
         await transition_state(
@@ -1063,6 +1078,20 @@ async def bulk_approve(
             if action not in ACTION_REGISTRY:
                 errors.append(f"Incident {incident.id}: Unknown action {action}")
                 continue
+
+            # Freeze execution params at approval time (Phase 3d: Execution Plan Snapshot)
+            meta = incident.meta or {}
+            rec_params = rec.get("params", {}) or {}
+            snapshot: dict = {
+                "action_type": action,
+                "params": rec_params,
+                "approved_by": actor_email,
+                "approved_at": datetime.now(timezone.utc).isoformat(),
+            }
+            snapshot["snapshot_hash"] = hashlib.sha256(
+                json.dumps(snapshot, sort_keys=True).encode()
+            ).hexdigest()
+            incident.meta = {**meta, "execution_snapshot": snapshot}
 
             # Transition to EXECUTING
             reason = body.reason or f"Bulk approved by {actor_email}"

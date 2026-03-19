@@ -190,6 +190,36 @@ async def generate_recommendation(
     rec_dict = _serialize_recommendation(rec_dict)
     meta["recommendation"] = rec_dict
 
+    # ── Phase 6: Confidence Validator ─────────────────────────────
+    try:
+        from airex_core.services.confidence_validator import validate_confidence
+
+        cv_result = await validate_confidence(
+            session=session,
+            incident=incident,
+            proposed_action=recommendation.proposed_action,
+            confidence=recommendation.confidence,
+        )
+        if not cv_result["valid"] and cv_result.get("warning"):
+            meta["_confidence_warning"] = cv_result["warning"]
+            log.warning(
+                "confidence_validator_flagged",
+                warning=cv_result["warning"],
+                kg_count=cv_result.get("kg_resolution_count"),
+            )
+    except Exception as exc:
+        log.warning("confidence_validator_error", error=str(exc))
+
+    # ── Phase 6: Reviewer Agent ────────────────────────────────────
+    try:
+        from airex_core.services.reviewer_service import run_reviewer_agent
+
+        second_opinion = await run_reviewer_agent(incident, recommendation)
+        if second_opinion:
+            meta["_second_opinion"] = second_opinion
+    except Exception as exc:
+        log.warning("reviewer_agent_error", error=str(exc))
+
     # Evaluate approval policy (confidence-gated + senior approval)
     decision = evaluate_approval(
         action_type=recommendation.proposed_action,
@@ -226,52 +256,13 @@ async def generate_recommendation(
     except Exception:
         pass
 
-    # Transition based on approval decision
-    if decision.requires_human:
-        await transition_state(
-            session,
-            incident,
-            IncidentState.AWAITING_APPROVAL,
-            reason=decision.reason,
-        )
-    else:
-        # Auto-approve: skip AWAITING_APPROVAL, go straight to EXECUTING
-        log.info(
-            "auto_approving_action",
-            action=recommendation.proposed_action,
-            confidence=recommendation.confidence,
-            reason=decision.reason,
-        )
-        await transition_state(
-            session,
-            incident,
-            IncidentState.AWAITING_APPROVAL,
-            reason=decision.reason,
-        )
-        await transition_state(
-            session,
-            incident,
-            IncidentState.EXECUTING,
-            reason=f"Auto-approved by policy: {recommendation.proposed_action}",
-            actor="auto_approval",
-        )
-
-        # Enqueue execution task
-        try:
-            from arq import create_pool
-            from arq.connections import RedisSettings
-
-            pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
-            await pool.enqueue_job(
-                "execute_action_task",
-                str(incident.tenant_id),
-                str(incident.id),
-                recommendation.proposed_action,
-            )
-            await pool.aclose()
-            log.info("auto_execution_enqueued", action=recommendation.proposed_action)
-        except Exception as exc:
-            log.error("auto_execution_enqueue_failed", error=str(exc))
+    # All actions require human approval — transition to AWAITING_APPROVAL
+    await transition_state(
+        session,
+        incident,
+        IncidentState.AWAITING_APPROVAL,
+        reason=decision.reason,
+    )
 
 
 def _serialize_recommendation(rec_dict: dict) -> dict:

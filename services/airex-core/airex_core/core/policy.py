@@ -1,18 +1,17 @@
 """
 Action policy engine.
 
-Defines approval rules, risk gating, and confidence-based auto-approval
-for each registered action.
+Defines approval rules and risk gating for each registered action.
+All actions require human approval — there is no auto-approve path.
 
 Approval decision chain:
   1. Policy lookup — unknown actions always require approval
   2. Risk gate — risk_level > max_allowed_risk blocks the action entirely
   3. Senior gate — requires_senior_approval actions need admin/senior role
-  4. Auto-approve gate — auto_approve=True AND confidence >= threshold
-  5. HIGH risk block — HIGH risk actions never auto-approve (configurable)
+  4. Default — operator approval required
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 import structlog
@@ -31,7 +30,6 @@ RISK_ORDER: dict[RiskLevel, int] = {
 class ApprovalLevel(str, Enum):
     """The type of approval required for an action."""
 
-    AUTO = "auto"  # No human needed (confidence gate passed)
     OPERATOR = "operator"  # Any operator/admin can approve
     SENIOR = "senior"  # Only admin can approve (requires_senior_approval)
 
@@ -40,11 +38,30 @@ class ApprovalLevel(str, Enum):
 class ApprovalDecision:
     """Result of the approval policy evaluation."""
 
-    requires_human: bool  # True if human must approve
+    requires_human: bool  # Always True — execution requires human approval
     level: ApprovalLevel  # What level of approval is needed
     reason: str  # Human-readable explanation
-    confidence_met: bool = True  # Whether confidence threshold was met
+    confidence_met: bool = True  # Informational only — does not gate execution
     senior_required: bool = False  # Whether senior/admin approval needed
+
+
+@dataclass(frozen=True)
+class ActionBounds:
+    """Execution limits enforced before any action runs.
+
+    Attributes:
+        max_replicas:          Hard cap on target replica count (scale actions).
+                               None = unrestricted.
+        cooldown_seconds:      Minimum seconds between executions of this action
+                               on the same incident. 0 = no cooldown.
+        allowed_environments:  Whitelist of environments this action may run in
+                               (matched against params["_environment"]).
+                               None = unrestricted.
+    """
+
+    max_replicas: int | None = None
+    cooldown_seconds: int = 0
+    allowed_environments: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -52,83 +69,86 @@ class ActionPolicy:
     """Static policy configuration for an executable action type."""
 
     action_type: str
-    auto_approve: bool
     requires_senior_approval: bool
     max_allowed_risk: RiskLevel
+    bounds: ActionBounds = field(default_factory=ActionBounds)
+    required_scope_fields: frozenset[str] = field(default_factory=frozenset)
 
 
 ACTION_POLICIES: dict[str, ActionPolicy] = {
     "restart_service": ActionPolicy(
         action_type="restart_service",
-        auto_approve=False,
         requires_senior_approval=False,
         max_allowed_risk=RiskLevel.HIGH,
+        bounds=ActionBounds(cooldown_seconds=30),
     ),
     "clear_logs": ActionPolicy(
         action_type="clear_logs",
-        auto_approve=True,
         requires_senior_approval=False,
         max_allowed_risk=RiskLevel.MED,
+        bounds=ActionBounds(cooldown_seconds=0),
     ),
     "scale_instances": ActionPolicy(
         action_type="scale_instances",
-        auto_approve=False,
         requires_senior_approval=True,
         max_allowed_risk=RiskLevel.HIGH,
+        bounds=ActionBounds(max_replicas=20, cooldown_seconds=300),
     ),
     "kill_process": ActionPolicy(
         action_type="kill_process",
-        auto_approve=False,
         requires_senior_approval=False,
         max_allowed_risk=RiskLevel.MED,
+        bounds=ActionBounds(cooldown_seconds=30),
     ),
     "flush_cache": ActionPolicy(
         action_type="flush_cache",
-        auto_approve=True,
         requires_senior_approval=False,
         max_allowed_risk=RiskLevel.LOW,
+        bounds=ActionBounds(cooldown_seconds=60),
     ),
     "rotate_credentials": ActionPolicy(
         action_type="rotate_credentials",
-        auto_approve=False,
         requires_senior_approval=True,
         max_allowed_risk=RiskLevel.HIGH,
+        bounds=ActionBounds(cooldown_seconds=3600),
     ),
     "rollback_deployment": ActionPolicy(
         action_type="rollback_deployment",
-        auto_approve=False,
         requires_senior_approval=True,
         max_allowed_risk=RiskLevel.HIGH,
+        bounds=ActionBounds(cooldown_seconds=300),
     ),
     "resize_disk": ActionPolicy(
         action_type="resize_disk",
-        auto_approve=False,
         requires_senior_approval=False,
         max_allowed_risk=RiskLevel.MED,
+        bounds=ActionBounds(cooldown_seconds=1800),
     ),
     "drain_node": ActionPolicy(
         action_type="drain_node",
-        auto_approve=False,
         requires_senior_approval=True,
         max_allowed_risk=RiskLevel.HIGH,
+        bounds=ActionBounds(cooldown_seconds=600),
+        required_scope_fields=frozenset({"_instance_id"}),
     ),
     "toggle_feature_flag": ActionPolicy(
         action_type="toggle_feature_flag",
-        auto_approve=True,
         requires_senior_approval=False,
         max_allowed_risk=RiskLevel.LOW,
+        bounds=ActionBounds(cooldown_seconds=60),
     ),
     "restart_container": ActionPolicy(
         action_type="restart_container",
-        auto_approve=False,
         requires_senior_approval=False,
         max_allowed_risk=RiskLevel.MED,
+        bounds=ActionBounds(cooldown_seconds=30),
     ),
     "block_ip": ActionPolicy(
         action_type="block_ip",
-        auto_approve=False,
         requires_senior_approval=True,
         max_allowed_risk=RiskLevel.HIGH,
+        bounds=ActionBounds(cooldown_seconds=300),
+        required_scope_fields=frozenset({"_target_ip"}),
     ),
 }
 
@@ -176,26 +196,17 @@ def check_policy(
 
 
 def requires_approval(action_type: str, correlation_id: str | None = None) -> bool:
-    """Return True if the action requires human approval (legacy API).
+    """Return True — all actions require human approval.
 
-    Preserved for backward compatibility. For confidence-aware decisions,
-    use evaluate_approval() instead.
+    Preserved for backward compatibility.
     """
-    policy = ACTION_POLICIES.get(action_type)
-    if policy is None:
-        logger.warning(
-            "requires_approval_policy_missing",
-            action=action_type,
-            correlation_id=correlation_id,
-        )
-        return True
     logger.info(
         "requires_approval_evaluated",
         action=action_type,
-        requires_human=not policy.auto_approve,
+        requires_human=True,
         correlation_id=correlation_id,
     )
-    return not policy.auto_approve
+    return True
 
 
 def evaluate_approval(
@@ -205,26 +216,24 @@ def evaluate_approval(
     correlation_id: str | None = None,
 ) -> ApprovalDecision:
     """
-    Evaluate the full approval policy for an action.
+    Evaluate the approval policy for an action.
+
+    All actions require human approval. This function determines the approval
+    level (OPERATOR vs SENIOR) and provides a human-readable reason.
 
     Decision logic:
       1. Unknown action → require operator approval
       2. requires_senior_approval → require admin/senior approval
-      3. auto_approve=False → require operator approval
-      4. auto_approve=True but confidence < threshold → require operator approval
-      5. auto_approve=True but HIGH risk + block enabled → require operator approval
-      6. All gates passed → auto-approve
+      3. Default → require operator approval
 
     Args:
         action_type: The proposed action (e.g. "restart_service").
-        confidence: LLM confidence score (0.0 to 1.0).
-        risk_level: Risk level of the recommendation.
+        confidence: LLM confidence score (0.0 to 1.0) — informational only.
+        risk_level: Risk level of the recommendation — informational only.
 
     Returns:
-        ApprovalDecision with requires_human, level, and reason.
+        ApprovalDecision with requires_human=True always.
     """
-    from airex_core.core.config import settings
-
     policy = ACTION_POLICIES.get(action_type)
 
     # Gate 1: Unknown action
@@ -260,79 +269,18 @@ def evaluate_approval(
             senior_required=True,
         )
 
-    # Gate 3: Not eligible for auto-approval
-    if not policy.auto_approve:
-        logger.info(
-            "operator_approval_required_auto_approve_disabled",
-            action=action_type,
-            confidence=confidence,
-            risk=risk_level.value,
-            correlation_id=correlation_id,
-        )
-        return ApprovalDecision(
-            requires_human=True,
-            level=ApprovalLevel.OPERATOR,
-            reason=(
-                f"Action '{action_type}' requires operator approval "
-                f"(auto_approve=False, confidence={confidence:.2f})"
-            ),
-        )
-
-    # Gate 4: Confidence threshold check
-    threshold = settings.AUTO_APPROVAL_CONFIDENCE_THRESHOLD
-    if confidence < threshold:
-        logger.info(
-            "confidence_below_threshold",
-            action=action_type,
-            confidence=confidence,
-            threshold=threshold,
-            correlation_id=correlation_id,
-        )
-        return ApprovalDecision(
-            requires_human=True,
-            level=ApprovalLevel.OPERATOR,
-            reason=(
-                f"Confidence {confidence:.2f} below threshold {threshold:.2f} "
-                f"for auto-approval of '{action_type}'"
-            ),
-            confidence_met=False,
-        )
-
-    # Gate 5: HIGH risk block
-    if settings.AUTO_APPROVAL_BLOCK_HIGH_RISK and risk_level == RiskLevel.HIGH:
-        logger.info(
-            "auto_approval_blocked_high_risk",
-            action=action_type,
-            confidence=confidence,
-            risk=risk_level.value,
-            correlation_id=correlation_id,
-        )
-        return ApprovalDecision(
-            requires_human=True,
-            level=ApprovalLevel.OPERATOR,
-            reason=(
-                f"HIGH risk actions cannot be auto-approved "
-                f"(action='{action_type}', confidence={confidence:.2f})"
-            ),
-        )
-
-    # All gates passed — auto-approve
+    # Default: operator approval
     logger.info(
-        "auto_approval_granted",
+        "operator_approval_required",
         action=action_type,
         confidence=confidence,
         risk=risk_level.value,
         correlation_id=correlation_id,
     )
     return ApprovalDecision(
-        requires_human=False,
-        level=ApprovalLevel.AUTO,
-        reason=(
-            f"Auto-approved: '{action_type}' "
-            f"(confidence={confidence:.2f} >= {threshold:.2f}, "
-            f"risk={risk_level.value})"
-        ),
-        confidence_met=True,
+        requires_human=True,
+        level=ApprovalLevel.OPERATOR,
+        reason=f"Action '{action_type}' requires operator approval",
     )
 
 
@@ -348,3 +296,108 @@ def get_policy(
             correlation_id=correlation_id,
         )
     return policy
+
+
+def check_bounds(
+    action_type: str,
+    params: dict,
+    correlation_id: str | None = None,
+) -> tuple[bool, str]:
+    """Phase 3a: Enforce action execution bounds.
+
+    Checks:
+      - max_replicas cap (for scale actions)
+      - Environment whitelist guard
+
+    Returns (allowed: bool, reason: str).
+    """
+    policy = ACTION_POLICIES.get(action_type)
+    if policy is None:
+        return True, "no policy — skipping bounds check"
+
+    bounds = policy.bounds
+
+    # Replica cap
+    if bounds.max_replicas is not None:
+        requested = params.get("desired_capacity") or params.get("target_replicas")
+        if requested is not None:
+            try:
+                if int(requested) > bounds.max_replicas:
+                    reason = (
+                        f"Requested replicas {requested} exceeds max "
+                        f"{bounds.max_replicas} for {action_type}"
+                    )
+                    logger.warning(
+                        "bounds_replicas_exceeded",
+                        action=action_type,
+                        requested=requested,
+                        max_replicas=bounds.max_replicas,
+                        correlation_id=correlation_id,
+                    )
+                    return False, reason
+            except (TypeError, ValueError):
+                pass
+
+    # Environment guard
+    if bounds.allowed_environments is not None:
+        env = (
+            params.get("_environment") or params.get("environment") or ""
+        ).lower().strip()
+        if env and env not in bounds.allowed_environments:
+            reason = (
+                f"Environment '{env}' not in allowed list "
+                f"{sorted(bounds.allowed_environments)} for {action_type}"
+            )
+            logger.warning(
+                "bounds_env_blocked",
+                action=action_type,
+                environment=env,
+                allowed=sorted(bounds.allowed_environments),
+                correlation_id=correlation_id,
+            )
+            return False, reason
+
+    logger.info(
+        "bounds_check_passed",
+        action=action_type,
+        correlation_id=correlation_id,
+    )
+    return True, "bounds check passed"
+
+
+def check_scope(
+    action_type: str,
+    params: dict,
+    correlation_id: str | None = None,
+) -> tuple[bool, str]:
+    """Phase 3c: Validate required targeting fields are present.
+
+    Ensures high-blast-radius actions are never run without explicit target
+    identification (prevents 'target nothing' or cross-tenant drift).
+
+    Returns (allowed: bool, reason: str).
+    """
+    policy = ACTION_POLICIES.get(action_type)
+    if policy is None:
+        return True, "no policy — skipping scope check"
+
+    missing = [f for f in policy.required_scope_fields if not params.get(f)]
+    if missing:
+        reason = (
+            f"Missing required scope fields for {action_type}: {missing}. "
+            "Add these fields to the incident meta before approving."
+        )
+        logger.warning(
+            "scope_check_failed",
+            action=action_type,
+            missing_fields=missing,
+            correlation_id=correlation_id,
+        )
+        return False, reason
+
+    logger.info(
+        "scope_check_passed",
+        action=action_type,
+        correlation_id=correlation_id,
+    )
+    return True, "scope check passed"

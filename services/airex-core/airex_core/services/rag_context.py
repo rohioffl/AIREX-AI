@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import TYPE_CHECKING
 
 from airex_core.core.config import settings
+from airex_core.core.knowledge_graph import knowledge_graph
 from airex_core.models.incident import Incident
 from airex_core.rag.vector_store import IncidentMatch, RunbookMatch, VectorStore
 
@@ -87,8 +88,22 @@ async def build_structured_context(
     except Exception as exc:
         log.warning("pattern_analysis_failed", error=str(exc))
 
-    text = format_context_sections(runbooks, incidents, pattern_analysis)
-    if text is None and not runbooks and not incidents:
+    # Knowledge Graph historical resolutions (Phase 4)
+    kg_context: str | None = None
+    try:
+        meta = incident.meta or {}
+        service_name = meta.get("service_name") or meta.get("_service_name")
+        kg_context = await knowledge_graph.get_context_for_incident(
+            session=session,
+            tenant_id=incident.tenant_id,
+            alert_type=incident.alert_type,
+            service_name=service_name,
+        )
+    except Exception as exc:
+        log.warning("kg_context_failed", error=str(exc))
+
+    text = format_context_sections(runbooks, incidents, pattern_analysis, kg_context)
+    if text is None and not runbooks and not incidents and not kg_context:
         return None
 
     # Build structured representation for frontend/meta
@@ -112,6 +127,7 @@ async def build_structured_context(
         "runbooks": structured_runbooks,
         "similar_incidents": structured_incidents,
         "pattern_analysis": structured_patterns,
+        "kg_context": kg_context,
         "runbook_count": len(structured_runbooks),
         "incident_count": len(structured_incidents),
     }
@@ -121,12 +137,17 @@ def format_context_sections(
     runbooks: Sequence[RunbookMatch],
     incidents: Sequence[IncidentMatch],
     pattern_analysis: PatternAnalysis | None = None,
+    kg_context: str | None = None,
 ) -> str | None:
     """Convert matches into a bounded text block for prompts."""
 
     sections: list[str] = []
 
-    # Pattern analysis first (most important for human-like analysis)
+    # KG historical resolutions first — most specific signal (Phase 4)
+    if kg_context:
+        sections.append(kg_context)
+
+    # Pattern analysis (human-like recurrence insights)
     if pattern_analysis and pattern_analysis.historical_context:
         sections.append(pattern_analysis.historical_context)
 

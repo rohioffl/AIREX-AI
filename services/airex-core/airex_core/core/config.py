@@ -70,13 +70,23 @@ class Settings(BaseSettings):
         2  # max alternative actions to try after verification failure
     )
 
-    # ── Auto-Approval Policy ────────────────────────────────────
-    # Confidence threshold for auto-approval (0.0-1.0).
-    # Actions with confidence >= threshold AND policy.auto_approve=True
-    # skip human approval. Set to 1.0 to disable confidence-based auto-approval.
-    AUTO_APPROVAL_CONFIDENCE_THRESHOLD: float = 0.85
-    # Actions with risk_level=HIGH are never auto-approved regardless of confidence.
-    AUTO_APPROVAL_BLOCK_HIGH_RISK: bool = True
+    # ── Approval SLA (Phase 6 ARE) ───────────────────────────────
+    # Maximum seconds to wait for operator approval before escalation
+    APPROVAL_SLA_CRITICAL_SECONDS: int = 120   # 2 minutes
+    APPROVAL_SLA_HIGH_SECONDS: int = 300        # 5 minutes
+    APPROVAL_SLA_MEDIUM_SECONDS: int = 900      # 15 minutes
+    APPROVAL_SLA_LOW_SECONDS: int = 1800        # 30 minutes
+
+    # ── Confidence Validator (Phase 6 ARE) ───────────────────────
+    # LLM confidence above which KG history is required (anti-hallucination)
+    CONFIDENCE_VALIDATOR_THRESHOLD: float = 0.85
+    # Minimum KG historical resolutions required for high-confidence actions
+    CONFIDENCE_VALIDATOR_MIN_KG_HISTORY: int = 1
+
+    # ── Reviewer Agent (Phase 6 ARE) ─────────────────────────────
+    # Risk levels that trigger a second LLM reviewer call
+    REVIEWER_AGENT_ENABLED: bool = True
+    REVIEWER_AGENT_TIMEOUT: int = 20  # seconds
 
     # ── Proactive Health Checks (Phase 6 ARE) ───────────────────
     HEALTH_CHECK_ENABLED: bool = True

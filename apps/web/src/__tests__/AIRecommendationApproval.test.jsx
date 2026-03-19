@@ -145,14 +145,15 @@ describe('AIRecommendationApproval', () => {
     expect(screen.getByText('Senior / Admin Approval Required')).toBeInTheDocument()
   })
 
-  it('shows auto-approved badge when approval_level is auto', () => {
+  it('shows operator approval when approval_level is operator', () => {
     const incident = {
       ...mockIncidentBase,
       recommendation: mockRecommendation,
-      meta: { _approval_level: 'auto', _approval_reason: 'Auto-approved', _confidence_met: true, _senior_required: false },
+      meta: { _approval_level: 'operator', _approval_reason: 'Operator approval required', _confidence_met: true, _senior_required: false },
     }
     render(<AIRecommendationApproval incident={incident} ragContext={null} />)
-    expect(screen.getByText('Auto-Approved')).toBeInTheDocument()
+    // Approval buttons should be visible for operator-level approval
+    expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument()
   })
 
   it('shows confidence gate banner when confidence not met', () => {

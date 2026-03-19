@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airex_core.actions.registry import get_action
 from airex_core.core.config import settings
 from airex_core.core.events import emit_verification_result
+from airex_core.core.knowledge_graph import knowledge_graph
 from airex_core.core.state_machine import transition_state
 from airex_core.models.enums import IncidentState
 from airex_core.models.incident import Incident
@@ -83,6 +84,25 @@ async def verify_resolution(
                 IncidentState.RESOLVED,
                 reason=f"Verification passed for {action_type}",
             )
+
+            # ── Knowledge Graph: record outcome (Phase 4) ─────────
+            try:
+                current_meta = incident.meta or {}
+                service_name = (
+                    current_meta.get("service_name")
+                    or current_meta.get("_service_name")
+                )
+                await knowledge_graph.record_outcome(
+                    session=session,
+                    tenant_id=incident.tenant_id,
+                    incident_id=incident.id,
+                    alert_type=incident.alert_type,
+                    action_type=action_type,
+                    success=True,
+                    service_name=service_name,
+                )
+            except Exception as exc:
+                log.warning("kg_outcome_record_failed", error=str(exc))
         else:
             await _handle_verification_failure(
                 session,

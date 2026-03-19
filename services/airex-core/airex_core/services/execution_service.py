@@ -13,12 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airex_core.actions.registry import get_action
 from airex_core.core.config import settings
+from airex_core.core.context_resolver import resolve_execution_context
 from airex_core.core.events import (
     emit_execution_completed,
     emit_execution_log,
     emit_execution_started,
 )
 from airex_core.core.metrics import execution_duration_seconds, execution_total
+from airex_core.core.policy import check_bounds, check_scope
 from airex_core.core.state_machine import transition_state
 from airex_core.models.enums import ExecutionStatus, IncidentState
 from airex_core.models.execution import Execution
@@ -62,6 +64,25 @@ async def execute_action(
     if not lock_acquired:
         log.warning("execution_lock_contention")
         return
+
+    # Phase 3b: Idempotency protection — prevent replay of the same approved action.
+    # Key is scoped to (tenant, incident, action_type, snapshot_hash) so that
+    # a re-approval with different params generates a distinct key.
+    snapshot_meta = (incident.meta or {}).get("execution_snapshot") or {}
+    snapshot_hash = snapshot_meta.get("snapshot_hash", "")
+    idempotency_key = (
+        f"idempotent:{incident.tenant_id}:{incident.id}:{action_type}:{snapshot_hash}"
+    )
+    if snapshot_hash:
+        previous = await redis.get(idempotency_key)
+        if previous:
+            log.warning(
+                "execution_idempotency_skip",
+                idempotency_key=idempotency_key,
+                previous_run=previous.decode() if isinstance(previous, bytes) else previous,
+            )
+            await redis.delete(lock_key)
+            return
 
     # Write audit lock record
     lock_record = IncidentLock(
@@ -125,8 +146,60 @@ async def execute_action(
         except Exception:
             pass
 
+        # Read params from frozen snapshot (set at approval time) to prevent
+        # approval drift — never read live incident.meta during execution.
+        snapshot = (incident.meta or {}).get("execution_snapshot")
+        exec_params = snapshot["params"] if snapshot else (incident.meta or {})
+        if snapshot:
+            log.info(
+                "execution_snapshot_loaded",
+                snapshot_hash=snapshot.get("snapshot_hash"),
+                approved_by=snapshot.get("approved_by"),
+                approved_at=snapshot.get("approved_at"),
+            )
+        else:
+            log.warning("execution_snapshot_missing", fallback="live_meta")
+
+        # Phase 3a: Bounds enforcement — replica caps + environment guards.
+        bounds_ok, bounds_reason = check_bounds(
+            action_type, exec_params, str(incident.id)
+        )
+        if not bounds_ok:
+            raise ValueError(f"Bounds violation: {bounds_reason}")
+
+        # Phase 3c: Action scoping — required targeting fields must be present.
+        scope_ok, scope_reason = check_scope(
+            action_type, exec_params, str(incident.id)
+        )
+        if not scope_ok:
+            raise ValueError(f"Scope violation: {scope_reason}")
+
+        # Phase 3e: Execution Context Resolver — enrich params with resolved context.
+        exec_ctx = resolve_execution_context(exec_params)
+        exec_params = {
+            **exec_params,
+            "_exec_context": {
+                "cloud": exec_ctx.cloud,
+                "instance_id": exec_ctx.instance_id,
+                "region": exec_ctx.region,
+                "zone": exec_ctx.zone,
+                "exec_mode": exec_ctx.exec_mode,
+                "environment": exec_ctx.environment,
+                "namespace": exec_ctx.namespace,
+                "cluster": exec_ctx.cluster,
+                "service_name": exec_ctx.service_name,
+                "tenant_name": exec_ctx.tenant_name,
+            },
+        }
+        log.info(
+            "execution_context_ready",
+            exec_mode=exec_ctx.exec_mode,
+            cloud=exec_ctx.cloud,
+            environment=exec_ctx.environment,
+        )
+
         result = await asyncio.wait_for(
-            action.execute(incident.meta or {}),
+            action.execute(exec_params),
             timeout=settings.EXECUTION_TIMEOUT,
         )
 
@@ -147,6 +220,15 @@ async def execute_action(
                 action_type=action_type,
                 status="success",
             ).inc()
+
+            # Phase 3b: Stamp idempotency key so this action cannot replay.
+            # TTL = 24 h — long enough to cover any retry/verification window.
+            if snapshot_hash:
+                await redis.set(
+                    idempotency_key,
+                    datetime.now(timezone.utc).isoformat(),
+                    ex=86400,
+                )
 
             try:
                 await emit_execution_completed(

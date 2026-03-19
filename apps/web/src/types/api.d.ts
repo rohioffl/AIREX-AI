@@ -104,7 +104,7 @@ export interface ReasoningStep {
 }
 
 /** Approval decision metadata stored in incident.meta by the backend. */
-export type ApprovalLevel = 'auto' | 'operator' | 'senior'
+export type ApprovalLevel = 'operator' | 'senior'
 
 export interface ApprovalMeta {
   _approval_level?: ApprovalLevel

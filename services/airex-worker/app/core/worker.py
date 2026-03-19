@@ -484,6 +484,35 @@ async def generate_postmortem_task(
             )
 
 
+async def approval_sla_check(ctx: Mapping[str, object]) -> None:
+    """ARQ cron: check AWAITING_APPROVAL incidents for SLA breaches (Phase 6 ARE).
+
+    Runs every minute. Escalates incidents that have exceeded their per-severity
+    SLA threshold and emits SSE so the frontend highlights overdue cards.
+    """
+    check_approval_slas = _load_attr(
+        "airex_core.services.approval_sla_service", "check_approval_slas"
+    )
+    get_tenant_session = _load_attr("airex_core.core.database", "get_tenant_session")
+
+    settings = _get_settings()
+    correlation_id = _extract_correlation_id(ctx)
+    log = _build_task_logger(
+        task_name="approval_sla_check", correlation_id=correlation_id
+    )
+    log.info("cron_started")
+
+    tenant_id = uuid.UUID(settings.DEV_TENANT_ID)
+
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            escalated = await check_approval_slas(session)
+            await session.commit()
+        log.info("cron_completed", escalated=escalated)
+    except Exception as exc:
+        log.error("cron_failed", error=str(exc))
+
+
 async def proactive_health_check(ctx: Mapping[str, object]) -> None:
     """ARQ cron: run proactive health checks against known infrastructure (Phase 6 ARE).
 
@@ -550,6 +579,10 @@ class WorkerSettings:
         cron(
             proactive_health_check,
             minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55},
+        ),
+        cron(
+            approval_sla_check,
+            minute=set(range(60)),
         ),
     ]
     on_startup = on_startup

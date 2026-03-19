@@ -29,6 +29,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from airex_core.core.config import settings
 from airex_core.core.events import emit_evidence_added, emit_investigation_progress
+from airex_core.core.knowledge_graph import knowledge_graph
 from airex_core.core.state_machine import transition_state
 from airex_core.investigations import INVESTIGATION_REGISTRY
 from airex_core.investigations.base import (
@@ -36,6 +37,7 @@ from airex_core.investigations.base import (
     InvestigationResult,
     ProbeResult,
 )
+from airex_core.investigations.probe_chainer import get_chained_probes
 from airex_core.investigations.probe_map import get_secondary_probes
 from airex_core.models.enums import IncidentState
 from airex_core.models.evidence import Evidence
@@ -242,6 +244,51 @@ async def run_investigation(
         await _handle_failure(session, incident, log, "All probes returned no results")
         return
 
+    # ── Phase 5: Dynamic probe chaining ─────────────────────────
+    # After initial probes complete, examine actual metric values to decide
+    # if follow-up probes are warranted based on what was actually found.
+    try:
+        probe_results_initial = [r for r in all_results if isinstance(r, ProbeResult)]
+        already_running_types = {incident.alert_type} | {
+            t for t, _ in secondary_plugins
+        }
+        chained = get_chained_probes(probe_results_initial, already_running_types)
+
+        if chained and not use_cloud:
+            chained_plugins: list[tuple[str, BaseInvestigation]] = []
+            for probe_type, chain_reason in chained:
+                cls = INVESTIGATION_REGISTRY.get(probe_type)
+                if cls is not None:
+                    chained_plugins.append((probe_type, cls()))
+                    log.info(
+                        "chained_probe_queued",
+                        probe_type=probe_type,
+                        reason=chain_reason,
+                    )
+
+            if chained_plugins:
+                chained_results = await asyncio.wait_for(
+                    _run_all_probes(
+                        primary_plugin=chained_plugins[0][1],
+                        secondary_plugins=chained_plugins[1:],
+                        meta=meta,
+                        tenant_id=tenant_id,
+                        incident_id=incident_id,
+                        alert_type=incident.alert_type,
+                        total_probes=len(chained_plugins),
+                        log=log,
+                    ),
+                    timeout=settings.INVESTIGATION_TIMEOUT,
+                )
+                all_results = list(all_results) + chained_results
+                log.info(
+                    "chained_probes_complete",
+                    chained_count=len(chained_plugins),
+                    new_results=len(chained_results),
+                )
+    except Exception as exc:
+        log.warning("probe_chaining_failed", error=str(exc))
+
     # ── Anomaly detection ────────────────────────────────────────
     probe_results = [r for r in all_results if isinstance(r, ProbeResult)]
     if probe_results:
@@ -359,6 +406,22 @@ async def run_investigation(
         IncidentState.RECOMMENDATION_READY,
         reason=reason,
     )
+
+    # ── Knowledge Graph: upsert observed entities (Phase 4) ───────
+    try:
+        current_meta = incident.meta or {}
+        host = current_meta.get("_private_ip") or current_meta.get("_instance_id")
+        service_name = current_meta.get("service_name") or current_meta.get("_service_name")
+        await knowledge_graph.upsert_alert_entities(
+            session=session,
+            tenant_id=incident.tenant_id,
+            incident_id=incident.id,
+            alert_type=incident.alert_type,
+            host=host,
+            service_name=service_name,
+        )
+    except Exception as exc:
+        log.warning("kg_entity_upsert_failed", error=str(exc))
 
     # Auto-trigger AI recommendation generation
     await _enqueue_recommendation(incident, log)

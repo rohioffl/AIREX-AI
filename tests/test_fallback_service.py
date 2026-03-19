@@ -232,7 +232,8 @@ class TestAttemptFallback:
         assert mock_ts.call_args[0][2] == IncidentState.AWAITING_APPROVAL
 
     @pytest.mark.asyncio
-    async def test_auto_approves_high_confidence_fallback(self):
+    async def test_high_confidence_fallback_still_requires_human_approval(self):
+        """All fallback actions require human approval — no auto-approve path exists."""
         incident = _make_incident(meta={
             "recommendation": {
                 "proposed_action": "restart_service",
@@ -255,26 +256,21 @@ class TestAttemptFallback:
             mock_settings.MAX_FALLBACK_ALTERNATIVES = 2
             mock_settings.REDIS_URL = "redis://localhost:6379/0"
             mock_eval.return_value = MagicMock(
-                level=MagicMock(value="auto"),
-                reason="Auto-approved: high confidence",
+                level=MagicMock(value="operator"),
+                reason="Operator approval required",
                 confidence_met=True,
                 senior_required=False,
-                requires_human=False,
+                requires_human=True,
             )
 
-            with patch("arq.create_pool", new_callable=AsyncMock) as mock_pool_factory:
-                mock_pool = AsyncMock()
-                mock_pool_factory.return_value = mock_pool
-                result = await attempt_fallback(
-                    session, incident, "restart_service", "Verification failed"
-                )
+            result = await attempt_fallback(
+                session, incident, "restart_service", "Verification failed"
+            )
 
         assert result is True
-        # Should transition AWAITING_APPROVAL then EXECUTING (auto-approve)
-        assert mock_ts.call_count == 2
-        calls = mock_ts.call_args_list
-        assert calls[0][0][2] == IncidentState.AWAITING_APPROVAL
-        assert calls[1][0][2] == IncidentState.EXECUTING
+        # Always exactly one transition: to AWAITING_APPROVAL (human required)
+        mock_ts.assert_called_once()
+        assert mock_ts.call_args[0][2] == IncidentState.AWAITING_APPROVAL
 
     @pytest.mark.asyncio
     async def test_returns_false_when_no_alternatives(self):

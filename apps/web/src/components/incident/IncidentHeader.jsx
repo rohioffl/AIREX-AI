@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Activity,
   MapPin,
-  Zap,
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
@@ -23,7 +22,6 @@ const SEVERITY_ACCENT = {
 }
 
 const APPROVAL_LEVEL_BADGE = {
-  auto: { label: 'Auto-Approved', color: 'var(--color-accent-green)', Icon: Zap },
   operator: { label: 'Operator Approval', color: 'var(--neon-cyan)', Icon: ShieldCheck },
   senior: { label: 'Senior Approval', color: 'var(--color-accent-red)', Icon: ShieldAlert },
 }
