@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
-import { fetchIncidents } from '../../services/api'
+import { fetchIncidents, fetchUserAccessibleTenants } from '../../services/api'
 import { createSSEConnection } from '../../services/sse'
 import {
   canAccessRoute,
@@ -255,6 +255,7 @@ export default function Layout({ children }) {
           tenants={tenants}
           activeTenant={activeTenant}
           switchTenant={switchTenant}
+          currentUserId={user?.userId || user?.user_id || null}
           navigate={navigate}
           collapsed={collapsed}
         />
@@ -558,9 +559,31 @@ export default function Layout({ children }) {
 }
 
 
-function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, activeTenant, switchTenant, navigate, collapsed }) {
+function WorkspaceRoleBadge({ membershipRole, active }) {
+  const label = membershipRole ? membershipRole : 'inherited'
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        padding: '2px 7px',
+        borderRadius: 999,
+        border: '1px solid',
+        borderColor: membershipRole ? 'rgba(251,146,60,0.28)' : active ? 'rgba(34,211,238,0.28)' : 'var(--border)',
+        color: membershipRole ? 'var(--brand-orange)' : active ? 'var(--neon-cyan)' : 'var(--text-muted)',
+        background: membershipRole ? 'rgba(251,146,60,0.12)' : active ? 'rgba(34,211,238,0.08)' : 'rgba(255,255,255,0.03)',
+        textTransform: 'capitalize',
+      }}
+    >
+      {label}
+    </span>
+  )
+}
+
+function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, activeTenant, switchTenant, currentUserId, navigate, collapsed }) {
   const [open, setOpen] = useState(false)
   const [switching, setSwitching] = useState(null)
+  const [accessibleTenants, setAccessibleTenants] = useState([])
   const ref = useRef(null)
 
   useEffect(() => {
@@ -571,13 +594,51 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const handleSwitch = async (org) => {
-    if (String(org.id) === String(activeOrganization?.id)) { setOpen(false); return }
-    const match = tenants?.find(t => String(t.organization_id) === String(org.id))
-    if (!match) return
-    setSwitching(org.id)
+  useEffect(() => {
+    let cancelled = false
+    async function loadAccessible() {
+      if (!currentUserId) {
+        setAccessibleTenants([])
+        return
+      }
+      try {
+        const rows = await fetchUserAccessibleTenants(currentUserId)
+        if (!cancelled) {
+          setAccessibleTenants(Array.isArray(rows) ? rows : [])
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('Failed to load accessible tenants:', err)
+          setAccessibleTenants([])
+        }
+      }
+    }
+    loadAccessible()
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId])
+
+  const tenantDetailsMap = new Map((tenants || []).map((tenant) => [String(tenant.id), tenant]))
+  const organizationMap = new Map((organizations || []).map((org) => [String(org.id), org]))
+  const visibleTenants = accessibleTenants.map((tenant) => {
+    const detail = tenantDetailsMap.get(String(tenant.id))
+    const organization = organizationMap.get(String(tenant.organization_id))
+    return {
+      ...tenant,
+      display_name: detail?.display_name || tenant.display_name,
+      name: detail?.name || tenant.name,
+      cloud: detail?.cloud || tenant.cloud,
+      organization_name: detail?.organization_name || organization?.name || 'Organization',
+      organization_slug: detail?.organization_slug || organization?.slug || '',
+    }
+  })
+
+  const handleSwitch = async (tenant) => {
+    if (String(tenant.id) === String(activeTenant?.id)) { setOpen(false); return }
+    setSwitching(tenant.id)
     try {
-      await switchTenant(match.id)
+      await switchTenant(tenant.id)
       navigate('/dashboard', { replace: false })
     } finally {
       setSwitching(null)
@@ -649,18 +710,18 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
           >
             <div style={{ padding: '10px 12px 6px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
               <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Switch Organization
+                Switch Workspace
               </span>
             </div>
             
             <div style={{ padding: 6, maxHeight: 300, overflowY: 'auto' }}>
-              {organizations?.map(org => {
-                const isActive = String(org.id) === String(activeOrganization?.id)
-                const isSwitching = switching === org.id
+              {visibleTenants.map(tenant => {
+                const isActive = String(tenant.id) === String(activeTenant?.id)
+                const isSwitching = switching === tenant.id
                 return (
                   <button
-                    key={org.id}
-                    onClick={() => handleSwitch(org)}
+                    key={tenant.id}
+                    onClick={() => handleSwitch(tenant)}
                     disabled={isSwitching}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
                     style={{
@@ -673,14 +734,17 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
                       className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0"
                       style={{ background: isActive ? 'var(--gradient-cyan)' : 'var(--bg-input)', border: '1px solid var(--border)', color: isActive ? '#fff' : 'var(--text-muted)', fontWeight: 700, fontSize: 12 }}
                     >
-                      {org.name ? org.name.charAt(0).toUpperCase() : <Building2 size={14} />}
+                      {tenant.display_name ? tenant.display_name.charAt(0).toUpperCase() : <Building2 size={14} />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div style={{ fontSize: 13, fontWeight: 600, color: isActive ? 'var(--neon-cyan)' : 'var(--text-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {org.name}
+                        {tenant.display_name || tenant.name}
                       </div>
-                      <div style={{ fontSize: 11, fontFamily: 'var(--font-sans)', color: 'var(--text-muted)' }}>{org.slug}</div>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-sans)', color: 'var(--text-muted)' }}>
+                        {tenant.organization_name} · {tenant.cloud?.toUpperCase?.() || 'N/A'}
+                      </div>
                     </div>
+                    <WorkspaceRoleBadge membershipRole={tenant.membership_role} active={isActive} />
                     {isActive && <Check size={14} style={{ color: '#22d3ee', flexShrink: 0 }} />}
                   </button>
                 )

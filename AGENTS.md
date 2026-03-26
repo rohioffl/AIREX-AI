@@ -141,9 +141,9 @@ docker-compose ps
 - Never execute arbitrary shell generated from LLM output.
 - Never commit credentials, tokens, or cloud secrets.
 
-Single-tenant runtime note:
-- Current runtime uses DEV tenant `00000000-0000-0000-0000-000000000000`.
-- Continue writing tenant-safe code for future multi-tenant re-enablement.
+Multi-organization tenancy:
+- **Organizations** group **Tenants**; users switch tenant workspaces via session headers (`X-Active-Tenant-Id` / `X-Tenant-Id`) where authorized. Platform admins use a separate console path.
+- Operational data and RLS still isolate by **`tenant_id`** — never bypass tenant filters. Seeds and tests may still use the historical DEV tenant UUID; production uses many tenants across organizations.
 
 ## 4) Testing Expectations
 - Add/adjust tests for every meaningful behavior change.

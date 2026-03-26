@@ -6,7 +6,7 @@ license: Private
 
 # Frontend Skill — AIREX
 
-> **Single-tenant note:** The product currently operates in a single-tenant configuration. UI controls or headers referencing tenant IDs are ignored until multi-tenancy returns.
+> **Multi-organization note:** **`AuthContext`** exposes **`organizations`**, **`tenants`**, **`active_tenant`**, and **`active_organization`** from `/auth/me`. Users switch workspaces via **`switchTenant`** (persists active tenant and refreshes session). Platform operators use **`PlatformAdminPage`** and related **`/admin/*`** routes. API calls must send the active tenant when the backend expects it (see Axios defaults in `apps/web/src/services/api.js`).
 
 This skill defines the frontend implementation rules for the operational SRE dashboard.
 

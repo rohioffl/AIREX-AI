@@ -18,13 +18,18 @@ import httpx
 
 DEFAULT_BASE = "http://localhost:8000"
 TENANT_ID = "00000000-0000-0000-0000-000000000000"
+DEFAULT_ORG_SLUG = "default-org"
+DEFAULT_TENANT_SLUG = "default-workspace"
 
 
 def main():
     parser = argparse.ArgumentParser(description="AIREX demo seed")
     parser.add_argument("--base-url", default=DEFAULT_BASE)
+    parser.add_argument("--org-slug", default=DEFAULT_ORG_SLUG)
+    parser.add_argument("--tenant-slug", default=DEFAULT_TENANT_SLUG)
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
+    webhook_path = f"/api/v1/webhooks/{args.org_slug}/{args.tenant_slug}/generic"
 
     headers = {"X-Tenant-Id": TENANT_ID, "Content-Type": "application/json"}
     client = httpx.Client(base_url=base, headers=headers, timeout=15)
@@ -49,7 +54,7 @@ def main():
             "region": "us-east-1",
         },
     }
-    r = client.post("/api/v1/webhooks/generic", json=payload)
+    r = client.post(webhook_path, json=payload)
     assert r.status_code == 202, f"Webhook failed: {r.text}"
     incident_id = r.json()["incident_id"]
     print(f"  -> Incident created: {incident_id}")

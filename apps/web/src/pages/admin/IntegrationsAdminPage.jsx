@@ -64,7 +64,9 @@ function WebhookEventsPanel({ integration, onClose }) {
   const [newToken, setNewToken] = useState(null)
   const [copied, setCopied] = useState(false)
 
-  const webhookUrl = `${window.location.origin}/api/v1/webhooks/site24x7/${integration.id}`
+  const webhookUrl = integration.webhook_path
+    ? `${window.location.origin}${integration.webhook_path}`
+    : ''
 
   const loadEvents = useCallback(async () => {
     setLoading(true)

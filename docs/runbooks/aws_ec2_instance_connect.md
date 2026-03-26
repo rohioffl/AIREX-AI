@@ -38,13 +38,7 @@ No SSH keys are stored; a temporary key is pushed via the API and used for one s
    - In EC2 console, open the instance → Connect → "EC2 Instance Connect" tab. If that works from the console, AIREX can use the same mechanism if IAM and network are correct.
    - Ensure the instance has a **private IP** and that the AIREX host can reach it (security groups, route tables).
 
-4. **OS user** — Default is `ubuntu`. For Amazon Linux use `ec2-user`. Set in tenant config:
-   ```yaml
-   tenants:
-     my-tenant:
-       ssh:
-         user: ec2-user
-   ```
+4. **OS user** — Default is `ubuntu`. For Amazon Linux use `ec2-user`. Set **`ssh_user`** on the tenant record (Admin panel or tenant API).
 
 ## Remediation
 
@@ -53,7 +47,7 @@ No SSH keys are stored; a temporary key is pushed via the API and used for one s
 | `SendSSHPublicKey` 400 / AuthException | Add or fix IAM policy above; check role assumption if cross-account. |
 | `EC2InstanceNotFoundException` | Wrong region or instance ID; check discovery and tags. |
 | SSH timeout / connection refused | Open port 22 from AIREX to instance private IP; check VPC/peering and security groups. |
-| Wrong OS user | Set `ssh.user` in `tenants.yaml` for that tenant. |
+| Wrong OS user | Set **`ssh_user`** on that tenant in the DB (Admin / `PUT /tenants/{name}`). |
 
 ## Optional: use SSM instead
 

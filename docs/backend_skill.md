@@ -6,7 +6,7 @@ license: Private
 
 # Backend Skill — AIREX
 
-> **Single-tenant mode:** Multi-tenancy is temporarily disabled while we simplify operations. All API requests execute under the primary DEV tenant ID (`00000000-0000-0000-0000-000000000000`). Any references to tenant switching or `X-Tenant-Id` headers in this document describe the long-term design but are currently no-ops.
+> **Multi-organization tenancy:** **Organizations** own **Tenants**. Authenticated routes resolve the effective **`tenant_id`** from the JWT default tenant and optional **`X-Active-Tenant-Id`** or **`X-Tenant-Id`** when the user has tenant or organization membership. DB sessions set RLS `app.tenant_id` to that resolved UUID. Unauthenticated flows (e.g. some webhooks) may use integration-bound tenants or fall back to **`DEV_TENANT_ID`** from settings — always confirm the path you are changing.
 
 This skill defines the backend implementation rules for the autonomous SRE platform.
 

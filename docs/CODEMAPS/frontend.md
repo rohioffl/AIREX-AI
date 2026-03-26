@@ -30,6 +30,11 @@ React 19, Vite 7, Tailwind v4, Axios, Recharts — `apps/web/src/`
 /profile             ProfilePage.jsx
 /users               UserManagementPage.jsx (admin)
 /super-admin         SuperAdminPage.jsx     (super-admin)
+/admin/login         AdminLoginPage.jsx     (platform admin auth)
+/admin               PlatformAdminPage.jsx  (orgs, tenants, platform ops)
+/admin/organizations OrganizationsAdminPage.jsx
+/admin/workspaces    TenantWorkspaceAdminPage.jsx
+/admin/integrations  IntegrationsAdminPage.jsx
 /rejected            RejectedPage.jsx
 *                    NotFoundPage.jsx
 ```

@@ -10,11 +10,14 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from airex_core.core.config import settings
 from airex_core.core.security import create_access_token
 
 
 TENANT_ID = "00000000-0000-0000-0000-000000000000"
 HEADERS = {"X-Tenant-Id": TENANT_ID}
+ORG_SLUG = "ankercloud"
+TENANT_SLUG = "workspace-alpha"
 
 
 def _auth_headers(*, role: str, tenant_id: str = TENANT_ID, user_id: uuid.UUID | None = None) -> dict[str, str]:
@@ -180,27 +183,119 @@ async def test_get_nonexistent_incident_returns_404(client, mock_session):
 
 @pytest.mark.asyncio
 async def test_generic_webhook_validation_error(client):
-    response = await client.post("/api/v1/webhooks/generic", json={})
+    response = await client.post(f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/generic", json={})
     assert response.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_generic_webhook_requires_fields(client):
     response = await client.post(
-        "/api/v1/webhooks/generic",
+        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/generic",
         json={"alert_type": "cpu_high"},
     )
     assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_site24x7_webhook_rejects_non_json(client):
+async def test_site24x7_webhook_rejects_non_json(client, monkeypatch):
+    from app.api.routes import webhooks as webhook_routes
+
+    tenant_id = uuid.UUID(TENANT_ID)
+    integration_id = uuid.uuid4()
+
+    async def fake_resolve_tenant(session, org_slug, tenant_slug):
+        assert org_slug == ORG_SLUG
+        assert tenant_slug == TENANT_SLUG
+        return tenant_id
+
+    async def fake_resolve_integration(session, integration_id_arg, expected_tenant_id):
+        assert integration_id_arg == integration_id
+        assert expected_tenant_id == tenant_id
+        return webhook_routes.Site24x7IntegrationContext(
+            integration_id=integration_id,
+            tenant_id=tenant_id,
+            integration_name="Tenant Site24x7",
+            integration_slug="tenant-site24x7",
+            integration_type_key="site24x7",
+            enabled=True,
+        )
+
+    monkeypatch.setattr(webhook_routes, "_resolve_tenant_by_slugs", fake_resolve_tenant)
+    monkeypatch.setattr(
+        webhook_routes,
+        "_resolve_site24x7_integration_context",
+        fake_resolve_integration,
+    )
+
     response = await client.post(
-        "/api/v1/webhooks/site24x7",
+        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{integration_id}",
         content=b"not json",
         headers={**HEADERS, "Content-Type": "application/json"},
     )
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        (
+            f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/prometheus",
+            {"alerts": [{"labels": {"alertname": "HighCPU"}}]},
+        ),
+        (
+            f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/grafana",
+            {"title": "Grafana alert", "severity": "warning"},
+        ),
+        (
+            f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/pagerduty",
+            {"messages": [{"event": {"incident": {"title": "PD incident", "severity": "critical"}}}]},
+        ),
+    ],
+)
+async def test_provider_webhooks_require_signature_when_secret_enabled(client, monkeypatch, path, payload):
+    monkeypatch.setattr(settings, "WEBHOOK_SECRET", "test-secret")
+    response = await client.post(path, json=payload)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Missing webhook signature header"
+    monkeypatch.setattr(settings, "WEBHOOK_SECRET", "")
+
+
+@pytest.mark.asyncio
+async def test_sse_resolve_tenant_uses_requested_active_tenant(mock_session):
+    from app.api.routes import sse as sse_routes
+
+    active_tenant_id = uuid.uuid4()
+    token = create_access_token(
+        uuid.UUID(TENANT_ID),
+        "viewer@example.com",
+        user_id=uuid.uuid4(),
+        role="tenant_viewer",
+    )
+
+    tenant_lookup = MagicMock()
+    tenant_lookup.first = MagicMock(
+        return_value=SimpleNamespace(
+            id=active_tenant_id,
+            organization_id=uuid.uuid4(),
+            is_active=True,
+        )
+    )
+    org_membership_lookup = MagicMock()
+    org_membership_lookup.scalar_one_or_none = MagicMock(return_value=None)
+    tenant_membership_lookup = MagicMock()
+    tenant_membership_lookup.scalar_one_or_none = MagicMock(return_value="viewer")
+    mock_session.execute = AsyncMock(
+        side_effect=[tenant_lookup, org_membership_lookup, tenant_membership_lookup]
+    )
+
+    resolved = await sse_routes._resolve_tenant(
+        mock_session,
+        token=token,
+        active_tenant_id=str(active_tenant_id),
+    )
+
+    assert resolved == active_tenant_id
 
 
 @pytest.mark.asyncio
@@ -1006,6 +1101,8 @@ async def test_list_integrations_allows_org_admin_for_sibling_tenant(
                     tenant_id=sibling_tenant_id,
                     integration_type_id=uuid.uuid4(),
                     integration_type_key="site24x7",
+                    organization_slug=ORG_SLUG,
+                    tenant_slug=TENANT_SLUG,
                     name="Primary Site24x7",
                     slug="primary-site24x7",
                     enabled=True,
@@ -1034,7 +1131,7 @@ async def test_list_integrations_allows_org_admin_for_sibling_tenant(
     body = response.json()
     assert body[0]["tenant_id"] == str(sibling_tenant_id)
     assert body[0]["integration_type_key"] == "site24x7"
-    assert body[0]["webhook_path"] == f"/api/v1/webhooks/site24x7/{body[0]['id']}"
+    assert body[0]["webhook_path"] == f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{body[0]['id']}"
 
 
 @pytest.mark.asyncio
@@ -1380,7 +1477,13 @@ async def test_create_integration_for_tenant_uses_jsonb_cast(client, mock_sessio
 
     fake_conn = _FakeConnection(
         responses=[
-            _FakeExecuteResult(first_row=SimpleNamespace(id=tenant_uuid)),
+            _FakeExecuteResult(
+                first_row=SimpleNamespace(
+                    id=tenant_uuid,
+                    organization_slug=ORG_SLUG,
+                    tenant_slug=TENANT_SLUG,
+                )
+            ),
             _FakeExecuteResult(first_row=integration_type_row),
             _FakeExecuteResult(first_row=None),
             _FakeExecuteResult(),
@@ -1404,7 +1507,9 @@ async def test_create_integration_for_tenant_uses_jsonb_cast(client, mock_sessio
     )
 
     assert response.status_code == 201
-    assert response.json()["webhook_path"] == f"/api/v1/webhooks/site24x7/{response.json()['id']}"
+    assert response.json()["webhook_path"] == (
+        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{response.json()['id']}"
+    )
     insert_sql, insert_params = fake_conn.statements[3]
     assert "CAST(:config_json AS jsonb)" in insert_sql
     assert insert_params["tenant_id"] == str(tenant_uuid)
@@ -1439,8 +1544,14 @@ async def test_site24x7_integration_webhook_uses_integration_tenant(
     integration_tenant_id = uuid.uuid4()
     captured = {}
 
-    async def fake_resolve(session, integration_id_arg):
+    async def fake_resolve_tenant(session, org_slug, tenant_slug):
+        assert org_slug == ORG_SLUG
+        assert tenant_slug == TENANT_SLUG
+        return integration_tenant_id
+
+    async def fake_resolve(session, integration_id_arg, expected_tenant_id):
         assert integration_id_arg == integration_id
+        assert expected_tenant_id == integration_tenant_id
         return webhook_routes.Site24x7IntegrationContext(
             integration_id=integration_id,
             tenant_id=integration_tenant_id,
@@ -1450,22 +1561,25 @@ async def test_site24x7_integration_webhook_uses_integration_tenant(
             enabled=True,
         )
 
-    async def fake_ingest(request, *, tenant_id, session, redis, integration_context):
+    async def fake_ingest(request, *, tenant_id, session, redis, integration_context, tenant_slug):
         captured["tenant_id"] = tenant_id
         captured["integration_context"] = integration_context
+        captured["tenant_slug"] = tenant_slug
         return IncidentCreatedResponse(incident_id=uuid.uuid4())
 
+    monkeypatch.setattr(webhook_routes, "_resolve_tenant_by_slugs", fake_resolve_tenant)
     monkeypatch.setattr(webhook_routes, "_resolve_site24x7_integration_context", fake_resolve)
     monkeypatch.setattr(webhook_routes, "_ingest_site24x7_request", fake_ingest)
 
     response = await client.post(
-        f"/api/v1/webhooks/site24x7/{integration_id}",
+        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{integration_id}",
         json={"monitor_id": "monitor-1", "monitor_name": "Web-01", "status": "down"},
     )
 
     assert response.status_code == 202
     assert captured["tenant_id"] == integration_tenant_id
     assert captured["integration_context"].integration_id == integration_id
+    assert captured["tenant_slug"] == TENANT_SLUG
 
 
 @pytest.mark.asyncio
@@ -1497,6 +1611,21 @@ async def test_merge_site24x7_integration_meta_adds_project_and_integration_cont
     assert meta["_integration_slug"] == "primary-site24x7"
     assert meta["project_id"] == str(project_id)
     assert meta["project_slug"] == "project-one"
+
+
+def test_annotate_tenant_tag_mismatch_preserves_path_authority():
+    from app.api.routes import webhooks as webhook_routes
+
+    meta = webhook_routes._annotate_tenant_tag_mismatch(
+        {"_source": "site24x7"},
+        tenant_slug="workspace-alpha",
+        tenant_tag="beta-workspace",
+    )
+
+    assert meta["_tenant_tag_mismatch"] == {
+        "path_tenant": "workspace-alpha",
+        "tag_tenant": "beta-workspace",
+    }
 
 
 @pytest.mark.asyncio

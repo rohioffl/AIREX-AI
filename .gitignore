@@ -11,6 +11,7 @@ everything-claude-code
 .ruff_cache
 # Local development commands (personal reference)
 commands.txt
+.git-mirror-remotes
 powers/
 site24x7-token-exchange.sh
 # Python

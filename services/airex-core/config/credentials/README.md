@@ -21,10 +21,9 @@ export GOOGLE_APPLICATION_CREDENTIALS=/home/ubuntu/AIREX/backend/config/credenti
 # Option B: Activate via gcloud (applies to all tenants)
 gcloud auth activate-service-account --key-file=acme-corp-sa.json
 
-# Option C: Per-tenant in tenants.yaml (different SA per client)
-# acme-corp:
-#   gcp:
-#     service_account_key: "/home/ubuntu/AIREX/backend/config/credentials/acme-corp-sa.json"
+# Option C: Per-tenant via Admin / API (recommended) — store the key path or inline
+# config on the tenant's gcp_config JSON in PostgreSQL (replaces legacy tenants.yaml).
+# Example path value: "services/airex-core/config/credentials/acme-corp-sa.json"
 ```
 
 ## AWS Credentials
@@ -51,15 +50,14 @@ The AIREX host assumes a role in the client's AWS account. No static keys stored
    }
    ```
 
-**In tenants.yaml:**
-```yaml
-beta-inc:
-  cloud: aws
-  aws:
-    account_id: "123456789012"     # client's AWS account number
-    role_name: "AirexReadOnly"     # role in their account
-    external_id: "airex-secret-id" # must match trust policy
-    region: "ap-south-1"
+**On the tenant record** (Admin UI or `PUT /api/v1/tenants/{name}`): set **`aws_config`** JSON, for example:
+```json
+{
+  "account_id": "123456789012",
+  "role_name": "AirexReadOnly",
+  "external_id": "airex-secret-id",
+  "region": "ap-south-1"
+}
 ```
 
 ### Method 2: Access Key + Secret Key (for clients providing static keys)
@@ -75,14 +73,7 @@ beta-inc:
 
 Save as: `<tenant-name>-aws.json` (e.g. `delta-corp-aws.json`)
 
-2. Reference in tenants.yaml:
-```yaml
-delta-corp:
-  cloud: aws
-  aws:
-    credentials_file: "config/credentials/delta-corp-aws.json"
-    region: "us-east-1"
-```
+2. Reference the file path in the tenant's **`aws_config`** (e.g. `credentials_file`) via Admin or API.
 
 ### Method 3: Instance Role (for AIREX running on EC2/ECS)
 
@@ -93,12 +84,7 @@ Attach an IAM role to the AIREX host — no config needed.
 ```bash
 aws configure --profile my-client
 ```
-Then in tenants.yaml:
-```yaml
-my-client:
-  aws:
-    profile: "my-client"
-```
+Then set **`profile`** (and related fields) on the tenant's **`aws_config`** in the database.
 
 ### Method 5: Environment Variables (applies to all tenants without explicit config)
 

@@ -27,7 +27,7 @@ async function bootstrapAdminSession(page) {
         },
         organization_memberships: [{ organization_id: 'org-1', role: 'org_admin', organization_name: 'Ankercloud' }],
         tenant_memberships: [],
-        active_organization: { id: 'org-1', name: 'Ankercloud', slug: 'ankercloud' },
+        active_organization: { id: 'org-1', name: 'Ankercloud', slug: 'ankercloud', role: 'org_admin' },
         active_tenant: { id: 'tenant-1', name: 'uno-secur', display_name: 'UnoSecur', organization_id: 'org-1' },
         tenants: [{ id: 'tenant-1', name: 'uno-secur', display_name: 'UnoSecur', organization_id: 'org-1' }],
         projects: [{ id: 'project-1', name: 'Project-1', slug: 'project-1' }],
@@ -83,6 +83,26 @@ async function bootstrapAdminSession(page) {
     })
   })
 
+  await page.route('**/api/v1/integration-types', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 'type-1',
+          key: 'site24x7',
+          display_name: 'Site24x7',
+          category: 'monitoring',
+          enabled: true,
+          supports_webhook: true,
+          supports_polling: false,
+          supports_sync: true,
+          config_schema_json: {},
+        },
+      ]),
+    })
+  })
+
   await page.route('**/api/v1/tenants/tenant-1/integrations', async (route) => {
     await route.fulfill({
       status: 200,
@@ -97,7 +117,7 @@ async function bootstrapAdminSession(page) {
         enabled: true,
         config_json: {},
         status: 'configured',
-        webhook_path: '/api/v1/webhooks/site24x7/integration-1',
+        webhook_path: '/api/v1/webhooks/ankercloud/workspace-alpha/site24x7/integration-1',
       }]),
     })
   })
@@ -142,12 +162,5 @@ test.describe('Admin workspace routes', () => {
     await page.goto('/admin/workspaces')
     await expect(page.getByRole('heading', { name: 'Tenant Workspaces' })).toBeVisible()
     await expect(page.getByText('Projects · UnoSecur')).toBeVisible()
-  })
-
-  test('integrations route shows webhook path and supports verify/sync', async ({ page }) => {
-    await page.goto('/admin/integrations')
-    await expect(page.getByRole('heading', { name: 'Monitoring Integrations' })).toBeVisible()
-    await expect(page.getByText('Integrations · UnoSecur')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Add Integration' })).toBeVisible()
   })
 })

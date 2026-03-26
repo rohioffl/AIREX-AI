@@ -16,6 +16,7 @@ import redis.asyncio as aioredis
 import structlog
 from arq.connections import RedisSettings
 from arq.cron import cron
+from sqlalchemy import select
 
 from airex_core.core.events import set_redis
 from airex_core.core.logging import setup_logging
@@ -104,6 +105,18 @@ def _get_settings() -> Any:
 def _load_attr(module_path: str, attr_name: str) -> Any:
     module = importlib.import_module(module_path)
     return getattr(module, attr_name)
+
+
+async def _list_active_tenant_ids() -> list[uuid.UUID]:
+    """Return all active tenant IDs for tenant-wide cron fan-out."""
+    async_session_factory = _load_attr("airex_core.core.database", "async_session_factory")
+    Tenant = _load_attr("airex_core.models.tenant", "Tenant")
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(Tenant.id).where(Tenant.is_active.is_(True)).order_by(Tenant.id)
+        )
+        return list(result.scalars().all())
 
 
 async def investigate_incident(
@@ -502,13 +515,26 @@ async def approval_sla_check(ctx: Mapping[str, object]) -> None:
     )
     log.info("cron_started")
 
-    tenant_id = uuid.UUID(settings.DEV_TENANT_ID)
-
     try:
-        async with get_tenant_session(tenant_id) as session:
-            escalated = await check_approval_slas(session)
-            await session.commit()
-        log.info("cron_completed", escalated=escalated)
+        tenant_ids = await _list_active_tenant_ids()
+        escalated_total = 0
+
+        for tenant_id in tenant_ids:
+            tenant_log = log.bind(tenant_id=str(tenant_id))
+            try:
+                async with get_tenant_session(tenant_id) as session:
+                    escalated = await check_approval_slas(session)
+                    await session.commit()
+                escalated_total += escalated
+                tenant_log.info("cron_tenant_completed", escalated=escalated)
+            except Exception as exc:
+                tenant_log.error("cron_tenant_failed", error=str(exc))
+
+        log.info(
+            "cron_completed",
+            tenant_count=len(tenant_ids),
+            escalated=escalated_total,
+        )
     except Exception as exc:
         log.error("cron_failed", error=str(exc))
 
@@ -534,12 +560,28 @@ async def proactive_health_check(ctx: Mapping[str, object]) -> None:
     )
     log.info("cron_started")
 
-    redis = ctx.get("redis")
-    tenant_id = uuid.UUID(settings.DEV_TENANT_ID)
-
     try:
-        summary = await run_health_checks(tenant_id, redis=redis)
-        log.info("cron_completed", **summary)
+        redis = ctx.get("redis")
+        tenant_ids = await _list_active_tenant_ids()
+        totals = {
+            "tenant_count": len(tenant_ids),
+            "checks_created": 0,
+            "incidents_created": 0,
+            "down_count": 0,
+            "degraded_count": 0,
+        }
+
+        for tenant_id in tenant_ids:
+            tenant_log = log.bind(tenant_id=str(tenant_id))
+            try:
+                summary = await run_health_checks(tenant_id, redis=redis)
+                for key in ("checks_created", "incidents_created", "down_count", "degraded_count"):
+                    totals[key] += int(summary.get(key, 0) or 0)
+                tenant_log.info("cron_tenant_completed", **summary)
+            except Exception as exc:
+                tenant_log.error("cron_tenant_failed", error=str(exc))
+
+        log.info("cron_completed", **totals)
     except Exception as exc:
         log.error("cron_failed", error=str(exc))
 

@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 import sys
+import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -192,3 +193,64 @@ async def test_generate_runbook_task_calls_service(monkeypatch, tenant_id, incid
     )
 
     generate_and_store_runbook.assert_awaited_once_with(session, incident, redis=redis)
+
+
+@pytest.mark.asyncio
+async def test_approval_sla_check_fans_out_across_active_tenants(monkeypatch):
+    tenant_ids = [uuid.uuid4(), uuid.uuid4()]
+    sessions = {tenant_id: AsyncMock() for tenant_id in tenant_ids}
+    check_approval_slas = AsyncMock(side_effect=[2, 1])
+
+    def fake_load_attr(module_path, attr_name):
+        mapping = {
+            ("airex_core.services.approval_sla_service", "check_approval_slas"): check_approval_slas,
+            ("airex_core.core.database", "get_tenant_session"): _tenant_session_factory_by_tenant(sessions),
+        }
+        return mapping[(module_path, attr_name)]
+
+    monkeypatch.setattr(worker, "_load_attr", fake_load_attr)
+    monkeypatch.setattr(worker, "_list_active_tenant_ids", AsyncMock(return_value=tenant_ids))
+    monkeypatch.setattr(worker, "_get_settings", lambda: SimpleNamespace(DEV_TENANT_ID=str(tenant_ids[0])))
+
+    await worker.approval_sla_check({"job_id": "job-sla"})
+
+    assert check_approval_slas.await_count == 2
+    for session in sessions.values():
+        session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_proactive_health_check_fans_out_across_active_tenants(monkeypatch):
+    tenant_ids = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
+    run_health_checks = AsyncMock(
+        side_effect=[
+            {"checks_created": 2, "incidents_created": 1, "down_count": 1, "degraded_count": 0},
+            {"checks_created": 1, "incidents_created": 0, "down_count": 0, "degraded_count": 1},
+            {"checks_created": 3, "incidents_created": 2, "down_count": 2, "degraded_count": 0},
+        ]
+    )
+    redis = AsyncMock()
+
+    def fake_load_attr(module_path, attr_name):
+        mapping = {
+            ("airex_core.services.health_check_service", "run_health_checks"): run_health_checks,
+        }
+        return mapping[(module_path, attr_name)]
+
+    monkeypatch.setattr(worker, "_load_attr", fake_load_attr)
+    monkeypatch.setattr(worker, "_list_active_tenant_ids", AsyncMock(return_value=tenant_ids))
+    monkeypatch.setattr(worker, "_get_settings", lambda: SimpleNamespace(HEALTH_CHECK_ENABLED=True))
+
+    await worker.proactive_health_check({"job_id": "job-health", "redis": redis})
+
+    assert run_health_checks.await_count == 3
+    assert [call.args[0] for call in run_health_checks.await_args_list] == tenant_ids
+    assert all(call.kwargs["redis"] is redis for call in run_health_checks.await_args_list)
+
+
+def _tenant_session_factory_by_tenant(sessions):
+    @asynccontextmanager
+    async def _session_scope(tenant_id):
+        yield sessions[tenant_id]
+
+    return _session_scope

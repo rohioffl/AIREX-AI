@@ -20,6 +20,9 @@ import { Rate, Trend } from 'k6/metrics'
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000'
 const TENANT_ID = __ENV.TENANT_ID || '00000000-0000-0000-0000-000000000000'
+const ORG_SLUG = __ENV.ORG_SLUG || 'default-org'
+const TENANT_SLUG = __ENV.TENANT_SLUG || 'default-workspace'
+const WEBHOOK_URL = `${BASE_URL}/api/v1/webhooks/${ORG_SLUG}/${TENANT_SLUG}/generic`
 
 const webhookErrors = new Rate('webhook_errors')
 const listLatency = new Trend('incident_list_latency', true)
@@ -63,7 +66,7 @@ export default function () {
       },
     })
 
-    const res = http.post(`${BASE_URL}/api/v1/webhooks/generic`, payload, { headers })
+    const res = http.post(WEBHOOK_URL, payload, { headers })
     webhookLatency.add(res.timings.duration)
 
     const ok = check(res, {

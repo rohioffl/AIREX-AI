@@ -15,6 +15,8 @@ import { test, expect } from '@playwright/test'
 
 const API = process.env.API_URL || 'http://localhost:8000'
 const TENANT_ID = '00000000-0000-0000-0000-000000000000'
+const ORG_SLUG = process.env.E2E_ORG_SLUG || 'default-org'
+const TENANT_SLUG = process.env.E2E_TENANT_SLUG || 'default-workspace'
 
 async function loginOperator(request) {
   const email = `e2e-operator-${Date.now()}@test.airex.dev`
@@ -29,10 +31,9 @@ async function loginOperator(request) {
 }
 
 async function createTestIncident(request) {
-  const res = await request.post(`${API}/api/v1/webhooks/generic`, {
+  const res = await request.post(`${API}/api/v1/webhooks/${ORG_SLUG}/${TENANT_SLUG}/generic`, {
     headers: {
       'Content-Type': 'application/json',
-      'X-Tenant-Id': TENANT_ID,
     },
     data: {
       alert_type: 'disk_full',

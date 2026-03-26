@@ -121,7 +121,7 @@ class AuthMeResponse(BaseModel):
 )
 async def register(
     body: RegisterRequest,
-    session: TenantSession,
+    session: AsyncSession = Depends(get_auth_session),
 ) -> UserResponse:
     """Register a new user account."""
     normalized_email = body.email.strip().lower()
@@ -163,7 +163,7 @@ async def register(
 @router.post("/login", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
 async def login(
     body: LoginRequest,
-    session: TenantSession,
+    session: AsyncSession = Depends(get_auth_session),
 ) -> TokenResponse:
     """Authenticate and return access + refresh tokens."""
     normalized_email = body.email.strip().lower()

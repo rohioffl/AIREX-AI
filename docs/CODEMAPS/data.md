@@ -17,6 +17,10 @@ state_transition.py       id, incident_id, from_state, to_state, reason, hash,
 evidence.py               id, incident_id, tenant_id, data (JSONB), created_at
 execution.py              id, incident_id, action_name, status, output, created_at
 health_check.py           id, tenant_id, host, check_type, status, result, ran_at
+organization.py           id, name, slug, status, timestamps (global SaaS customer)
+organization_membership.py organization_id, user_id, role
+project.py                id, organization_id, name, …
+tenant.py                 id (tenant_id), organization_id, name, cloud, aws_config, gcp_config, …
 user.py                   id, tenant_id, email, role, hashed_password, totp_secret,
                           invitation_token, invited_at, last_login
 tenant_limit.py           tenant_id, max_incidents, max_users, feature_flags
@@ -76,5 +80,4 @@ docker-compose run migrate
 - Never auto-generate Alembic migrations without review
 - Schema changes and data backfills = separate migration files
 - Large FK tables: use `NOT VALID` + `VALIDATE CONSTRAINT`
-- Single-tenant runtime: DEV tenant `00000000-0000-0000-0000-000000000000`
-  (all code must still filter by tenant_id)
+- Multi-organization SaaS: **`organizations`** → **`tenants`** (each tenant has **`organization_id`**); RLS and incident data remain keyed by **`tenant_id`**

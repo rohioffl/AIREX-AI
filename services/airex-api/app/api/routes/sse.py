@@ -10,12 +10,13 @@ import json
 import uuid
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.dependencies import Redis
+from app.api.dependencies import Redis, get_auth_session, resolve_active_tenant_id
 from airex_core.core.config import settings
 from airex_core.core.security import decode_access_token
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
 
@@ -24,18 +25,33 @@ router = APIRouter()
 AUTH_ERROR_DETAIL = "Invalid or expired token"
 
 
-def _resolve_tenant(token: str | None = None) -> uuid.UUID:
-    """Single-tenant mode: optionally validate token, always return default tenant."""
+async def _resolve_tenant(
+    session: AsyncSession,
+    *,
+    token: str | None = None,
+    active_tenant_id: str | None = None,
+) -> uuid.UUID:
+    """Resolve the tenant channel for SSE subscriptions.
+
+    If a JWT is provided, use the same tenant-switch logic as the REST API.
+    In dev mode without auth, fall back to the explicit active tenant query
+    param or the configured DEV tenant.
+    """
+    current_user = None
     if token:
         try:
-            decode_access_token(token)
+            current_user = decode_access_token(token)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=AUTH_ERROR_DETAIL,
             ) from exc
 
-    return uuid.UUID(settings.DEV_TENANT_ID)
+    return await resolve_active_tenant_id(
+        session=session,
+        current_user=current_user,
+        active_tenant_id=active_tenant_id,
+    )
 
 
 @router.get("/stream")
@@ -43,6 +59,8 @@ async def event_stream(
     request: Request,
     redis: Redis,
     token: str | None = Query(None),
+    active_tenant_id: str | None = Query(None),
+    session: AsyncSession = Depends(get_auth_session),
 ) -> EventSourceResponse:
     """
     SSE stream for a tenant. Emits events:
@@ -54,9 +72,15 @@ async def event_stream(
     - execution_completed
     - verification_result
 
-    Auth: pass `token` query param with JWT, or `x_tenant_id` for dev.
+    Auth: pass `token` query param with JWT. If the user switched tenants in
+    the UI, also pass `active_tenant_id` so SSE subscribes to the same tenant
+    channel as the REST API.
     """
-    tenant_id = _resolve_tenant(token)
+    tenant_id = await _resolve_tenant(
+        session,
+        token=token,
+        active_tenant_id=active_tenant_id,
+    )
 
     async def generate():
         channel = f"tenant:{tenant_id}:events"

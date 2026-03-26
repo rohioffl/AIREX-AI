@@ -3,7 +3,7 @@
 # AIREX Architecture
 
 ## System Type
-Monorepo — AI-powered SRE incident response automation platform
+Monorepo — AI-powered SRE incident response automation platform (multi-organization SaaS: **organizations** → **tenants** → RLS-scoped **`tenant_id`** data)
 
 ## Service Boundaries
 ```

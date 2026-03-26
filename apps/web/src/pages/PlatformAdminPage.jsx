@@ -53,6 +53,8 @@ import {
 import { extractErrorMessage } from '../utils/errorHandler'
 import { formatRelativeTime } from '../utils/formatters'
 
+import './PlatformAdminPage.css'
+
 function useToast() {
   const { addToast } = useToasts()
   return useCallback(
@@ -86,10 +88,13 @@ const textareaCls = {
 
 function StatCard({ label, value, color = 'var(--neon-indigo)', icon: Icon, sub }) {
   return (
-    <div className="glass rounded-xl p-4 flex flex-col gap-1" style={{ border: '1px solid var(--border)' }}>
+    <div
+      className="glass pa-stat rounded-xl p-4 flex flex-col gap-1"
+      style={{ border: '1px solid var(--border)', '--pa-stat-accent': color }}
+    >
       <div className="flex items-center justify-between mb-1">
         <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
-        {Icon && <Icon size={14} style={{ color, opacity: 0.7 }} />}
+        {Icon && <Icon size={14} style={{ color, opacity: 0.75 }} />}
       </div>
       <span style={{ fontSize: 26, fontWeight: 800, color, fontFamily: 'var(--font-mono)' }}>{value}</span>
       {sub && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{sub}</span>}
@@ -98,11 +103,7 @@ function StatCard({ label, value, color = 'var(--neon-indigo)', icon: Icon, sub 
 }
 
 function SectionTitle({ children }) {
-  return (
-    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
-      {children}
-    </p>
-  )
+  return <p className="pa-section-label">{children}</p>
 }
 
 function StatusBadge({ status }) {
@@ -127,6 +128,77 @@ const SECTIONS = [
   { id: 'integrations', label: 'Integrations', icon: Zap },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
+
+const SECTION_COPY = {
+  overview: {
+    title: 'Fleet overview',
+    description:
+      'Cross-tenant signals, capacity, and subsystem health. Use quick links to drill into organizations, workspaces, and global configuration.',
+  },
+  organizations: {
+    title: 'Organizations',
+    description:
+      'Customer accounts and slugs. Map each organization to its workspaces and keep onboarding aligned with billing boundaries.',
+  },
+  workspaces: {
+    title: 'Workspaces',
+    description:
+      'Tenant inventory, cloud bindings, and org mappings — without opening tenant-owned project data.',
+  },
+  users: {
+    title: 'Platform admins',
+    description:
+      'Super-operator identities for this installation. Separate from tenant-scoped users in customer workspaces.',
+  },
+  integrations: {
+    title: 'Integration catalog',
+    description:
+      'Global integration type definitions and schemas that workspaces instantiate for Site24x7, webhooks, and more.',
+  },
+  settings: {
+    title: 'Platform settings',
+    description:
+      'Runtime flags, safety limits, and operational knobs that apply across the deployment.',
+  },
+}
+
+function PageHero({ sectionId }) {
+  const meta = SECTION_COPY[sectionId] || SECTION_COPY.overview
+  const section = SECTIONS.find((s) => s.id === sectionId) || SECTIONS[0]
+  const Icon = section.icon
+  const isOverview = sectionId === 'overview'
+
+  return (
+    <div className={`pa-hero ${isOverview ? 'pa-hero--overview' : ''}`}>
+      {!isOverview && (
+        <div className="flex items-center gap-2 mb-2" style={{ color: 'var(--neon-cyan)' }}>
+          <Icon size={20} strokeWidth={2} />
+        </div>
+      )}
+      {isOverview && (
+        <p className="pa-kicker" style={{ marginBottom: 8, position: 'relative', zIndex: 1 }}>
+          Platform control plane
+        </p>
+      )}
+      <h1 className="pa-hero-title" style={{ position: 'relative', zIndex: 1 }}>
+        {meta.title}
+      </h1>
+      <p className="pa-hero-desc" style={{ position: 'relative', zIndex: 1 }}>
+        {meta.description}
+      </p>
+      {isOverview && (
+        <div className="pa-hero-meta" style={{ position: 'relative', zIndex: 1 }}>
+          <span className="pa-pulse">
+            <span className="pa-pulse-dot" aria-hidden />
+            Live stack monitoring
+          </span>
+          <span className="pa-hero-stat-pill">Multi-organization SaaS</span>
+          <span className="pa-hero-stat-pill">RLS-isolated workspaces</span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function roleMeta(role) {
   const r = (role || 'operator').toLowerCase()
@@ -263,9 +335,9 @@ function UsersSection() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Platform Administrators</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-            This view is intentionally isolated to platform-admin identities. Tenant users remain managed from organization and tenant-scoped user management.
+          <h2 style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Super-operator accounts</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, maxWidth: 520 }}>
+            Isolated from tenant-scoped users. Customer operators are managed inside each organization and workspace.
           </p>
         </div>
         <button
@@ -422,7 +494,7 @@ function OverviewSection({ onNavigate }) {
         <SectionTitle>System Health</SectionTitle>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {statusRows.map((row) => (
-            <div key={row.label} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+            <div key={row.label} className="pa-health-tile">
               {loading
                 ? <div className="w-4 h-4 rounded-full animate-pulse" style={{ background: 'var(--border)' }} />
                 : row.ok
@@ -473,7 +545,8 @@ function OverviewSection({ onNavigate }) {
             <button
               key={section.id}
               onClick={() => onNavigate(section.id)}
-              className="glass rounded-xl p-4 flex items-center gap-3 hover-lift transition-all text-left"
+              type="button"
+              className="glass pa-quick-card rounded-xl p-4 flex items-center gap-3 text-left"
               style={{ border: '1px solid var(--border)', cursor: 'pointer' }}
             >
               <div className="p-2 rounded-lg" style={{ background: 'rgba(99,102,241,0.12)' }}>
@@ -540,7 +613,10 @@ function OrganizationsSection() {
     [tenants]
   )
 
-  const organizations = remoteOrganizations || authOrganizations || []
+  const organizations = useMemo(
+    () => remoteOrganizations || authOrganizations || [],
+    [remoteOrganizations, authOrganizations]
+  )
   const totalTenantSpaces = useMemo(
     () => organizations.reduce((sum, organization) => sum + tenantCount(organization), 0),
     [organizations, tenantCount]
@@ -605,8 +681,10 @@ function OrganizationsSection() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Organizations</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Manage organization records and onboard tenants into the correct customer workspace.</p>
+          <h2 style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Customer directory</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, maxWidth: 480 }}>
+            Select an organization to inspect workspaces, or create a new customer record.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -950,8 +1028,10 @@ function IntegrationCatalogSection() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Integration Catalog</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Create and manage the global integration type definitions used by tenant workspaces.</p>
+          <h2 style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Global definitions</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, maxWidth: 480 }}>
+            Schema-backed types that workspaces instantiate — webhooks, polling, and sync capabilities.
+          </p>
         </div>
         <button
           onClick={() => loadItems(true)}
@@ -1224,8 +1304,10 @@ function SettingsSection() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Settings</h2>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Tune AI providers, pipeline limits, and runtime safety thresholds for the active API process.</p>
+        <h2 style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Runtime configuration</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, maxWidth: 520 }}>
+          AI routing, pipeline limits, and safety thresholds for the running API — applied in-memory until persisted.
+        </p>
       </div>
 
       {loading || !form ? (
@@ -1368,13 +1450,16 @@ export default function PlatformAdminPage() {
   const displayRole = (user?.role || '').replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase())
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
+    <div className="platform-admin min-h-screen" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
       {/* ── Top Bar ── */}
-      <div className="flex items-center justify-between px-6 py-3 border-b sticky top-0 z-40" style={{ background: 'var(--bg-sidebar)', borderColor: 'var(--border)' }}>
+      <header className="pa-topbar flex items-center justify-between px-6 py-3 sticky top-0 z-40">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Globe size={15} style={{ color: '#22d3ee' }} />
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)' }}>Platform Admin</span>
+          <div className="pa-brand-mark">
+            <Globe size={18} style={{ color: '#22d3ee' }} aria-hidden />
+          </div>
+          <div className="pa-title-stack">
+            <span className="pa-kicker">AIREX</span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>Platform Admin</span>
           </div>
           {user?.role && (
             <span className="px-2 py-0.5 rounded-full" style={{ fontSize: 10, fontWeight: 700, background: 'rgba(34,211,238,0.10)', color: '#22d3ee', border: '1px solid rgba(34,211,238,0.22)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -1384,9 +1469,9 @@ export default function PlatformAdminPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-            <ShieldCheck size={12} style={{ color: 'var(--color-accent-green)' }} />
-            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>PLATFORM SCOPE</span>
+          <div className="pa-chip-scope">
+            <ShieldCheck size={12} style={{ color: 'var(--neon-green)', flexShrink: 0 }} aria-hidden />
+            Platform scope
           </div>
           {user?.displayName && (
             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{user.displayName}</span>
@@ -1411,27 +1496,24 @@ export default function PlatformAdminPage() {
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      <div className="flex min-h-[calc(100vh-49px)]">
+      <div className="flex min-h-[calc(100vh-57px)]">
         {/* ── Sidebar ── */}
-        <nav className="w-56 flex-shrink-0 border-r py-6 px-3 space-y-1" style={{ borderColor: 'var(--border)', background: 'var(--bg-sidebar)' }}>
+        <nav className="pa-sidebar" aria-label="Platform admin sections">
+          <p className="pa-nav-label">Navigate</p>
           {SECTIONS.map((section) => {
             const isActive = activeSection === section.id
             return (
               <button
                 key={section.id}
+                type="button"
                 onClick={() => setSection(section.id)}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all"
-                style={{
-                  background: isActive ? 'rgba(34,211,238,0.08)' : 'transparent',
-                  border: isActive ? '1px solid rgba(34,211,238,0.20)' : '1px solid transparent',
-                  color: isActive ? '#22d3ee' : 'var(--text-secondary)',
-                  fontWeight: isActive ? 600 : 400,
-                  fontSize: 13,
-                }}
+                className={`pa-nav-btn ${isActive ? 'pa-nav-btn--active' : ''}`}
               >
-                <section.icon size={14} style={{ flexShrink: 0 }} />
+                <span className="pa-nav-icon-wrap">
+                  <section.icon size={15} strokeWidth={2} />
+                </span>
                 {section.label}
               </button>
             )
@@ -1440,15 +1522,12 @@ export default function PlatformAdminPage() {
 
         {/* ── Main Content ── */}
         <main className="flex-1 overflow-auto">
-          <div className="max-w-5xl mx-auto px-8 py-8 animate-fade-in">
+          <div className="pa-main-inner">
+            <PageHero sectionId={activeSection} />
             {activeSection === 'overview' && <OverviewSection onNavigate={setSection} />}
             {activeSection === 'organizations' && <OrganizationsSection />}
             {activeSection === 'workspaces' && (
-              <div className="space-y-4">
-                <div>
-                  <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Workspaces</h2>
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Manage tenant inventory, onboarding, and organization mappings without crossing into tenant-owned project data.</p>
-                </div>
+              <div className="space-y-6">
                 <TenantWorkspaceManager mode="platform" />
               </div>
             )}

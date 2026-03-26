@@ -2,6 +2,14 @@
 
 Base URL: `http://localhost:8000/api/v1`
 
+## Active tenant (multi-organization)
+
+Authenticated incident and tenant-scoped routes resolve the **active tenant** from the JWT and optional headers:
+
+- **`X-Active-Tenant-Id`** (preferred) or **`X-Tenant-Id`** — UUID of the workspace to use when the user is allowed to access it (home tenant, tenant membership, or organization membership).
+
+Platform-admin tokens follow a separate path and do not use tenant RLS for global admin APIs.
+
 ## Authentication
 
 ### Register
@@ -13,7 +21,7 @@ Content-Type: application/json
   "email": "operator@example.com",
   "password": "SecurePass123!",
   "display_name": "Alex Operator",
-  "tenant_id": "00000000-0000-0000-0000-000000000000"  // optional
+  "tenant_id": "<tenant-uuid>"  // optional on register — must be a valid tenant the user may join
 }
 ```
 
@@ -63,8 +71,7 @@ Content-Type: application/json
 
 ### Site24x7 Webhook
 ```http
-POST /webhooks/site24x7
-Authorization: Bearer <token>
+POST /webhooks/{org_slug}/{tenant_slug}/site24x7/{integration_id}
 Content-Type: application/json
 
 {
@@ -85,8 +92,7 @@ Content-Type: application/json
 
 ### Generic Webhook
 ```http
-POST /webhooks/generic
-Authorization: Bearer <token>
+POST /webhooks/{org_slug}/{tenant_slug}/generic
 Content-Type: application/json
 
 {

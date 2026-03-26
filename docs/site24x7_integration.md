@@ -10,7 +10,7 @@ Connect Site24x7 monitoring to AIREX for automated incident investigation and re
 ## Your Webhook URL
 
 ```
-https://airex.rohitpt.online/api/v1/webhooks/site24x7
+https://<your-domain>/api/v1/webhooks/<org_slug>/<tenant_slug>/site24x7/<integration_id>
 ```
 
 ---
@@ -26,18 +26,20 @@ https://airex.rohitpt.online/api/v1/webhooks/site24x7
 | Field | Value |
 |-------|-------|
 | **Integration Name** | `AIREX Incident Engine` |
-| **Hook URL** | `https://airex.rohitpt.online/api/v1/webhooks/site24x7` |
+| **Hook URL** | `https://<your-domain>/api/v1/webhooks/<org_slug>/<tenant_slug>/site24x7/<integration_id>` |
 | **HTTP Method** | `POST` |
 | **Content Type** | `application/json` |
 | **Send Incident Parameters** | `JSON` |
 
 ### 2. Add Custom Headers (optional)
 
-Single-tenant mode no longer requires tenant headers. Ensure the request sends JSON:
+The URL path is authoritative for organization and workspace routing. The `integration_id` must belong to the same tenant resolved by `{org_slug}/{tenant_slug}`.
 
 | Header | Value |
 |--------|-------|
 | `Content-Type` | `application/json` |
+
+Get the exact URL from the AIREX Admin integrations page after creating the Site24x7 integration. It copies the backend-provided path directly.
 
 ### 3. Select JSON Payload Format
 
@@ -239,10 +241,11 @@ RESOLVED (or REJECTED for manual review if auto-fix fails)
 
 ### From AIREX Side
 
-Check recent incidents:
+Check recent incidents (replace `<tenant-uuid>` with your workspace tenant id; include a valid `Authorization` bearer if required):
 ```bash
 curl -s https://airex.rohitpt.online/api/v1/incidents/ \
-  -H "X-Tenant-Id: 00000000-0000-0000-0000-000000000000" | python3 -m json.tool
+  -H "Authorization: Bearer <access-token>" \
+  -H "X-Tenant-Id: <tenant-uuid>" | python3 -m json.tool
 ```
 
 ### From Site24x7 Side
@@ -254,9 +257,9 @@ curl -s https://airex.rohitpt.online/api/v1/incidents/ \
 ### Test Webhook Manually
 
 ```bash
-curl -X POST https://airex.rohitpt.online/api/v1/webhooks/site24x7 \
+curl -X POST https://<your-domain>/api/v1/webhooks/<org_slug>/<tenant_slug>/site24x7/<integration_id> \
   -H "Content-Type: application/json" \
-  -H "X-Tenant-Id: 00000000-0000-0000-0000-000000000000" \
+  -H "X-Tenant-Id: <tenant-uuid>" \
   -d '{
     "MONITORNAME": "Test Monitor",
     "STATUS": "DOWN",

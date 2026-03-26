@@ -12,6 +12,8 @@
 import { test, expect } from '@playwright/test'
 
 const API = process.env.API_URL || 'http://localhost:8000'
+const ORG_SLUG = process.env.E2E_ORG_SLUG || 'default-org'
+const TENANT_SLUG = process.env.E2E_TENANT_SLUG || 'default-workspace'
 
 let e2eUserToken = ''
 
@@ -38,10 +40,9 @@ test.describe('Incident Lifecycle', () => {
     const user = await setupTestUser(request)
 
     // Create an incident via webhook
-    const res = await request.post(`${API}/api/v1/webhooks/generic`, {
+    const res = await request.post(`${API}/api/v1/webhooks/${ORG_SLUG}/${TENANT_SLUG}/generic`, {
       headers: {
         'Content-Type': 'application/json',
-        'X-Tenant-Id': '00000000-0000-0000-0000-000000000000',
       },
       data: {
         alert_type: 'cpu_high',

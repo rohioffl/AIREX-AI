@@ -292,8 +292,7 @@ Validation:
   → Audit trail records full scope per execution
 ```
 
-Note: Current runtime uses DEV tenant `00000000-0000-0000-0000-000000000000`.
-Scoping is enforced now so multi-tenant re-enablement requires zero execution-layer changes.
+Note: Production supports multiple **organizations** and **tenants**; execution scope remains **`tenant_id`** (plus project/environment where modeled). Legacy seeds or tests may still reference the historical DEV tenant UUID — design assumes many isolated tenants.
 
 ### Idempotency Protection
 

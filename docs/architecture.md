@@ -119,6 +119,13 @@ AWAITING_APPROVAL ────────────────▶ REJECTED
 - **JWT Claims**: `tenant_id` is embedded in JWT tokens
 - **SSE Channels**: Events scoped to `tenant:{tenant_id}:events`
 
+### Organizations and tenants
+
+- **Organizations** are top-level customer records (`organizations` table: name, slug, status).
+- **Tenants** are operational workspaces with cloud config and credentials; each tenant references **`organization_id`**.
+- Users may belong to organizations (**`organization_memberships`**) and to specific tenants (**`tenant_memberships`**). The API resolves which tenant rows and child data are visible.
+- **Platform admins** manage cross-organization inventory (e.g. org and tenant onboarding) without impersonating a customer tenant for RLS-backed app data.
+
 ## Security Layers
 
 | Layer | Mechanism |

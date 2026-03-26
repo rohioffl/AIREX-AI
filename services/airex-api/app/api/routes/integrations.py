@@ -222,10 +222,20 @@ class ProjectMonitorBindingResponse(BaseModel):
     routing_tags_json: dict = {}
 
 
-def _build_webhook_path(integration_type_key: str | None, integration_id: str) -> str | None:
-    if not integration_type_key:
+def _build_webhook_path(
+    integration_type_key: str | None,
+    integration_id: str,
+    *,
+    org_slug: str | None,
+    tenant_slug: str | None,
+) -> str | None:
+    if not integration_type_key or not org_slug or not tenant_slug:
         return None
-    return f"/api/v1/webhooks/{integration_type_key}/{integration_id}"
+
+    if integration_type_key == "site24x7":
+        return f"/api/v1/webhooks/{org_slug}/{tenant_slug}/site24x7/{integration_id}"
+
+    return f"/api/v1/webhooks/{org_slug}/{tenant_slug}/{integration_type_key}"
 
 
 def _serialize_integration_type(row) -> IntegrationTypeResponse:
@@ -517,10 +527,13 @@ async def list_monitoring_integrations(
             sa_text(
                 """
                 SELECT mi.id, mi.tenant_id, mi.integration_type_id, it.key AS integration_type_key,
+                       o.slug AS organization_slug, t.name AS tenant_slug,
                        mi.name, mi.slug, mi.enabled, mi.config_json, mi.secret_ref,
                        mi.webhook_token_ref, mi.status, mi.last_tested_at, mi.last_sync_at
                 FROM monitoring_integrations mi
                 JOIN integration_types it ON it.id = mi.integration_type_id
+                JOIN tenants t ON t.id = mi.tenant_id
+                JOIN organizations o ON o.id = t.organization_id
                 WHERE mi.tenant_id = :tenant_id
                 ORDER BY mi.name
                 """
@@ -533,7 +546,12 @@ async def list_monitoring_integrations(
                 tenant_id=str(row.tenant_id),
                 integration_type_id=str(row.integration_type_id),
                 integration_type_key=row.integration_type_key,
-                webhook_path=_build_webhook_path(row.integration_type_key, str(row.id)),
+                webhook_path=_build_webhook_path(
+                    row.integration_type_key,
+                    str(row.id),
+                    org_slug=row.organization_slug,
+                    tenant_slug=row.tenant_slug,
+                ),
                 name=row.name,
                 slug=row.slug,
                 enabled=row.enabled,
@@ -558,7 +576,19 @@ async def create_monitoring_integration(
     await _require_tenant_admin(session, current_user, tenant_id)
     integration_id = uuid.uuid4()
     async with async_engine.begin() as conn:
-        tenant = (await conn.execute(sa_text("SELECT id FROM tenants WHERE id = :tenant_id"), {"tenant_id": str(tenant_id)})).first()
+        tenant = (
+            await conn.execute(
+                sa_text(
+                    """
+                    SELECT t.id, t.name AS tenant_slug, o.slug AS organization_slug
+                    FROM tenants t
+                    JOIN organizations o ON o.id = t.organization_id
+                    WHERE t.id = :tenant_id
+                    """
+                ),
+                {"tenant_id": str(tenant_id)},
+            )
+        ).first()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         integration_type = await _resolve_integration_type(
@@ -608,7 +638,12 @@ async def create_monitoring_integration(
         tenant_id=str(tenant_id),
         integration_type_id=str(integration_type.id),
         integration_type_key=integration_type.key,
-        webhook_path=_build_webhook_path(integration_type.key, str(integration_id)),
+        webhook_path=_build_webhook_path(
+            integration_type.key,
+            str(integration_id),
+            org_slug=tenant.organization_slug,
+            tenant_slug=tenant.tenant_slug,
+        ),
         name=body.name,
         slug=body.slug.lower(),
         enabled=body.enabled,
@@ -633,10 +668,13 @@ async def get_monitoring_integration(
                 sa_text(
                     """
                     SELECT mi.id, mi.tenant_id, mi.integration_type_id, it.key AS integration_type_key,
+                           o.slug AS organization_slug, t.name AS tenant_slug,
                            mi.name, mi.slug, mi.enabled, mi.config_json, mi.secret_ref,
                            mi.webhook_token_ref, mi.status, mi.last_tested_at, mi.last_sync_at
                     FROM monitoring_integrations mi
                     JOIN integration_types it ON it.id = mi.integration_type_id
+                    JOIN tenants t ON t.id = mi.tenant_id
+                    JOIN organizations o ON o.id = t.organization_id
                     WHERE mi.id = :integration_id
                     """
                 ),
@@ -650,7 +688,12 @@ async def get_monitoring_integration(
         tenant_id=str(row.tenant_id),
         integration_type_id=str(row.integration_type_id),
         integration_type_key=row.integration_type_key,
-        webhook_path=_build_webhook_path(row.integration_type_key, str(row.id)),
+        webhook_path=_build_webhook_path(
+            row.integration_type_key,
+            str(row.id),
+            org_slug=row.organization_slug,
+            tenant_slug=row.tenant_slug,
+        ),
         name=row.name,
         slug=row.slug,
         enabled=row.enabled,

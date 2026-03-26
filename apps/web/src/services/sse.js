@@ -14,6 +14,7 @@ const MAX_RETRY_DELAY = 10000
 const INITIAL_RETRY_DELAY = 300
 const MAX_JITTER = 200
 const STALE_THRESHOLD_MS = 45000
+const ACTIVE_TENANT_KEY = 'airex-active-tenant-id'
 
 export function createSSEConnection(handlers, onConnectionChange) {
   let eventSource = null
@@ -32,6 +33,13 @@ export function createSSEConnection(handlers, onConnectionChange) {
       params.set('token', token)
     } else {
       clearAccessToken()
+    }
+
+    const activeTenantId = typeof window !== 'undefined'
+      ? localStorage.getItem(ACTIVE_TENANT_KEY)
+      : null
+    if (activeTenantId) {
+      params.set('active_tenant_id', activeTenantId)
     }
 
     const url = `/api/v1/events/stream?${params.toString()}`

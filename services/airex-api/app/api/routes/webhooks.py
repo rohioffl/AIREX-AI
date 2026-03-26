@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import Redis, TenantId, TenantSession, get_auth_session
+from app.api.dependencies import Redis, get_auth_session
 from airex_core.core.rate_limit import webhook_rate_limit
 from airex_core.core.webhook_signature import verify_webhook_signature
 from airex_core.models.enums import IncidentState, SeverityLevel
@@ -60,9 +60,38 @@ class Site24x7ProjectBinding:
     alert_type_override: str | None = None
 
 
+async def _resolve_tenant_by_slugs(
+    session: AsyncSession,
+    org_slug: str,
+    tenant_slug: str,
+) -> uuid.UUID:
+    """Resolve tenant_id from org slug + tenant slug path params."""
+    result = await session.execute(
+        sa_text(
+            """
+            SELECT t.id AS tenant_id
+            FROM tenants t
+            JOIN organizations o ON o.id = t.organization_id
+            WHERE o.slug = :org_slug
+              AND t.name = :tenant_slug
+              AND t.is_active = true
+            """
+        ),
+        {"org_slug": org_slug, "tenant_slug": tenant_slug},
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization or workspace not found",
+        )
+    return uuid.UUID(str(row.tenant_id))
+
+
 async def _resolve_site24x7_integration_context(
     session,
     integration_id: uuid.UUID,
+    expected_tenant_id: uuid.UUID,
 ) -> Site24x7IntegrationContext:
     result = await session.execute(
         sa_text(
@@ -71,9 +100,10 @@ async def _resolve_site24x7_integration_context(
             FROM monitoring_integrations mi
             JOIN integration_types it ON it.id = mi.integration_type_id
             WHERE mi.id = :integration_id
+              AND mi.tenant_id = :tenant_id
             """
         ),
-        {"integration_id": str(integration_id)},
+        {"integration_id": str(integration_id), "tenant_id": str(expected_tenant_id)},
     )
     row = result.first()
     if row is None:
@@ -147,6 +177,26 @@ def _merge_site24x7_integration_meta(
         meta["project_id"] = str(project_binding.project_id)
         meta["project_name"] = project_binding.project_name
         meta["project_slug"] = project_binding.project_slug
+    return meta
+
+
+def _annotate_tenant_tag_mismatch(
+    meta: dict[str, Any],
+    *,
+    tenant_slug: str | None,
+    tenant_tag: str | None,
+) -> dict[str, Any]:
+    """Record tag/path tenant disagreements while keeping path routing authoritative."""
+    if not tenant_slug or not tenant_tag:
+        return meta
+
+    if tenant_slug.strip().lower() == tenant_tag.strip().lower():
+        return meta
+
+    meta["_tenant_tag_mismatch"] = {
+        "path_tenant": tenant_slug,
+        "tag_tenant": tenant_tag,
+    }
     return meta
 
 
@@ -456,45 +506,28 @@ async def _parse_site24x7_payload(request: Request) -> Site24x7Payload:
 
 
 @router.post(
-    "/site24x7",
+    "/{org_slug}/{tenant_slug}/site24x7/{integration_id}",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
     dependencies=[Depends(webhook_rate_limit), Depends(verify_webhook_signature)],
 )
 async def ingest_site24x7(
-    request: Request,
-    tenant_id: TenantId,
-    session: TenantSession,
-    redis: Redis,
-) -> IncidentCreatedResponse:
-    return await _ingest_site24x7_request(
-        request,
-        tenant_id=tenant_id,
-        session=session,
-        redis=redis,
-        integration_context=None,
-    )
-
-
-@router.post(
-    "/site24x7/{integration_id}",
-    status_code=status.HTTP_202_ACCEPTED,
-    response_model=IncidentCreatedResponse,
-    dependencies=[Depends(webhook_rate_limit), Depends(verify_webhook_signature)],
-)
-async def ingest_site24x7_for_integration(
+    org_slug: str,
+    tenant_slug: str,
     integration_id: uuid.UUID,
     request: Request,
     redis: Redis,
     session: AsyncSession = Depends(get_auth_session),
 ) -> IncidentCreatedResponse:
-    integration_context = await _resolve_site24x7_integration_context(session, integration_id)
+    tenant_id = await _resolve_tenant_by_slugs(session, org_slug, tenant_slug)
+    integration_context = await _resolve_site24x7_integration_context(session, integration_id, tenant_id)
     return await _ingest_site24x7_request(
         request,
-        tenant_id=integration_context.tenant_id,
+        tenant_id=tenant_id,
         session=session,
         redis=redis,
         integration_context=integration_context,
+        tenant_slug=tenant_slug,
     )
 
 
@@ -505,22 +538,17 @@ async def _ingest_site24x7_request(
     session,
     redis,
     integration_context: Site24x7IntegrationContext | None,
+    tenant_slug: str | None = None,
 ) -> IncidentCreatedResponse:
     """
     Ingest a Site24x7 alert webhook.
 
     Accepts both JSON and form-urlencoded payloads.
 
-    Tenant identification (priority order):
-      1. JWT Bearer token with tenant_id claim
-      2. X-Tenant-Id HTTP header (UUID)
-      3. DEV_TENANT_ID fallback (single-tenant mode)
-
     Configure in Site24x7:
       Admin → IT Automation → Webhooks
-      URL: https://<your-domain>/api/v1/webhooks/site24x7
+      URL: https://<your-domain>/api/v1/webhooks/{org_slug}/{tenant_slug}/site24x7/{integration_id}
       Method: POST
-      Tags: optional (no tenant tag required in single-tenant mode)
     """
     parse_tags = cast(Callable[[str], Any], _tag_parser_module().parse_tags)
     merge_context_into_meta = cast(
@@ -851,11 +879,17 @@ async def _ingest_site24x7_request(
 
     # Inject structured cloud context into meta for investigation plugins
     merge_context_into_meta(meta, cloud_ctx)
+    meta = _annotate_tenant_tag_mismatch(
+        meta,
+        tenant_slug=tenant_slug,
+        tenant_tag=cloud_ctx.tenant,
+    )
 
     logger.info(
         "site24x7_cloud_context",
         cloud=cloud_ctx.cloud,
         tenant_tag=cloud_ctx.tenant,
+        tenant_slug=tenant_slug,
         private_ip=cloud_ctx.private_ip,
         instance_id=cloud_ctx.instance_id,
         zone=cloud_ctx.zone,
@@ -991,18 +1025,20 @@ async def _ingest_site24x7_request(
 
 
 @router.post(
-    "/generic",
+    "/{org_slug}/{tenant_slug}/generic",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
     dependencies=[Depends(webhook_rate_limit), Depends(verify_webhook_signature)],
 )
 async def ingest_generic(
+    org_slug: str,
+    tenant_slug: str,
     payload: GenericWebhookPayload,
-    tenant_id: TenantId,
-    session: TenantSession,
     redis: Redis,
+    session: AsyncSession = Depends(get_auth_session),
 ) -> IncidentCreatedResponse:
     """Ingest a generic alert webhook."""
+    tenant_id = await _resolve_tenant_by_slugs(session, org_slug, tenant_slug)
     parse_tags = cast(Callable[[str], Any], _tag_parser_module().parse_tags)
     merge_context_into_meta = cast(
         Callable[[dict[str, Any], Any], None],
@@ -1192,16 +1228,17 @@ async def ingest_generic(
 
 
 @router.post(
-    "/prometheus",
+    "/{org_slug}/{tenant_slug}/prometheus",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
-    dependencies=[Depends(webhook_rate_limit)],
+    dependencies=[Depends(webhook_rate_limit), Depends(verify_webhook_signature)],
 )
 async def ingest_prometheus(
+    org_slug: str,
+    tenant_slug: str,
     request: Request,
-    tenant_id: TenantId,
-    session: TenantSession,
     redis: Redis,
+    session: AsyncSession = Depends(get_auth_session),
 ) -> IncidentCreatedResponse:
     """
     Ingest Prometheus Alertmanager webhook.
@@ -1217,9 +1254,10 @@ async def ingest_prometheus(
       receivers:
         - name: 'airex'
           webhook_configs:
-            - url: 'https://<your-domain>/api/v1/webhooks/prometheus'
+            - url: 'https://<your-domain>/api/v1/webhooks/{org_slug}/{tenant_slug}/prometheus'
               send_resolved: false
     """
+    tenant_id = await _resolve_tenant_by_slugs(session, org_slug, tenant_slug)
     try:
         body = await request.json()
     except Exception as exc:
@@ -1370,16 +1408,17 @@ async def ingest_prometheus(
 
 
 @router.post(
-    "/grafana",
+    "/{org_slug}/{tenant_slug}/grafana",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
-    dependencies=[Depends(webhook_rate_limit)],
+    dependencies=[Depends(webhook_rate_limit), Depends(verify_webhook_signature)],
 )
 async def ingest_grafana(
+    org_slug: str,
+    tenant_slug: str,
     request: Request,
-    tenant_id: TenantId,
-    session: TenantSession,
     redis: Redis,
+    session: AsyncSession = Depends(get_auth_session),
 ) -> IncidentCreatedResponse:
     """
     Ingest Grafana OnCall webhook.
@@ -1388,8 +1427,9 @@ async def ingest_grafana(
 
     Configure in Grafana OnCall:
       Webhooks → Add Integration
-      URL: https://<your-domain>/api/v1/webhooks/grafana
+      URL: https://<your-domain>/api/v1/webhooks/{org_slug}/{tenant_slug}/grafana
     """
+    tenant_id = await _resolve_tenant_by_slugs(session, org_slug, tenant_slug)
     try:
         body = await request.json()
     except Exception as exc:
@@ -1520,16 +1560,17 @@ async def ingest_grafana(
 
 
 @router.post(
-    "/pagerduty",
+    "/{org_slug}/{tenant_slug}/pagerduty",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
-    dependencies=[Depends(webhook_rate_limit)],
+    dependencies=[Depends(webhook_rate_limit), Depends(verify_webhook_signature)],
 )
 async def ingest_pagerduty(
+    org_slug: str,
+    tenant_slug: str,
     request: Request,
-    tenant_id: TenantId,
-    session: TenantSession,
     redis: Redis,
+    session: AsyncSession = Depends(get_auth_session),
 ) -> IncidentCreatedResponse:
     """
     Ingest PagerDuty Events API v2 webhook.
@@ -1538,8 +1579,9 @@ async def ingest_pagerduty(
 
     Configure in PagerDuty:
       Integrations → Add Integration → Events API v2
-      URL: https://<your-domain>/api/v1/webhooks/pagerduty
+      URL: https://<your-domain>/api/v1/webhooks/{org_slug}/{tenant_slug}/pagerduty
     """
+    tenant_id = await _resolve_tenant_by_slugs(session, org_slug, tenant_slug)
     try:
         body = await request.json()
     except Exception as exc:

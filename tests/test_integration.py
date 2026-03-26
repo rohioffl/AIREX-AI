@@ -25,6 +25,8 @@ pytestmark = pytest.mark.asyncio
 
 TENANT_ID = "00000000-0000-0000-0000-000000000000"
 HEADERS = {"X-Tenant-Id": TENANT_ID}
+ORG_SLUG = "ankercloud"
+TENANT_SLUG = "workspace-alpha"
 
 
 @pytest.fixture
@@ -52,7 +54,7 @@ def mock_session():
 @pytest_asyncio.fixture
 async def client(mock_redis, mock_session):
     """httpx AsyncClient with mocked dependencies."""
-    from app.api.dependencies import get_db_session, get_redis
+    from app.api.dependencies import get_auth_session, get_db_session, get_redis
 
     async def override_redis():
         return mock_redis
@@ -62,6 +64,7 @@ async def client(mock_redis, mock_session):
 
     app.dependency_overrides[get_redis] = override_redis
     app.dependency_overrides[get_db_session] = override_session
+    app.dependency_overrides[get_auth_session] = override_session
     app.state.redis = mock_redis
 
     async with AsyncClient(
@@ -123,24 +126,40 @@ class TestIncidentDetail:
 
 class TestWebhookGeneric:
     async def test_generic_webhook_validation_error(self, client):
-        response = await client.post("/api/v1/webhooks/generic", json={})
+        response = await client.post(f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/generic", json={})
         assert response.status_code == 422
 
     async def test_generic_webhook_requires_fields(self, client):
         """Ensures required fields are validated."""
         response = await client.post(
-            "/api/v1/webhooks/generic",
+            f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/generic",
             json={"alert_type": "cpu_high"},
         )
         assert response.status_code == 422
 
     async def test_site24x7_webhook_rejects_non_json(self, client):
         """Non-JSON body should be rejected."""
-        response = await client.post(
-            "/api/v1/webhooks/site24x7",
-            content=b"not json",
-            headers={"Content-Type": "application/json"},
-        )
+        integration_id = uuid.uuid4()
+
+        with patch("app.api.routes.webhooks._resolve_tenant_by_slugs", AsyncMock(return_value=uuid.UUID(TENANT_ID))), patch(
+            "app.api.routes.webhooks._resolve_site24x7_integration_context",
+            AsyncMock(),
+        ) as resolve_integration:
+            from app.api.routes import webhooks as webhook_routes
+
+            resolve_integration.return_value = webhook_routes.Site24x7IntegrationContext(
+                integration_id=integration_id,
+                tenant_id=uuid.UUID(TENANT_ID),
+                integration_name="Tenant Site24x7",
+                integration_slug="tenant-site24x7",
+                integration_type_key="site24x7",
+                enabled=True,
+            )
+            response = await client.post(
+                f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{integration_id}",
+                content=b"not json",
+                headers={"Content-Type": "application/json"},
+            )
         assert response.status_code == 400
 
 

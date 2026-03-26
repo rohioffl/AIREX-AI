@@ -27,7 +27,9 @@ knowledge_base.py  GET/POST /knowledge-base, GET/DELETE /knowledge-base/{id}
 templates.py       GET/POST /incident-templates
 reports.py         GET/POST /reports, GET /reports/{id}, POST /reports/generate
 users.py           GET/POST /users, GET/PUT/DELETE /users/{id}
-tenants.py         GET/POST /tenants, GET/PUT /tenants/{id}
+tenants.py         GET/POST /tenants, GET/PUT /tenants/{id} (org-scoped visibility for non–platform-admin)
+organizations.py   Organization CRUD + membership (SaaS hierarchy)
+platform_admin.py  Platform operator summary + cross-tenant inventory helpers
 chat.py            POST /incidents/{id}/chat
 dlq.py             GET /dlq/messages, POST /dlq/retry, /dlq/purge
 grafana_dashboards.py  GET /grafana/dashboards

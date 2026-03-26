@@ -98,7 +98,7 @@ Direct IAM user credentials. The simplest method but least secure for production
 Step 1: Basic Info          Step 2: Credentials        Step 3: SSH          Step 4: Review
 ┌──────────────────┐       ┌──────────────────┐      ┌───────────────┐    ┌──────────────┐
 │ Display Name     │       │ AWS Auth Method  │      │ SSH User      │    │ Summary      │
-│ Slug (auto)      │  ──►  │  ◉ Role Assume   │ ──►  │ SSH Port      │ ►  │ YAML Preview │
+│ Slug (auto)      │  ──►  │  ◉ Role Assume   │ ──►  │ SSH Port      │ ►  │ Review+Create│
 │ Cloud: AWS/GCP   │       │  ○ ARN           │      │ Timeout       │    │ [Create]     │
 │ Email            │       │  ○ Access Keys   │      │ Log Lookback  │    │              │
 │ Slack Channel    │       │  ○ Creds File    │      │               │    │              │
@@ -111,31 +111,32 @@ Step 1: Basic Info          Step 2: Credentials        Step 3: SSH          Step
 
 ## Architecture
 
-### Current State (YAML-only)
+### Historical (YAML-only, deprecated)
 
 ```
-tenants.yaml ──► tenant_config.py ──► 30+ consumers
-                  (60s cache)          (tag_parser, aws_auth, cloud_investigation,
-                                        10 action plugins, ssh_user_resolver, etc.)
+tenants.yaml ──► tenant_config.py ──► consumers
+                  (cache)              (legacy path — do not use for new deployments)
 ```
 
-### New State (DB-backed)
+### Current (DB-backed + organizations)
 
 ```
-┌────────────┐     ┌──────────────────┐     ┌───────────────────┐
-│ Admin UI   │────►│ CRUD API         │────►│ PostgreSQL        │
-│ (React)    │     │ POST/PUT/DELETE  │     │ tenants table     │
-└────────────┘     └──────────────────┘     └───────┬───────────┘
+┌────────────┐     ┌──────────────────┐     ┌───────────────────────────────────┐
+│ Admin UI   │────►│ CRUD API         │────►│ PostgreSQL                        │
+│ (React)    │     │ tenants, orgs    │     │ organizations + tenants (+ RLS    │
+│ Platform   │     │ platform_admin   │     │  data tables keyed by tenant_id)  │
+└────────────┘     └──────────────────┘     └───────┬───────────────────────────┘
                                                      │
                                           ┌──────────┴──────────┐
                                           │ tenant_config.py    │
                                           │ (reads from DB,     │
-                                          │  cached 60s)        │
+                                          │  cached)            │
                                           └──────────┬──────────┘
                                                      │
                                           ┌──────────┴──────────┐
-                                          │ 30+ consumers       │
-                                          │ (no changes needed) │
+                                          │ Worker + plugins    │
+                                          │ (investigations,    │
+                                          │  actions, cloud)    │
                                           └─────────────────────┘
 ```
 
@@ -144,6 +145,7 @@ tenants.yaml ──► tenant_config.py ──► 30+ consumers
 ```sql
 CREATE TABLE tenants (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id),
     name            VARCHAR(100) UNIQUE NOT NULL,   -- slug
     display_name    VARCHAR(255) NOT NULL,
     cloud           VARCHAR(10) NOT NULL,           -- 'aws' or 'gcp'
@@ -199,17 +201,18 @@ CREATE TABLE tenants (
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/tenants/` | Any | List all active tenants |
-| `GET` | `/api/v1/tenants/{name}` | Any | Get tenant detail |
-| `POST` | `/api/v1/tenants/` | Admin | Create new tenant |
-| `PUT` | `/api/v1/tenants/{name}` | Admin | Update tenant |
-| `DELETE` | `/api/v1/tenants/{name}` | Admin | Soft-delete tenant |
+| `GET` | `/api/v1/tenants/` | Authenticated | List tenants visible to the caller (org / membership scoped unless platform admin) |
+| `GET` | `/api/v1/tenants/{name}` | Authenticated | Get tenant detail (same visibility rules) |
+| `POST` | `/api/v1/tenants/` | Org admin / platform admin | Create tenant (requires **`organization_id`**) |
+| `PUT` | `/api/v1/tenants/{name}` | Org admin / platform admin | Update tenant |
+| `DELETE` | `/api/v1/tenants/{name}` | Org admin / platform admin | Soft-delete tenant |
 | `POST` | `/api/v1/tenants/reload` | Admin | Reload config cache |
 
 ### Create Request Body
 
 ```json
 {
+  "organization_id": "11111111-1111-1111-1111-111111111111",
   "name": "acme-corp",
   "display_name": "Acme Corporation",
   "cloud": "aws",

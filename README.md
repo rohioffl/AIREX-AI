@@ -35,7 +35,7 @@ database/                Alembic migrations (21 applied) and standalone migratio
 tests/                   Backend pytest suite (525 tests passing)
 e2e/                     Playwright end-to-end tests
 scripts/                 Utility scripts (admin user creation, etc.)
-config/                  Configuration files (tenants, credentials)
+config/                  Legacy/static configuration and credential file layout (tenant registry lives in PostgreSQL)
 deployment/              ECS Terraform + CodePipeline + CodeBuild assets
 docs/                    Project architecture, skills, and runbooks
 infra/                   Prometheus, Grafana, and AI platform config
@@ -71,7 +71,7 @@ Retryable states: `FAILED_ANALYSIS`, `FAILED_VERIFICATION`
 - **Zero-trust cloud** — No stored credentials, IAM roles/Workload Identity only
 - **Structured logging** — JSON logs with correlation IDs across all backend flows
 - **Policy-first execution** — Confidence-based auto-approval with senior approval gates
-- **Tenant-safe patterns** — Code remains tenant-safe even in single-tenant mode (DEV tenant `00000000-0000-0000-0000-000000000000`)
+- **Tenant-safe patterns** — Every RLS-backed row is scoped by **`tenant_id`**; organizations are a separate hierarchy for billing and access. UI and API resolve the active tenant from auth plus optional tenant headers.
 
 ## Local Development
 

@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockAuth = vi.hoisted(() => ({
   user: { role: 'platform_admin' },
   activeTenantId: 'tenant-1',
+  activeTenant: { id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one' },
+  activeOrganization: { id: 'org-1', name: 'Org One' },
   projects: [],
-  organizations: [],
-  tenants: [],
+  organizations: [{ id: 'org-1', name: 'Org One' }],
+  tenants: [{ id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one' }],
   organizationMemberships: [],
 }))
 
@@ -31,6 +33,18 @@ vi.mock('../components/admin/TenantWorkspaceManager', () => ({
   default: ({ mode }) => <div data-testid="tenant-workspace-manager">{mode}</div>,
 }))
 
+vi.mock('../components/admin/AccessMatrixView', () => ({
+  default: ({ organization }) => <div data-testid="access-matrix-view">{organization?.name}</div>,
+}))
+
+vi.mock('../components/admin/TenantAccessDrawer', () => ({
+  default: () => null,
+}))
+
+vi.mock('../components/admin/TenantMembersPanel', () => ({
+  default: ({ tenant }) => <div data-testid="tenant-members-panel">{tenant?.display_name || tenant?.name}</div>,
+}))
+
 import OrganizationsAdminPage from '../pages/admin/OrganizationsAdminPage'
 import TenantWorkspaceAdminPage from '../pages/admin/TenantWorkspaceAdminPage'
 import IntegrationsAdminPage from '../pages/admin/IntegrationsAdminPage'
@@ -39,9 +53,11 @@ describe('admin workspace route pages', () => {
   beforeEach(() => {
     mockAuth.user = { role: 'platform_admin' }
     mockAuth.activeTenantId = 'tenant-1'
+    mockAuth.activeTenant = { id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one' }
+    mockAuth.activeOrganization = { id: 'org-1', name: 'Org One' }
     mockAuth.projects = []
-    mockAuth.organizations = []
-    mockAuth.tenants = []
+    mockAuth.organizations = [{ id: 'org-1', name: 'Org One' }]
+    mockAuth.tenants = [{ id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one' }]
     mockAuth.organizationMemberships = []
   })
 
@@ -54,6 +70,7 @@ describe('admin workspace route pages', () => {
 
     expect(screen.getByText('Organization Admin')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /back to platform admin/i })).toBeInTheDocument()
+    expect(screen.getByTestId('access-matrix-view')).toHaveTextContent('Org One')
     expect(screen.getByTestId('tenant-workspace-manager')).toHaveTextContent('organizations')
   })
 
@@ -66,6 +83,7 @@ describe('admin workspace route pages', () => {
 
     expect(screen.getByText('Tenant Workspaces')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /back to platform admin/i })).toBeInTheDocument()
+    expect(screen.getByTestId('tenant-members-panel')).toHaveTextContent('Tenant One')
     expect(screen.getByTestId('tenant-workspace-manager')).toHaveTextContent('workspace')
   })
 

@@ -127,7 +127,7 @@ export default function LoginPage() {
           style={{ backgroundImage: `url(${landFinalBg})` }}
         />
         <div className="absolute inset-0 bg-gradient-to-tr from-black via-black/40 to-blue-900/20 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20 mix-blend-overlay" aria-hidden />
       </div>
 
       {/* ── Main Interface ── */}

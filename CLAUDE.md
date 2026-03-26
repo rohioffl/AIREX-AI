@@ -74,7 +74,7 @@ services/airex-core/  # shared package (models/services/core/schemas/cloud/llm/a
 services/airex-api/   # FastAPI runtime package + Dockerfile
 services/airex-worker/# ARQ worker runtime package + Dockerfile
 apps/web/             # React 19 + Vite 7 frontend + Dockerfile
-config/               # Configuration files (tenants, credentials)
+config/               # Static config samples; tenant registry + credentials metadata live in PostgreSQL
 scripts/               # Utility scripts
 tests/                 # Test suite
 database/alembic/     # Alembic migrations (isolated pipeline)
@@ -139,7 +139,7 @@ All API calls are centralized in `apps/web/src/services/api.js` (Axios instance)
 - Composite PKs: `(tenant_id, id)` everywhere
 - `state_transitions` table is **immutable** with a SHA-256 hash chain — never UPDATE or DELETE
 - Migrations live in `database/alembic/` — independent from application deployment
-- Current runtime: single-tenant, fixed to DEV tenant `00000000-0000-0000-0000-000000000000` — but all code must remain tenant-safe (always filter by `tenant_id`)
+- **Multi-organization SaaS:** **Organizations** (customer accounts) own **Tenants** (operational workspaces). All incident and RLS-scoped data remains keyed by **`tenant_id`**. Authenticated requests resolve the active tenant from the JWT and optional **`X-Active-Tenant-Id`** / **`X-Tenant-Id`** headers when the caller is allowed (home tenant, tenant membership, or organization membership). Some unauthenticated entry points may fall back to **`DEV_TENANT_ID`** from settings. Always filter by `tenant_id` in application queries.
 
 ### Infrastructure (ECS Fargate)
 Terraform is split into modules (`vpc`, `platform`, `frontend`) under `deployment/ecs/terraform/modules/`. The active production root is `deployment/ecs/terraform/environments/prod` — **always run Terraform from there, not the modules directly**.

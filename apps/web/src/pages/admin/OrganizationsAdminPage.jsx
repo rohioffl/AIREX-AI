@@ -1,6 +1,9 @@
+import { useMemo, useState } from 'react'
 import { Building2, Globe, Layers } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import AccessMatrixView from '../../components/admin/AccessMatrixView'
+import TenantAccessDrawer from '../../components/admin/TenantAccessDrawer'
 import TenantWorkspaceManager from '../../components/admin/TenantWorkspaceManager'
 import { useAuth } from '../../context/AuthContext'
 import { isPlatformAdmin } from '../../utils/accessControl'
@@ -19,9 +22,24 @@ function SummaryCard({ label, value, icon: Icon, color }) {
 
 export default function OrganizationsAdminPage() {
   const auth = useAuth()
-  const { organizations = [], tenants = [], organizationMemberships = [] } = auth
+  const {
+    organizations = [],
+    tenants = [],
+    organizationMemberships = [],
+    activeOrganization = null,
+  } = auth
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState(activeOrganization?.id || organizations[0]?.id || '')
+  const [inspectedUser, setInspectedUser] = useState(null)
   const backTarget = isPlatformAdmin(auth) ? '/admin' : '/dashboard'
   const backLabel = isPlatformAdmin(auth) ? 'Back to Platform Admin' : 'Back to Dashboard'
+  const selectedOrganization = useMemo(
+    () => organizations.find((org) => org.id === selectedOrganizationId) || activeOrganization || organizations[0] || null,
+    [activeOrganization, organizations, selectedOrganizationId]
+  )
+  const organizationTenants = useMemo(
+    () => tenants.filter((tenant) => tenant.organization_id === selectedOrganization?.id),
+    [selectedOrganization?.id, tenants]
+  )
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -58,7 +76,47 @@ export default function OrganizationsAdminPage() {
         </p>
       </div>
 
+      <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Organization Scope
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
+            Select an organization to review org roles and inspect inherited tenant access.
+          </p>
+        </div>
+        <div style={{ maxWidth: 360 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Organization</label>
+          <select
+            aria-label="Organization scope"
+            value={selectedOrganization?.id || ''}
+            onChange={(e) => setSelectedOrganizationId(e.target.value)}
+            className="w-full rounded-lg px-3 py-2"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+          >
+            {(organizations.length ? organizations : activeOrganization ? [activeOrganization] : []).map((org) => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {selectedOrganization && (
+        <AccessMatrixView
+          organization={selectedOrganization}
+          tenants={organizationTenants}
+          onInspectUser={setInspectedUser}
+        />
+      )}
+
       <TenantWorkspaceManager mode="organizations" />
+
+      <TenantAccessDrawer
+        open={!!inspectedUser}
+        user={inspectedUser}
+        tenants={organizationTenants}
+        onClose={() => setInspectedUser(null)}
+      />
     </div>
   )
 }

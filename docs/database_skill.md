@@ -6,7 +6,7 @@ license: Private
 
 # Database Skill — AIREX
 
-> **Single-tenant mode:** Although the schema still includes `tenant_id` columns for future scalability, the running system now fixes every row to the primary DEV tenant. RLS `SET app.tenant_id` calls always use `00000000-0000-0000-0000-000000000000` until multi-tenancy is reintroduced.
+> **Multi-organization tenancy:** Isolation is still **`tenant_id`-first**. The global **`tenants`** table includes **`organization_id`** (FK to **`organizations`**). Each request uses a tenant-scoped DB session: `SET app.tenant_id` (or equivalent) must reflect the **resolved active tenant** for that request, not a hardcoded UUID. Design migrations and queries for many tenants across many organizations.
 
 This skill defines the data persistence rules for the autonomous SRE system.
 
