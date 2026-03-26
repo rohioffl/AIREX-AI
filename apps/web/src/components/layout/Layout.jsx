@@ -633,6 +633,7 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
       cloud: detail?.cloud || tenant.cloud,
       organization_name: detail?.organization_name || organization?.name || 'Organization',
       organization_slug: detail?.organization_slug || organization?.slug || '',
+      membership_role: tenant.role || null,
     }
   })
 
@@ -717,6 +718,12 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
             </div>
             
             <div style={{ padding: 6, maxHeight: 300, overflowY: 'auto' }}>
+              {visibleTenants.length === 0 && (
+                <div style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+                  <div style={{ marginBottom: 4, fontWeight: 600, color: 'var(--text-secondary)' }}>No workspace access</div>
+                  Contact your organization admin to request access.
+                </div>
+              )}
               {visibleTenants.map(tenant => {
                 const isActive = String(tenant.id) === String(activeTenant?.id)
                 const isSwitching = switching === tenant.id

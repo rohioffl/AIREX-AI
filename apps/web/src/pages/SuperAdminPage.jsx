@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import {
-  Building2, LayoutDashboard,
+  Building2, Edit, LayoutDashboard,
   Plus, Trash2, CheckCircle, AlertTriangle,
   ChevronRight, Server,
   ShieldCheck, Activity, X, UserCheck,
-  Search, RefreshCcw, Globe,
+  Search, RefreshCcw, Globe, UserCog,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
 import ModalShell from '../components/common/ModalShell'
+import TenantAccessDrawer from '../components/admin/TenantAccessDrawer'
+import AccessMatrixView from '../components/admin/AccessMatrixView'
 import {
   fetchTenants, fetchTenantDetail, createTenant, updateTenant, deleteTenant, reloadTenants,
   fetchOrganizations, createOrganization, createOrganizationTenant,
@@ -1007,16 +1009,20 @@ function MembersTab() {
   const [selectedOrgId, setSelectedOrgId] = useState('')
   const [members, setMembers] = useState([])
   const [users, setUsers] = useState([])
+  const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [addUserId, setAddUserId] = useState('')
   const [addRole, setAddRole] = useState('operator')
   const [saving, setSaving] = useState(false)
+  const [drawerUser, setDrawerUser] = useState(null)
+  const [showMatrix, setShowMatrix] = useState(false)
   const { addToast } = useToasts()
 
   useEffect(() => {
     fetchOrganizations().then(setOrgs).catch(() => {})
     fetchUsers().then(data => setUsers(Array.isArray(data) ? data : (data.items || []))).catch(() => {})
+    fetchTenants().then(data => setTenants(Array.isArray(data) ? data : (data.items || []))).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -1073,7 +1079,18 @@ function MembersTab() {
 
   return (
     <div className="space-y-4">
-      <SectionHeader title="Organization Members" />
+      <div className="flex items-center justify-between">
+        <SectionHeader title="Organization Members" />
+        {selectedOrgId && (
+          <button
+            onClick={() => setShowMatrix(s => !s)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: 'rgba(139,92,246,0.1)', color: 'var(--neon-violet)', border: '1px solid rgba(139,92,246,0.2)' }}
+          >
+            <ShieldCheck size={12} /> {showMatrix ? 'Hide Matrix' : 'Access Matrix'}
+          </button>
+        )}
+      </div>
 
       <div className="glass rounded-xl p-4 space-y-3">
         <div>
@@ -1158,6 +1175,14 @@ function MembersTab() {
                     <option value="admin">Admin</option>
                   </select>
                   <button
+                    onClick={() => setDrawerUser(users.find(u => String(u.id) === String(m.user_id)) || { id: m.user_id, display_name: userName(m.user_id) })}
+                    title="Manage tenant access"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--neon-indigo)', padding: 4, flexShrink: 0, opacity: 0.8 }}
+                    className="transition-opacity hover:opacity-100"
+                  >
+                    <UserCog size={14} />
+                  </button>
+                  <button
                     onClick={() => handleRemove(m.user_id)}
                     title="Remove member"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent-red)', padding: 4, flexShrink: 0, opacity: 0.7 }}
@@ -1171,6 +1196,23 @@ function MembersTab() {
           )}
         </div>
       )}
+
+      {/* Access Matrix */}
+      {showMatrix && selectedOrgId && (
+        <AccessMatrixView
+          organization={orgs.find(o => String(o.id) === String(selectedOrgId))}
+          tenants={tenants.filter(t => String(t.organization_id) === String(selectedOrgId))}
+          onInspectUser={(user) => setDrawerUser(user)}
+        />
+      )}
+
+      {/* Tenant Access Drawer */}
+      <TenantAccessDrawer
+        user={drawerUser}
+        tenants={tenants.filter(t => String(t.organization_id) === String(selectedOrgId))}
+        open={!!drawerUser}
+        onClose={() => setDrawerUser(null)}
+      />
     </div>
   )
 }

@@ -8,8 +8,10 @@ import {
   LayoutGrid,
   List as ListIcon,
   Search,
+  ShieldOff,
 } from 'lucide-react'
 import useIncidents from '../hooks/useIncidents'
+import { useAuth } from '../context/AuthContext'
 import IncidentCard from '../components/incident/IncidentCard'
 import IncidentListRow from '../components/incident/IncidentListRow'
 import MetricCard from '../components/common/MetricCard'
@@ -27,6 +29,7 @@ const ALERT_TYPES = ['cpu_high', 'memory_high', 'disk_full', 'healthcheck', 'net
 
 export default function IncidentList({ initialFilters = {}, title = 'Dashboard' }) {
   const { incidents, loading, error, connected, reconnecting, filters, setFilters, loadMore, hasMore, total } = useIncidents(initialFilters)
+  const { tenants, user } = useAuth()
   const [view, setView] = useState('list')
   const [graphType, setGraphType] = useState('area')
   const [searchInput, setSearchInput] = useState(filters.search || '')
@@ -189,8 +192,19 @@ export default function IncidentList({ initialFilters = {}, title = 'Dashboard' 
         </div>
       )}
 
+      {/* No-access state */}
+      {!loading && !error && user && tenants.length === 0 && !['admin', 'platform_admin'].includes(user.role?.toLowerCase?.()) && (
+        <div className="glass rounded-xl py-20 text-center relative overflow-hidden" style={{ borderColor: 'rgba(148,163,184,0.1)' }}>
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full mb-4" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+            <ShieldOff size={20} />
+          </div>
+          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>No workspace access</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>You don&apos;t have access to any tenants yet. Contact your organization admin.</p>
+        </div>
+      )}
+
       {/* Content */}
-      {!loading && !error && (
+      {!loading && !error && (tenants.length > 0 || ['admin', 'platform_admin'].includes(user?.role?.toLowerCase?.())) && (
         incidents.length === 0 ? (
           <div className="glass glass-cyan rounded-xl py-20 text-center relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-b from-[rgba(34,211,238,0.05)] to-transparent pointer-events-none" />
