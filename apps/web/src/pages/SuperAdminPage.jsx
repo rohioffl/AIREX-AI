@@ -5,7 +5,7 @@ import {
   Plus, Trash2, CheckCircle, AlertTriangle,
   ChevronRight, Server,
   ShieldCheck, Activity, X, UserCheck,
-  Search, RefreshCcw, Globe, UserCog,
+  Search, RefreshCcw, Globe, UserCog, Clock, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
@@ -21,6 +21,7 @@ import {
   syncIntegrationMonitors, fetchIntegrationTypes,
   fetchBackendHealth,
   fetchUsers,
+  fetchAuditEvents,
 } from '../services/api'
 import { useTenantWorkspace } from '../hooks/useTenantWorkspace'
 import { extractErrorMessage } from '../utils/errorHandler'
@@ -29,8 +30,9 @@ import { FALLBACK_TENANT_ID } from '../utils/constants'
 // ── Tab definitions ──────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'overview', label: 'Overview',    icon: LayoutDashboard },
-  { id: 'members',  label: 'Org Members', icon: UserCheck },
+  { id: 'overview',  label: 'Overview',    icon: LayoutDashboard },
+  { id: 'members',   label: 'Org Members', icon: UserCheck },
+  { id: 'activity',  label: 'Activity',    icon: Clock },
 ]
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -1217,6 +1219,147 @@ function MembersTab() {
   )
 }
 
+// ── Activity Tab ──────────────────────────────────────────────────────────────
+
+const ACTION_COLOR = {
+  org_member_added: 'var(--neon-green)',
+  org_member_removed: '#ef4444',
+  org_member_role_changed: 'var(--neon-indigo)',
+  tenant_member_added: 'var(--neon-cyan)',
+  tenant_member_removed: '#ef4444',
+  integration_created: 'var(--neon-purple)',
+  integration_deleted: '#ef4444',
+  incident_approved: 'var(--neon-green)',
+  incident_rejected: '#ef4444',
+}
+
+function ActivityTab() {
+  const [orgs, setOrgs] = useState([])
+  const [selectedOrgId, setSelectedOrgId] = useState('')
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [actionFilter, setActionFilter] = useState('')
+
+  useEffect(() => {
+    fetchOrganizations().then(setOrgs).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!selectedOrgId) { setEvents([]); return }
+    setLoading(true)
+    fetchAuditEvents(selectedOrgId, { action: actionFilter || undefined, limit: 100 })
+      .then(data => setEvents(Array.isArray(data) ? data : []))
+      .catch(() => setEvents([]))
+      .finally(() => setLoading(false))
+  }, [selectedOrgId, actionFilter])
+
+  const uniqueActions = useMemo(() => [...new Set(events.map(e => e.action))].sort(), [events])
+
+  return (
+    <div className="space-y-4">
+      <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Audit Trail
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
+            Append-only log of all org-level actions — member changes, integration events, and incident decisions.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3 items-end">
+          <div style={{ minWidth: 200 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Organization</label>
+            <select
+              value={selectedOrgId}
+              onChange={e => { setSelectedOrgId(e.target.value); setActionFilter('') }}
+              style={inputCls}
+            >
+              <option value="">Select organization…</option>
+              {orgs.map(org => (
+                <option key={org.id} value={org.id}>{org.name}</option>
+              ))}
+            </select>
+          </div>
+          {selectedOrgId && uniqueActions.length > 0 && (
+            <div style={{ minWidth: 200 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Filter by Action</label>
+              <select value={actionFilter} onChange={e => setActionFilter(e.target.value)} style={inputCls}>
+                <option value="">All actions</option>
+                {uniqueActions.map(a => (
+                  <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {!selectedOrgId && (
+          <div className="rounded-xl p-4 text-center" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)', color: 'var(--text-muted)', fontSize: 13 }}>
+            Select an organization to view its audit trail.
+          </div>
+        )}
+
+        {selectedOrgId && loading && (
+          <div className="space-y-2">
+            {[1,2,3].map(i => <div key={i} className="h-12 rounded-xl skeleton" />)}
+          </div>
+        )}
+
+        {selectedOrgId && !loading && events.length === 0 && (
+          <div className="rounded-xl p-4 text-center" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)', color: 'var(--text-muted)', fontSize: 13 }}>
+            No audit events recorded yet.
+          </div>
+        )}
+
+        {selectedOrgId && !loading && events.length > 0 && (
+          <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid var(--border)' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead style={{ background: 'var(--bg-elevated)' }}>
+                <tr>
+                  {['Action', 'Actor', 'Entity', 'IP', 'When'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {events.map(ev => (
+                  <tr key={ev.id} style={{ background: 'var(--bg-input)' }}>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: ACTION_COLOR[ev.action] || 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                        {ev.action.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{ev.actor_email || '—'}</div>
+                      {ev.actor_role && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{ev.actor_role}</div>}
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                      {ev.entity_type && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          {ev.entity_type}{ev.entity_id ? `:${ev.entity_id.slice(0, 8)}…` : ''}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{ev.ip_address || '—'}</span>
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {new Date(ev.created_at).toLocaleString()}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SuperAdminPage() {
@@ -1236,7 +1379,7 @@ export default function SuperAdminPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>Organization Administration</h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Overview · Org Members
+            Overview · Org Members · Activity
           </p>
         </div>
       </div>
@@ -1306,8 +1449,9 @@ export default function SuperAdminPage() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'overview' && <OverviewTab onNavigate={setTab} />}
-      {activeTab === 'members'  && <MembersTab />}
+      {activeTab === 'overview'  && <OverviewTab onNavigate={setTab} />}
+      {activeTab === 'members'   && <MembersTab />}
+      {activeTab === 'activity'  && <ActivityTab />}
     </div>
   )
 }

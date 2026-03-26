@@ -71,6 +71,8 @@ class MonitoringIntegrationResponse(BaseModel):
     status: str
     last_tested_at: str | None = None
     last_sync_at: str | None = None
+    recent_alert_count: int = 0
+    last_alert_at: str | None = None
 
 
 class IntegrationConnectionCheck(BaseModel):
@@ -529,11 +531,22 @@ async def list_monitoring_integrations(
                 SELECT mi.id, mi.tenant_id, mi.integration_type_id, it.key AS integration_type_key,
                        o.slug AS organization_slug, t.name AS tenant_slug,
                        mi.name, mi.slug, mi.enabled, mi.config_json, mi.secret_ref,
-                       mi.webhook_token_ref, mi.status, mi.last_tested_at, mi.last_sync_at
+                       mi.webhook_token_ref, mi.status, mi.last_tested_at, mi.last_sync_at,
+                       COALESCE(we.recent_alert_count, 0) AS recent_alert_count,
+                       we.last_alert_at
                 FROM monitoring_integrations mi
                 JOIN integration_types it ON it.id = mi.integration_type_id
                 JOIN tenants t ON t.id = mi.tenant_id
                 JOIN organizations o ON o.id = t.organization_id
+                LEFT JOIN (
+                    SELECT integration_id,
+                           COUNT(*) FILTER (WHERE received_at >= NOW() - INTERVAL '7 days'
+                                            AND incident_id IS NOT NULL) AS recent_alert_count,
+                           MAX(received_at) FILTER (WHERE incident_id IS NOT NULL) AS last_alert_at
+                    FROM webhook_events
+                    WHERE tenant_id = :tenant_id
+                    GROUP BY integration_id
+                ) we ON we.integration_id = mi.id
                 WHERE mi.tenant_id = :tenant_id
                 ORDER BY mi.name
                 """
@@ -561,6 +574,8 @@ async def list_monitoring_integrations(
                 status=row.status,
                 last_tested_at=str(row.last_tested_at) if row.last_tested_at else None,
                 last_sync_at=str(row.last_sync_at) if row.last_sync_at else None,
+                recent_alert_count=int(row.recent_alert_count),
+                last_alert_at=str(row.last_alert_at) if row.last_alert_at else None,
             )
             for row in rows
         ]

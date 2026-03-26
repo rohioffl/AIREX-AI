@@ -427,6 +427,21 @@ function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefres
         </div>
       </div>
 
+      {/* Alert source stats */}
+      {integration && (
+        <div className="flex items-center gap-3 flex-wrap" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', color: integration.recent_alert_count > 0 ? 'var(--neon-cyan)' : 'var(--text-muted)', fontWeight: 600 }}>
+            {integration.recent_alert_count} alerts (7d)
+          </span>
+          {integration.last_alert_at && (
+            <span>Last alert {new Date(integration.last_alert_at).toLocaleString()}</span>
+          )}
+          {!integration.last_alert_at && (
+            <span>No alerts recorded</span>
+          )}
+        </div>
+      )}
+
       {/* Sync timestamps */}
       {integration?.last_tested_at && (
         <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
