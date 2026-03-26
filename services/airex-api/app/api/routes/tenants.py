@@ -122,6 +122,16 @@ class TenantUpdateRequest(BaseModel):
     is_active: bool | None = None
 
 
+class AccessibleTenantEntry(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    cloud: str
+    organization_id: str | None = None
+    is_active: bool
+    role: str  # effective role in this tenant
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  Helpers
 # ═══════════════════════════════════════════════════════════════════
@@ -264,6 +274,97 @@ async def list_all_tenants(
                         tenant.aws_config or {},
                         tenant.gcp_config or {},
                     ),
+                )
+            )
+    return result
+
+
+@router.get(
+    "/accessible",
+    response_model=list[AccessibleTenantEntry],
+)
+async def list_accessible_tenants(
+    current_user: TokenData = Depends(get_authenticated_user),
+    auth_session: AsyncSession = Depends(get_auth_session),
+) -> list[AccessibleTenantEntry]:
+    """List all tenants accessible to the current user with their effective role."""
+    is_platform_admin = normalize_role_name(current_user.role) == "platform_admin"
+    result: list[AccessibleTenantEntry] = []
+
+    async with async_engine.connect() as conn:
+        if is_platform_admin:
+            rows = await conn.execute(
+                select(Tenant).where(Tenant.is_active.is_(True)).order_by(Tenant.name.asc())
+            )
+            for tenant in rows.scalars().all():
+                result.append(
+                    AccessibleTenantEntry(
+                        id=str(tenant.id),
+                        name=tenant.name,
+                        display_name=tenant.display_name,
+                        cloud=tenant.cloud,
+                        organization_id=str(tenant.organization_id) if tenant.organization_id else None,
+                        is_active=tenant.is_active,
+                        role="platform_admin",
+                    )
+                )
+            return result
+
+        # Collect explicit tenant memberships
+        explicit_roles: dict[uuid.UUID, str] = {}
+        membership_rows = await auth_session.execute(
+            select(TenantMembership.tenant_id, TenantMembership.role).where(
+                TenantMembership.user_id == current_user.user_id
+            )
+        )
+        for tid, role in membership_rows.all():
+            explicit_roles[tid] = str(role)
+
+        # Collect org memberships → inherit role for all org tenants
+        org_roles: dict[uuid.UUID, str] = {}
+        org_membership_rows = await auth_session.execute(
+            select(OrganizationMembership.organization_id, OrganizationMembership.role).where(
+                OrganizationMembership.user_id == current_user.user_id
+            )
+        )
+        for oid, role in org_membership_rows.all():
+            org_roles[oid] = str(role)
+
+        # Home tenant (JWT) and home org
+        visible_ids = set(explicit_roles.keys()) | {current_user.tenant_id}
+        visible_org_ids = set(org_roles.keys())
+        home_org_id = await get_home_organization_id(auth_session, current_user)
+        if home_org_id:
+            visible_org_ids.add(home_org_id)
+
+        if not visible_ids and not visible_org_ids:
+            return []
+
+        rows = await conn.execute(
+            select(Tenant).where(
+                Tenant.is_active.is_(True),
+                or_(
+                    Tenant.id.in_(list(visible_ids)) if visible_ids else false(),
+                    Tenant.organization_id.in_(list(visible_org_ids)) if visible_org_ids else false(),
+                ),
+            ).order_by(Tenant.name.asc())
+        )
+        for tenant in rows.scalars().all():
+            if tenant.id in explicit_roles:
+                eff_role = explicit_roles[tenant.id]
+            elif tenant.organization_id and tenant.organization_id in org_roles:
+                eff_role = org_roles[tenant.organization_id]
+            else:
+                eff_role = current_user.role
+            result.append(
+                AccessibleTenantEntry(
+                    id=str(tenant.id),
+                    name=tenant.name,
+                    display_name=tenant.display_name,
+                    cloud=tenant.cloud,
+                    organization_id=str(tenant.organization_id) if tenant.organization_id else None,
+                    is_active=tenant.is_active,
+                    role=eff_role,
                 )
             )
     return result

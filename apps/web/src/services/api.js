@@ -266,9 +266,9 @@ export async function removeTenantMember(tenantId, userId) {
   await api.delete(`/tenants/${tenantId}/members/${userId}`)
 }
 
-// User accessible tenants
-export async function fetchUserAccessibleTenants(userId) {
-  const res = await api.get(`/users/${userId}/accessible-tenants`)
+// Accessible tenants for the current authenticated user
+export async function fetchUserAccessibleTenants() {
+  const res = await api.get('/tenants/accessible')
   return res.data
 }
 

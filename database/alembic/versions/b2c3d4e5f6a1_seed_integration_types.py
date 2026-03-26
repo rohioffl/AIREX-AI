@@ -3,9 +3,9 @@
 Inserts the canonical catalog of monitoring integration types.
 Uses ON CONFLICT DO UPDATE so this migration is safe to re-apply.
 
-Revision ID: a1b2c3d4e5f6
-Revises: 9a2b3c4d5e6f
-Create Date: 2026-03-17
+Revision ID: b2c3d4e5f6a1
+Revises: a1b2c3d4e5f6
+Create Date: 2026-03-26
 """
 
 from typing import Sequence, Union
@@ -14,8 +14,8 @@ import json
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "a1b2c3d4e5f6"
-down_revision: Union[str, None] = "9a2b3c4d5e6f"
+revision: str = "b2c3d4e5f6a1"
+down_revision: Union[str, None] = "a1b2c3d4e5f6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
