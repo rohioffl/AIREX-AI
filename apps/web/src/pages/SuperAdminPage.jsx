@@ -5,7 +5,7 @@ import {
   Plus, Trash2, CheckCircle, AlertTriangle,
   ChevronRight, Server,
   ShieldCheck, Activity, X, UserCheck,
-  Search, RefreshCcw, Globe, UserCog, Clock, ChevronDown,
+  Search, RefreshCcw, Globe, UserCog, Clock, ChevronDown, Key, Copy, Eye, EyeOff,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useToasts } from '../context/ToastContext'
@@ -22,6 +22,7 @@ import {
   fetchBackendHealth,
   fetchUsers,
   fetchAuditEvents,
+  fetchApiKeys, createApiKey, revokeApiKey,
 } from '../services/api'
 import { useTenantWorkspace } from '../hooks/useTenantWorkspace'
 import { extractErrorMessage } from '../utils/errorHandler'
@@ -33,6 +34,7 @@ const TABS = [
   { id: 'overview',  label: 'Overview',    icon: LayoutDashboard },
   { id: 'members',   label: 'Org Members', icon: UserCheck },
   { id: 'activity',  label: 'Activity',    icon: Clock },
+  { id: 'api-keys',  label: 'API Keys',    icon: Key },
 ]
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -1360,6 +1362,242 @@ function ActivityTab() {
   )
 }
 
+// ── API Keys Tab ──────────────────────────────────────────────────────────────
+
+function ApiKeysTab() {
+  const { addToast } = useToasts()
+  const [orgs, setOrgs] = useState([])
+  const [selectedOrgId, setSelectedOrgId] = useState('')
+  const [keys, setKeys] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newKeyName, setNewKeyName] = useState('')
+  const [expiresInDays, setExpiresInDays] = useState('')
+  const [revealedKey, setRevealedKey] = useState(null) // { id, key }
+  const [showCreateForm, setShowCreateForm] = useState(false)
+
+  useEffect(() => {
+    fetchOrganizations().then(setOrgs).catch(() => {})
+  }, [])
+
+  const loadKeys = useCallback(() => {
+    if (!selectedOrgId) { setKeys([]); return }
+    setLoading(true)
+    fetchApiKeys(selectedOrgId)
+      .then(data => setKeys(Array.isArray(data) ? data : []))
+      .catch(() => setKeys([]))
+      .finally(() => setLoading(false))
+  }, [selectedOrgId])
+
+  useEffect(() => { loadKeys() }, [loadKeys])
+
+  const handleCreate = async () => {
+    if (!newKeyName.trim()) return
+    setCreating(true)
+    try {
+      const data = await createApiKey(selectedOrgId, {
+        name: newKeyName.trim(),
+        expires_in_days: expiresInDays ? parseInt(expiresInDays) : undefined,
+      })
+      setRevealedKey({ id: data.id, key: data.key })
+      setNewKeyName('')
+      setExpiresInDays('')
+      setShowCreateForm(false)
+      loadKeys()
+      addToast({ title: 'API Key Created', message: 'Copy the key now — it will not be shown again.', severity: 'INFO' })
+    } catch (err) {
+      addToast({ title: 'Error', message: extractErrorMessage(err) || 'Failed to create key', severity: 'CRITICAL' })
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleRevoke = async (keyId, keyName) => {
+    if (!confirm(`Revoke API key "${keyName}"? This cannot be undone.`)) return
+    try {
+      await revokeApiKey(selectedOrgId, keyId)
+      loadKeys()
+      addToast({ title: 'Key Revoked', message: `"${keyName}" has been revoked.`, severity: 'INFO' })
+    } catch (err) {
+      addToast({ title: 'Error', message: extractErrorMessage(err) || 'Failed to revoke key', severity: 'CRITICAL' })
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              API Keys
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
+              Organization-scoped keys for programmatic access. Each key is shown once on creation.
+            </p>
+          </div>
+          {selectedOrgId && (
+            <button
+              onClick={() => setShowCreateForm(v => !v)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
+              style={{ background: 'rgba(99,102,241,0.1)', color: 'var(--neon-indigo)', border: '1px solid rgba(99,102,241,0.25)' }}
+            >
+              <Plus size={14} /> New Key
+            </button>
+          )}
+        </div>
+
+        {/* Org selector */}
+        <div style={{ maxWidth: 280 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Organization</label>
+          <select
+            value={selectedOrgId}
+            onChange={e => { setSelectedOrgId(e.target.value); setRevealedKey(null); setShowCreateForm(false) }}
+            style={inputCls}
+          >
+            <option value="">Select organization…</option>
+            {orgs.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Create form */}
+        {showCreateForm && selectedOrgId && (
+          <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)' }}>Create New API Key</div>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div style={{ flex: '1 1 200px' }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Key Name *</label>
+                <input
+                  value={newKeyName}
+                  onChange={e => setNewKeyName(e.target.value)}
+                  placeholder="e.g. CI Deploy Key"
+                  style={inputCls}
+                />
+              </div>
+              <div style={{ flex: '0 0 140px' }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Expires in (days)</label>
+                <input
+                  type="number"
+                  value={expiresInDays}
+                  onChange={e => setExpiresInDays(e.target.value)}
+                  placeholder="Never"
+                  min={1}
+                  style={inputCls}
+                />
+              </div>
+              <button
+                onClick={handleCreate}
+                disabled={creating || !newKeyName.trim()}
+                className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+                style={{ background: 'rgba(99,102,241,0.15)', color: 'var(--neon-indigo)', border: '1px solid rgba(99,102,241,0.3)', opacity: (creating || !newKeyName.trim()) ? 0.5 : 1 }}
+              >
+                {creating ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Revealed key banner */}
+        {revealedKey && (
+          <div className="rounded-xl p-4 space-y-2" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
+            <div className="flex items-center gap-2">
+              <Eye size={14} style={{ color: 'var(--color-accent-green)' }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-accent-green)' }}>
+                Copy your API key now — it will not be shown again
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <code style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neon-cyan)', background: 'var(--bg-input)', padding: '6px 10px', borderRadius: 6, wordBreak: 'break-all' }}>
+                {revealedKey.key}
+              </code>
+              <button
+                onClick={() => { navigator.clipboard.writeText(revealedKey.key); addToast({ title: 'Copied', message: 'API key copied to clipboard', severity: 'INFO' }) }}
+                className="p-2 rounded-lg transition-all"
+                style={{ background: 'rgba(34,211,238,0.1)', color: 'var(--neon-cyan)', border: '1px solid rgba(34,211,238,0.2)', flexShrink: 0 }}
+                title="Copy to clipboard"
+              >
+                <Copy size={14} />
+              </button>
+              <button
+                onClick={() => setRevealedKey(null)}
+                className="p-2 rounded-lg transition-all"
+                style={{ background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)', flexShrink: 0 }}
+                title="Dismiss"
+              >
+                <EyeOff size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!selectedOrgId && (
+          <div className="rounded-xl p-4 text-center" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)', color: 'var(--text-muted)', fontSize: 13 }}>
+            Select an organization to view its API keys.
+          </div>
+        )}
+
+        {selectedOrgId && loading && (
+          <div className="space-y-2">
+            {[1,2].map(i => <div key={i} className="h-12 rounded-xl skeleton" />)}
+          </div>
+        )}
+
+        {selectedOrgId && !loading && keys.length === 0 && (
+          <div className="rounded-xl p-4 text-center" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)', color: 'var(--text-muted)', fontSize: 13 }}>
+            No API keys yet. Create one to enable programmatic access.
+          </div>
+        )}
+
+        {selectedOrgId && !loading && keys.length > 0 && (
+          <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid var(--border)' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead style={{ background: 'var(--bg-elevated)' }}>
+                <tr>
+                  {['Name', 'Prefix', 'Expires', 'Created', ''].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {keys.map(k => (
+                  <tr key={k.id} style={{ background: 'var(--bg-input)' }}>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{k.name}</span>
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                      <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neon-cyan)' }}>{k.key_prefix}…</code>
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        {k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Never'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {new Date(k.created_at).toLocaleDateString()}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', textAlign: 'right' }}>
+                      <button
+                        onClick={() => handleRevoke(k.id, k.name)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all"
+                        style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}
+                      >
+                        <Trash2 size={11} /> Revoke
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SuperAdminPage() {
@@ -1379,7 +1617,7 @@ export default function SuperAdminPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>Organization Administration</h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Overview · Org Members · Activity
+            Overview · Org Members · Activity · API Keys
           </p>
         </div>
       </div>
@@ -1452,6 +1690,7 @@ export default function SuperAdminPage() {
       {activeTab === 'overview'  && <OverviewTab onNavigate={setTab} />}
       {activeTab === 'members'   && <MembersTab />}
       {activeTab === 'activity'  && <ActivityTab />}
+      {activeTab === 'api-keys'  && <ApiKeysTab />}
     </div>
   )
 }
