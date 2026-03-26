@@ -786,4 +786,31 @@ export async function rotateIntegrationSecret(integrationId) {
   return res.data
 }
 
+// Single organization
+export async function fetchOrganization(orgId) {
+  const res = await api.get(`/organizations/${orgId}`)
+  return res.data
+}
+
+// API Keys
+export async function fetchApiKeys(orgId) {
+  const res = await api.get(`/organizations/${orgId}/api-keys`)
+  return res.data
+}
+
+export async function createApiKey(orgId, data) {
+  const res = await api.post(`/organizations/${orgId}/api-keys`, data)
+  return res.data
+}
+
+export async function revokeApiKey(orgId, keyId) {
+  await api.delete(`/organizations/${orgId}/api-keys/${keyId}`)
+}
+
+// Audit Events
+export async function fetchAuditEvents(orgId, params = {}) {
+  const res = await api.get(`/organizations/${orgId}/audit-events`, { params })
+  return res.data
+}
+
 export default api

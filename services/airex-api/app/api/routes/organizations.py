@@ -1,7 +1,9 @@
 """Organization and organization-scoped tenant APIs."""
 
+import hashlib
+import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,11 +22,13 @@ from app.api.dependencies import (
 )
 from airex_core.core.rbac import normalize_role_name
 from airex_core.core.security import TokenData
+from airex_core.models.api_key import ApiKey
 from airex_core.models.organization import Organization
 from airex_core.models.organization_membership import OrganizationMembership
 from airex_core.models.tenant import Tenant
 from airex_core.models.tenant_membership import TenantMembership
 from airex_core.models.user import User
+from airex_core.services.audit_service import record_event
 
 router = APIRouter()
 
@@ -408,6 +412,19 @@ async def add_org_member(
     )
     session.add(membership)
     await session.flush()
+
+    await record_event(
+        session,
+        action="org_member.added",
+        actor_id=current_user.user_id,
+        actor_email=current_user.sub,
+        actor_role=current_user.role,
+        organization_id=organization_id,
+        entity_type="org_member",
+        entity_id=str(body.user_id),
+        after_state={"role": body.role},
+    )
+
     return OrgMemberResponse(
         id=membership.id,
         user_id=membership.user_id,
@@ -439,9 +456,24 @@ async def update_org_member(
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
 
+    old_role = membership.role
     membership.role = body.role
     session.add(membership)
     await session.flush()
+
+    await record_event(
+        session,
+        action="org_member.role_updated",
+        actor_id=current_user.user_id,
+        actor_email=current_user.sub,
+        actor_role=current_user.role,
+        organization_id=organization_id,
+        entity_type="org_member",
+        entity_id=str(user_id),
+        before_state={"role": old_role},
+        after_state={"role": body.role},
+    )
+
     return OrgMemberResponse(
         id=membership.id,
         user_id=membership.user_id,
@@ -462,14 +494,35 @@ async def remove_org_member(
     if not await authorize_org_admin(session, current_user, organization_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
 
-    result = await session.execute(
+    # Fetch role before deleting for audit record
+    fetch_result = await session.execute(
+        select(OrganizationMembership.role).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user_id,
+        )
+    )
+    removed_role = fetch_result.scalar_one_or_none()
+    if removed_role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+
+    await session.execute(
         delete(OrganizationMembership).where(
             OrganizationMembership.organization_id == organization_id,
             OrganizationMembership.user_id == user_id,
         )
     )
-    if result.rowcount == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+
+    await record_event(
+        session,
+        action="org_member.removed",
+        actor_id=current_user.user_id,
+        actor_email=current_user.sub,
+        actor_role=current_user.role,
+        organization_id=organization_id,
+        entity_type="org_member",
+        entity_id=str(user_id),
+        before_state={"role": removed_role},
+    )
 
 
 # ─── Org Analytics ────────────────────────────────────────────────────────────
@@ -534,4 +587,159 @@ async def get_org_analytics(
         tenant_count=len(visible_tenant_ids),
         active_tenant_count=sum(1 for row in visible_tenant_rows if row.is_active),
         member_count=len(member_ids),
+    )
+
+
+# ─── Shared helper ────────────────────────────────────────────────────────────
+
+
+async def _require_org_access(
+    session: AsyncSession,
+    current_user: TokenData,
+    organization_id: uuid.UUID,
+) -> None:
+    """Raise 403 if the user cannot access the organization."""
+    if not await authorize_org_admin(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+
+# ─── API Key Management ────────────────────────────────────────────────────────
+
+
+class ApiKeyResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    key_prefix: str
+    expires_at: datetime | None
+    created_at: datetime
+
+
+class ApiKeyCreateResponse(ApiKeyResponse):
+    key: str  # Only returned once at creation
+
+
+class ApiKeyCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    expires_in_days: int | None = Field(None, ge=1, le=3650)
+
+
+@router.get("/organizations/{organization_id}/api-keys", response_model=list[ApiKeyResponse])
+async def list_api_keys(
+    organization_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> list[ApiKeyResponse]:
+    """List active API keys for an organization."""
+    await _require_org_access(session, current_user, organization_id)
+
+    result = await session.execute(
+        select(ApiKey)
+        .where(ApiKey.organization_id == organization_id, ApiKey.revoked_at.is_(None))
+        .order_by(ApiKey.created_at.desc())
+    )
+    keys = result.scalars().all()
+    return [
+        ApiKeyResponse(
+            id=k.id,
+            name=k.name,
+            key_prefix=k.key_prefix,
+            expires_at=k.expires_at,
+            created_at=k.created_at,
+        )
+        for k in keys
+    ]
+
+
+@router.post(
+    "/organizations/{organization_id}/api-keys",
+    response_model=ApiKeyCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_api_key(
+    organization_id: uuid.UUID,
+    body: ApiKeyCreateRequest,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> ApiKeyCreateResponse:
+    """Create a new API key for an organization."""
+    await _require_org_access(session, current_user, organization_id)
+
+    raw_key = f"airex_{secrets.token_urlsafe(32)}"
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    key_prefix = raw_key[:12]
+
+    expires_at = None
+    if body.expires_in_days:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
+
+    api_key = ApiKey(
+        organization_id=organization_id,
+        name=body.name.strip(),
+        key_hash=key_hash,
+        key_prefix=key_prefix,
+        expires_at=expires_at,
+        created_by=current_user.user_id,
+    )
+    session.add(api_key)
+    await session.flush()
+
+    await record_event(
+        session,
+        action="api_key.created",
+        actor_id=current_user.user_id,
+        actor_email=current_user.sub,
+        actor_role=current_user.role,
+        organization_id=organization_id,
+        entity_type="api_key",
+        entity_id=str(api_key.id),
+        after_state={"name": api_key.name, "expires_at": expires_at.isoformat() if expires_at else None},
+    )
+
+    return ApiKeyCreateResponse(
+        id=api_key.id,
+        name=api_key.name,
+        key_prefix=api_key.key_prefix,
+        expires_at=api_key.expires_at,
+        created_at=api_key.created_at,
+        key=raw_key,
+    )
+
+
+@router.delete(
+    "/organizations/{organization_id}/api-keys/{key_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_api_key(
+    organization_id: uuid.UUID,
+    key_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> None:
+    """Revoke an API key."""
+    await _require_org_access(session, current_user, organization_id)
+
+    result = await session.execute(
+        select(ApiKey).where(
+            ApiKey.id == key_id,
+            ApiKey.organization_id == organization_id,
+            ApiKey.revoked_at.is_(None),
+        )
+    )
+    api_key = result.scalar_one_or_none()
+    if api_key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+
+    api_key.revoked_at = datetime.now(timezone.utc)
+    session.add(api_key)
+
+    await record_event(
+        session,
+        action="api_key.revoked",
+        actor_id=current_user.user_id,
+        actor_email=current_user.sub,
+        actor_role=current_user.role,
+        organization_id=organization_id,
+        entity_type="api_key",
+        entity_id=str(api_key.id),
+        before_state={"name": api_key.name},
     )

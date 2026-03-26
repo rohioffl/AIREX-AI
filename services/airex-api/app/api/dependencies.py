@@ -2,8 +2,10 @@
 FastAPI dependencies for tenant context, DB sessions, Redis, and RBAC.
 """
 
+import hashlib
 import uuid
 from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
 from typing import Annotated, TypeAlias
 
 import redis.asyncio as aioredis
@@ -15,6 +17,7 @@ from airex_core.core.config import settings
 from airex_core.core.database import async_session_factory, get_tenant_session
 from airex_core.core.rbac import Permission, has_any_permission, normalize_role_name
 from airex_core.core.security import TokenData, decode_access_token
+from airex_core.models.api_key import ApiKey
 from airex_core.models.monitoring_integration import MonitoringIntegration
 from airex_core.models.organization_membership import OrganizationMembership
 from airex_core.models.tenant import Tenant
@@ -34,16 +37,51 @@ def _decode_bearer_token_or_401(token: str) -> TokenData:
         ) from exc
 
 
+async def _resolve_api_key_token(raw_key: str) -> TokenData:
+    """Validate an API key and return a synthetic TokenData for the org."""
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(ApiKey, Tenant.id).join(
+                Tenant, Tenant.organization_id == ApiKey.organization_id
+            ).where(
+                ApiKey.key_hash == key_hash,
+                ApiKey.revoked_at.is_(None),
+                Tenant.is_active.is_(True),
+            )
+        )
+        row = result.first()
+
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AUTH_ERROR_DETAIL)
+
+    api_key, tenant_id = row
+
+    if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired")
+
+    return TokenData(
+        sub=f"apikey:{api_key.id}",
+        tenant_id=tenant_id,
+        role="operator",
+    )
+
+
 async def get_current_user(
     authorization: str | None = Header(None),
 ) -> TokenData | None:
     """
-    Extract the full user token data from JWT.
+    Extract the full user token data from JWT or API key.
     Returns None if no token provided (dev mode).
     """
-    if authorization and authorization.startswith("Bearer "):
+    if not authorization:
+        return None
+    if authorization.startswith("Bearer "):
         token = authorization[len("Bearer ") :]
         return _decode_bearer_token_or_401(token)
+    if authorization.startswith("ApiKey "):
+        raw_key = authorization[len("ApiKey ") :]
+        return await _resolve_api_key_token(raw_key)
     return None
 
 

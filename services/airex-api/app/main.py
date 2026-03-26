@@ -14,6 +14,7 @@ from app.api.routes import (
     admin_auth,
     analytics,
     anomalies,
+    audit_events,
     auth,
     chat,
     dlq,
@@ -173,6 +174,11 @@ app.include_router(
     organizations.router,
     prefix=f"{settings.API_V1_STR}",
     tags=["organizations"],
+)
+app.include_router(
+    audit_events.router,
+    prefix=f"{settings.API_V1_STR}",
+    tags=["audit-events"],
 )
 app.include_router(
     platform_admin.router,

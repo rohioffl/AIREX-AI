@@ -30,6 +30,7 @@ import OrganizationsAdminPage from './pages/admin/OrganizationsAdminPage'
 import TenantWorkspaceAdminPage from './pages/admin/TenantWorkspaceAdminPage'
 import IntegrationsAdminPage from './pages/admin/IntegrationsAdminPage'
 import PlatformAdminPage from './pages/PlatformAdminPage'
+import OrgSettingsPage from './pages/OrgSettingsPage'
 
 export default function App() {
   return (
@@ -67,6 +68,7 @@ export default function App() {
                       <Route path="/runbooks" element={<ErrorBoundary><RunbooksPage /></ErrorBoundary>} />
                       <Route path="/patterns" element={<ErrorBoundary><PatternsPage /></ErrorBoundary>} />
                       <Route path="/profile" element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
+                      <Route path="/org-settings" element={<ErrorBoundary><OrgSettingsPage /></ErrorBoundary>} />
                       <Route path="/health-checks" element={<ErrorBoundary><LiveMonitoringPage /></ErrorBoundary>} />
                       <Route path="/health-checks/site24x7" element={<ErrorBoundary><HealthChecksPage /></ErrorBoundary>} />
                       <Route path="/org-admin" element={
