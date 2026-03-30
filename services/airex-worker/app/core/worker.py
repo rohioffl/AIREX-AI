@@ -539,53 +539,6 @@ async def approval_sla_check(ctx: Mapping[str, object]) -> None:
         log.error("cron_failed", error=str(exc))
 
 
-async def proactive_health_check(ctx: Mapping[str, object]) -> None:
-    """ARQ cron: run proactive health checks against known infrastructure (Phase 6 ARE).
-
-    Polls Site24x7 monitors, evaluates thresholds, and auto-creates
-    incidents when degradation is detected.
-    """
-    run_health_checks = _load_attr(
-        "airex_core.services.health_check_service", "run_health_checks"
-    )
-
-    settings = _get_settings()
-
-    if not settings.HEALTH_CHECK_ENABLED:
-        return
-
-    correlation_id = _extract_correlation_id(ctx)
-    log = _build_task_logger(
-        task_name="proactive_health_check", correlation_id=correlation_id
-    )
-    log.info("cron_started")
-
-    try:
-        redis = ctx.get("redis")
-        tenant_ids = await _list_active_tenant_ids()
-        totals = {
-            "tenant_count": len(tenant_ids),
-            "checks_created": 0,
-            "incidents_created": 0,
-            "down_count": 0,
-            "degraded_count": 0,
-        }
-
-        for tenant_id in tenant_ids:
-            tenant_log = log.bind(tenant_id=str(tenant_id))
-            try:
-                summary = await run_health_checks(tenant_id, redis=redis)
-                for key in ("checks_created", "incidents_created", "down_count", "degraded_count"):
-                    totals[key] += int(summary.get(key, 0) or 0)
-                tenant_log.info("cron_tenant_completed", **summary)
-            except Exception as exc:
-                tenant_log.error("cron_tenant_failed", error=str(exc))
-
-        log.info("cron_completed", **totals)
-    except Exception as exc:
-        log.error("cron_failed", error=str(exc))
-
-
 async def on_startup(ctx: dict) -> None:
     """ARQ worker startup hook — init Redis for SSE events."""
     redis = aioredis.from_url(_get_settings().REDIS_URL, decode_responses=False)
@@ -618,10 +571,6 @@ class WorkerSettings:
     ]
     cron_jobs = [
         cron(retry_failed_incidents, second={0, 30}),
-        cron(
-            proactive_health_check,
-            minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55},
-        ),
         cron(
             approval_sla_check,
             minute=set(range(60)),

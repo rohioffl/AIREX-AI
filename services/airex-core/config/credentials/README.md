@@ -1,5 +1,18 @@
 # Credentials Directory
 
+> **DEPRECATED — use AWS Secrets Manager instead.**
+>
+> Storing credentials as local files or inline in `tenants.aws_config` / `gcp_config`
+> JSONB is the **legacy path**.  The target architecture keeps sensitive material
+> (access keys, service account JSON) in **AWS Secrets Manager** and stores only
+> the secret ARN on the `cloud_account_bindings` row in PostgreSQL.
+>
+> See `docs/plans/tenant_credentials_aws_secrets_manager_plan.md` for the full
+> migration plan.  New tenants should be onboarded via Secrets Manager only.
+>
+> The approaches below remain supported as a **fallback** during the transition
+> (phases M0–M3) and for local development where Secrets Manager is unavailable.
+
 Store cloud provider credentials here. **Never commit these to git.**
 
 ## GCP Service Account Keys

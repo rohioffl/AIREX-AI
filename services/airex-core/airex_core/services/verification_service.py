@@ -100,6 +100,7 @@ async def verify_resolution(
                     action_type=action_type,
                     success=True,
                     service_name=service_name,
+                    resolution_seconds=getattr(incident, "resolution_duration_seconds", None),
                 )
             except Exception as exc:
                 log.warning("kg_outcome_record_failed", error=str(exc))

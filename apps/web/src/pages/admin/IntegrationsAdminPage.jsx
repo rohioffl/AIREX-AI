@@ -515,9 +515,16 @@ function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefres
   )
 }
 
-export default function IntegrationsAdminPage() {
+export default function IntegrationsAdminPage({
+  embedded = false,
+  tenantId: propTenantId = null,
+  launchIntegrationKey = null,
+  launchSignal = 0,
+  onDataChange = null,
+}) {
   const auth = useAuth()
-  const { activeTenantId, projects: ctxProjects } = auth
+  const { activeTenantId: authTenantId, projects: ctxProjects } = auth
+  const activeTenantId = propTenantId || authTenantId
   const backTarget = isPlatformAdmin(auth) ? '/admin' : '/admin/workspaces'
   const backLabel = isPlatformAdmin(auth) ? 'Back to Platform Admin' : 'Back to Workspaces'
   const [integrationTypes, setIntegrationTypes] = useState([])
@@ -527,6 +534,15 @@ export default function IntegrationsAdminPage() {
   const [wizardType, setWizardType] = useState(null)
   const [wizardIntegration, setWizardIntegration] = useState(null)
   const [eventsIntegration, setEventsIntegration] = useState(null)
+
+  const publishData = useCallback((types, configured) => {
+    onDataChange?.({
+      availableCount: (types || []).length,
+      configuredCount: (configured || []).length,
+      configured: configured || [],
+      types: types || [],
+    })
+  }, [onDataChange])
 
   const loadData = useCallback(async () => {
     if (!activeTenantId) return
@@ -539,16 +555,25 @@ export default function IntegrationsAdminPage() {
       setIntegrationTypes(types || [])
       setIntegrations(configured || [])
       setProjects(projs || [])
+      publishData(types || [], configured || [])
     } catch (err) {
       console.error('Failed to load integrations:', err)
     } finally {
       setIsLoading(false)
     }
-  }, [activeTenantId])
+  }, [activeTenantId, publishData])
 
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    if (!launchIntegrationKey || integrationTypes.length === 0) return
+    const integrationType = integrationTypes.find((item) => item.key === launchIntegrationKey)
+    if (!integrationType) return
+    setWizardType(integrationType)
+    setWizardIntegration(null)
+  }, [integrationTypes, launchIntegrationKey, launchSignal])
 
   function handleAdd(integrationType) {
     setWizardType(integrationType)
@@ -576,23 +601,25 @@ export default function IntegrationsAdminPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
-            Monitoring Integrations
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-            Connect monitoring providers to route alerts into incident workflows.
-          </p>
+      {!embedded && (
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
+              Monitoring Integrations
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+              Connect monitoring providers to route alerts into incident workflows.
+            </p>
+          </div>
+          <Link
+            to={backTarget}
+            className="px-4 py-2 rounded-lg text-sm font-semibold"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+          >
+            {backLabel}
+          </Link>
         </div>
-        <Link
-          to={backTarget}
-          className="px-4 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-        >
-          {backLabel}
-        </Link>
-      </div>
+      )}
 
       {!activeTenantId && (
         <div className="glass rounded-xl p-6 text-center" style={{ border: '1px dashed var(--border)' }}>

@@ -1,9 +1,11 @@
 """Add api_keys and audit_events tables for Phase 2 SaaS features.
 
 Revision ID: a1b2c3d4e5f6
-Revises: f1a2b3c4d5e6
+Revises: 8f3b7c2a91e4
 Create Date: 2026-03-26 08:00:00.000000
 
+api_keys FK to organizations — must run after 7c1a9d9f4b10.
+b2c3d4e5f6a1 seeds integration_types — must run after 8f3b7c2a91e4 creates that table.
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "a1b2c3d4e5f6"
-down_revision = "d5e7f9a1c3b2"
+down_revision = "8f3b7c2a91e4"
 branch_labels = None
 depends_on = None
 

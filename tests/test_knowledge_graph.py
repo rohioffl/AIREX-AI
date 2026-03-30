@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airex_core.core.knowledge_graph import KnowledgeGraph, make_entity_id, knowledge_graph
+from airex_core.core.knowledge_graph import (
+    KnowledgeGraph,
+    build_state_hash,
+    make_entity_id,
+    make_versioned_entity_id,
+    knowledge_graph,
+)
 
 
 # ── make_entity_id ────────────────────────────────────────────────
@@ -30,6 +37,14 @@ class TestMakeEntityId:
 
     def test_singleton_import(self):
         assert isinstance(knowledge_graph, KnowledgeGraph)
+
+    def test_versioned_entity_id(self):
+        eid = make_versioned_entity_id("config", "checkout-api", "abcdef1234567890")
+        assert eid == "config:checkout-api:abcdef123456"
+
+    def test_build_state_hash_is_stable(self):
+        payload = {"cpu": 95, "service": "checkout-api"}
+        assert build_state_hash(payload) == build_state_hash(dict(reversed(payload.items())))
 
 
 # ── upsert_node ───────────────────────────────────────────────────
@@ -81,7 +96,6 @@ class TestUpsertNode:
             properties=props,
         )
 
-        call_args = session.execute.call_args[0][0]
         # The compiled statement should include properties
         assert session.execute.called
 
@@ -252,8 +266,8 @@ class TestUpsertAlertEntities:
             alert_type="DiskFull",
         )
 
-        # Only 1 node (alert_type) — no host or service
-        assert session.execute.call_count == 1
+        # alert_type node + incident node + observed_alert edge
+        assert session.execute.call_count == 3
 
     @pytest.mark.asyncio
     async def test_with_host_adds_node_and_edge(self, kg, tenant_id, incident_id):
@@ -270,8 +284,8 @@ class TestUpsertAlertEntities:
             host="10.0.0.5",
         )
 
-        # alert_type node + host node + has_alert edge = 3
-        assert session.execute.call_count == 3
+        # alert node + incident node + observed_alert edge + host node + has_alert + observed_entity = 6
+        assert session.execute.call_count == 6
 
     @pytest.mark.asyncio
     async def test_with_service_adds_node_and_edge(self, kg, tenant_id, incident_id):
@@ -288,8 +302,8 @@ class TestUpsertAlertEntities:
             service_name="storage-api",
         )
 
-        # alert_type node + service node + has_alert edge = 3
-        assert session.execute.call_count == 3
+        # alert + incident + observed_alert + service + has_alert + observed_entity = 6
+        assert session.execute.call_count == 6
 
     @pytest.mark.asyncio
     async def test_with_host_and_service(self, kg, tenant_id, incident_id):
@@ -307,8 +321,45 @@ class TestUpsertAlertEntities:
             service_name="storage-api",
         )
 
-        # alert + host + svc nodes (3) + 2 has_alert edges = 5
-        assert session.execute.call_count == 5
+        # alert + incident + host + svc nodes (4) + observed_alert + 2 has_alert + 2 observed_entity edges = 9
+        assert session.execute.call_count == 9
+
+    @pytest.mark.asyncio
+    async def test_record_incident_timeline_writes_metric_snapshot(self, kg, tenant_id, incident_id):
+        session = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.one.return_value = MagicMock()
+        session.execute = AsyncMock(return_value=mock_result)
+
+        await kg.record_incident_timeline(
+            session=session,
+            tenant_id=tenant_id,
+            incident_id=incident_id,
+            alert_type="HighCPU",
+            service_name="checkout-api",
+            observations=["cpu_diagnostics:cpu_percent=95.1"],
+            metrics={"cpu_diagnostics.cpu_percent": 95.1},
+        )
+
+        assert session.execute.call_count == 4
+
+    @pytest.mark.asyncio
+    async def test_record_incident_timeline_writes_config_snapshot(self, kg, tenant_id, incident_id):
+        session = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.one.return_value = MagicMock()
+        session.execute = AsyncMock(return_value=mock_result)
+
+        await kg.record_incident_timeline(
+            session=session,
+            tenant_id=tenant_id,
+            incident_id=incident_id,
+            alert_type="HighCPU",
+            config_name="checkout-api",
+            config_snapshot={"deployment_detected": True, "resource_name": "checkout-api"},
+        )
+
+        assert session.execute.call_count == 7
 
 
 # ── causal_walk ───────────────────────────────────────────────────
@@ -386,9 +437,11 @@ class TestGetContextForIncident:
     @pytest.mark.asyncio
     async def test_no_history_returns_none(self, kg, tenant_id):
         session = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.__iter__ = MagicMock(return_value=iter([]))
-        session.execute = AsyncMock(return_value=mock_result)
+        mock_state_result = MagicMock()
+        mock_state_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_history_result = MagicMock()
+        mock_history_result.__iter__ = MagicMock(return_value=iter([]))
+        session.execute = AsyncMock(side_effect=[mock_state_result, mock_history_result])
 
         result = await kg.get_context_for_incident(
             session=session,
@@ -401,15 +454,27 @@ class TestGetContextForIncident:
     @pytest.mark.asyncio
     async def test_with_history_returns_text(self, kg, tenant_id):
         session = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        # Row: (dst_entity_id, weight, src_entity_id)
-        mock_result.__iter__ = MagicMock(
+        mock_state_result = MagicMock()
+        mock_state_result.__iter__ = MagicMock(
             return_value=iter([
-                ("action:restart_service", 3.0, "alert_type:highcpu"),
-                ("action:scale_instances", 1.0, "alert_type:highcpu"),
+                (
+                    "alert_type:highcpu",
+                    "highcpu",
+                    datetime(2026, 3, 27, 12, 0, tzinfo=timezone.utc),
+                    datetime(2026, 3, 27, 12, 5, tzinfo=timezone.utc),
+                    "abc12345deadbeef",
+                    {"last_alert_type": "HighCPU"},
+                )
             ])
         )
-        session.execute = AsyncMock(return_value=mock_result)
+        mock_history_result = MagicMock()
+        mock_history_result.__iter__ = MagicMock(
+            return_value=iter([
+                ("action:restart_service", 3.0, "alert_type:highcpu", 0.86, datetime(2026, 3, 27, 12, 4, tzinfo=timezone.utc)),
+                ("action:scale_instances", 1.0, "alert_type:highcpu", 0.42, datetime(2026, 3, 26, 11, 0, tzinfo=timezone.utc)),
+            ])
+        )
+        session.execute = AsyncMock(side_effect=[mock_state_result, mock_history_result])
 
         result = await kg.get_context_for_incident(
             session=session,
@@ -418,17 +483,21 @@ class TestGetContextForIncident:
         )
 
         assert result is not None
-        assert "Knowledge Graph" in result
+        assert "Knowledge Graph — Current State" in result
+        assert "Knowledge Graph — Historical Resolutions" in result
         assert "restart_service" in result
         assert "3x" in result
         assert "scale_instances" in result
+        assert "causal_confidence=0.86" in result
 
     @pytest.mark.asyncio
     async def test_with_service_name_included_in_query(self, kg, tenant_id):
         session = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.__iter__ = MagicMock(return_value=iter([]))
-        session.execute = AsyncMock(return_value=mock_result)
+        mock_state_result = MagicMock()
+        mock_state_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_history_result = MagicMock()
+        mock_history_result.__iter__ = MagicMock(return_value=iter([]))
+        session.execute = AsyncMock(side_effect=[mock_state_result, mock_history_result])
 
         await kg.get_context_for_incident(
             session=session,
@@ -438,19 +507,21 @@ class TestGetContextForIncident:
         )
 
         # Service name means two candidate src IDs are included in the query
-        session.execute.assert_called_once()
+        assert session.execute.call_count == 2
 
     @pytest.mark.asyncio
     async def test_action_name_strips_prefix(self, kg, tenant_id):
         """dst_entity_id 'action:restart_service' should display as 'restart_service'."""
         session = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.__iter__ = MagicMock(
+        mock_state_result = MagicMock()
+        mock_state_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_history_result = MagicMock()
+        mock_history_result.__iter__ = MagicMock(
             return_value=iter([
-                ("action:restart_service", 5.0, "alert_type:diskfull"),
+                ("action:restart_service", 5.0, "alert_type:diskfull", 0.91, datetime(2026, 3, 27, 12, 4, tzinfo=timezone.utc)),
             ])
         )
-        session.execute = AsyncMock(return_value=mock_result)
+        session.execute = AsyncMock(side_effect=[mock_state_result, mock_history_result])
 
         result = await kg.get_context_for_incident(
             session=session,

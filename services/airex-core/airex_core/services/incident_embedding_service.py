@@ -10,6 +10,7 @@ from airex_core.core.config import settings
 from airex_core.llm.embeddings import EmbeddingsClient
 from airex_core.models.incident import Incident
 from airex_core.models.incident_embedding import IncidentEmbedding
+from airex_core.schemas.recommendation_contract import resolve_recommendation_contract
 
 logger = structlog.get_logger()
 
@@ -91,7 +92,12 @@ def build_incident_summary(incident: Incident) -> str:
     ]
 
     meta = incident.meta or {}
-    recommendation = meta.get("recommendation", {})
+    contract = resolve_recommendation_contract(meta)
+    recommendation = (
+        contract.to_legacy_recommendation()
+        if contract is not None
+        else meta.get("recommendation", {})
+    )
     if recommendation:
         root_cause = recommendation.get("root_cause")
         proposed_action = recommendation.get("proposed_action")

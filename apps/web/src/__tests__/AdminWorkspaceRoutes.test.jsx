@@ -17,9 +17,11 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => mockAuth,
 }))
 
-vi.mock('../services/api', () => ({
+const mockApi = vi.hoisted(() => ({
   fetchIntegrationTypes: vi.fn(async () => []),
   fetchIntegrations: vi.fn(async () => []),
+  fetchOrganizations: vi.fn(async () => [{ id: 'org-1', name: 'Org One', slug: 'org-one' }]),
+  fetchOrganizationTenants: vi.fn(async () => [{ id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one', organization_id: 'org-1' }]),
   fetchProjects: vi.fn(async () => []),
   deleteIntegration: vi.fn(async () => ({})),
   testIntegration: vi.fn(async () => ({})),
@@ -29,12 +31,34 @@ vi.mock('../services/api', () => ({
   rotateIntegrationSecret: vi.fn(async () => ({})),
 }))
 
+vi.mock('../services/api', () => ({
+  fetchIntegrationTypes: mockApi.fetchIntegrationTypes,
+  fetchIntegrations: mockApi.fetchIntegrations,
+  fetchOrganizations: mockApi.fetchOrganizations,
+  fetchOrganizationTenants: mockApi.fetchOrganizationTenants,
+  fetchProjects: mockApi.fetchProjects,
+  deleteIntegration: mockApi.deleteIntegration,
+  testIntegration: mockApi.testIntegration,
+  syncIntegrationMonitors: mockApi.syncIntegrationMonitors,
+  fetchWebhookEvents: mockApi.fetchWebhookEvents,
+  replayWebhookEvent: mockApi.replayWebhookEvent,
+  rotateIntegrationSecret: mockApi.rotateIntegrationSecret,
+}))
+
 vi.mock('../components/admin/TenantWorkspaceManager', () => ({
-  default: ({ mode }) => <div data-testid="tenant-workspace-manager">{mode}</div>,
+  default: ({ mode, initialOrganizationId }) => (
+    <div data-testid="tenant-workspace-manager">
+      {mode}:{initialOrganizationId || 'none'}
+    </div>
+  ),
 }))
 
 vi.mock('../components/admin/AccessMatrixView', () => ({
-  default: ({ organization }) => <div data-testid="access-matrix-view">{organization?.name}</div>,
+  default: ({ organization, tenants }) => (
+    <div data-testid="access-matrix-view">
+      {organization?.name}|{Array.isArray(tenants) ? tenants.length : 0}
+    </div>
+  ),
 }))
 
 vi.mock('../components/admin/TenantAccessDrawer', () => ({
@@ -51,17 +75,28 @@ import IntegrationsAdminPage from '../pages/admin/IntegrationsAdminPage'
 
 describe('admin workspace route pages', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
+    window.localStorage.clear()
     mockAuth.user = { role: 'platform_admin' }
     mockAuth.activeTenantId = 'tenant-1'
     mockAuth.activeTenant = { id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one' }
     mockAuth.activeOrganization = { id: 'org-1', name: 'Org One' }
     mockAuth.projects = []
-    mockAuth.organizations = [{ id: 'org-1', name: 'Org One' }]
+    mockAuth.organizations = [{ id: 'org-1', name: 'Org One' }, { id: 'org-2', name: 'Org Two' }]
     mockAuth.tenants = [{ id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one' }]
     mockAuth.organizationMemberships = []
+    mockApi.fetchOrganizations.mockResolvedValue([
+      { id: 'org-1', name: 'Org One', slug: 'org-one' },
+      { id: 'org-2', name: 'Org Two', slug: 'org-two' },
+    ])
+    mockApi.fetchOrganizationTenants.mockImplementation(async (organizationId) => (
+      organizationId === 'org-2'
+        ? []
+        : [{ id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one', organization_id: 'org-1' }]
+    ))
   })
 
-  it('renders the organizations admin page wrapper', () => {
+  it('renders the organizations admin page wrapper', async () => {
     render(
       <MemoryRouter>
         <OrganizationsAdminPage />
@@ -70,11 +105,26 @@ describe('admin workspace route pages', () => {
 
     expect(screen.getByText('Organization Admin')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /back to platform admin/i })).toBeInTheDocument()
-    expect(screen.getByTestId('access-matrix-view')).toHaveTextContent('Org One')
-    expect(screen.getByTestId('tenant-workspace-manager')).toHaveTextContent('organizations')
+    await waitFor(() => {
+      expect(screen.getByTestId('access-matrix-view')).toHaveTextContent('Org One|1')
+      expect(screen.getByTestId('tenant-workspace-manager')).toHaveTextContent('organizations:org-1')
+    })
   })
 
-  it('renders the tenant workspace admin page wrapper', () => {
+  it('pins org admin to the requested organization instead of falling back to the active org', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/organizations?org_id=org-2']}>
+        <OrganizationsAdminPage />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('access-matrix-view')).toHaveTextContent('Org Two|0')
+      expect(screen.getByTestId('tenant-workspace-manager')).toHaveTextContent('organizations:org-2')
+    })
+  })
+
+  it('renders the tenant workspace admin page wrapper', async () => {
     render(
       <MemoryRouter>
         <TenantWorkspaceAdminPage />
@@ -83,8 +133,23 @@ describe('admin workspace route pages', () => {
 
     expect(screen.getByText('Tenant Workspaces')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /back to platform admin/i })).toBeInTheDocument()
-    expect(screen.getByTestId('tenant-members-panel')).toHaveTextContent('Tenant One')
-    expect(screen.getByTestId('tenant-workspace-manager')).toHaveTextContent('workspace')
+    await waitFor(() => {
+      expect(screen.getByTestId('tenant-members-panel')).toHaveTextContent('Tenant One')
+    })
+  })
+
+  it('scopes the tenant workspace page to the requested organization', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/workspaces?org_id=org-2']}>
+        <TenantWorkspaceAdminPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('Tenant Workspaces')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Workspaces (0)')).toBeInTheDocument()
+      expect(screen.getByText('No workspaces found')).toBeInTheDocument()
+    })
   })
 
   it('renders the integrations admin page wrapper', async () => {

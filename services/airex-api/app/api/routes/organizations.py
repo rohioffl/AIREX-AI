@@ -1,13 +1,11 @@
 """Organization and organization-scoped tenant APIs."""
 
-import hashlib
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,14 +19,15 @@ from app.api.dependencies import (
     has_org_membership,
 )
 from airex_core.core.rbac import normalize_role_name
-from airex_core.core.security import TokenData
-from airex_core.models.api_key import ApiKey
+from airex_core.core.config import settings
+from airex_core.core.security import TokenData, generate_invitation_token
 from airex_core.models.organization import Organization
 from airex_core.models.organization_membership import OrganizationMembership
 from airex_core.models.tenant import Tenant
 from airex_core.models.tenant_membership import TenantMembership
 from airex_core.models.user import User
 from airex_core.services.audit_service import record_event
+from airex_core.services.notification_service import send_user_invitation_email
 
 router = APIRouter()
 
@@ -337,6 +336,10 @@ class OrgMemberResponse(BaseModel):
     user_id: uuid.UUID
     organization_id: uuid.UUID
     role: str
+    email: str | None = None
+    display_name: str | None = None
+    is_active: bool | None = None
+    invitation_status: str | None = None
     created_at: datetime
 
 
@@ -345,8 +348,38 @@ class OrgMemberAddRequest(BaseModel):
     role: str = Field(..., pattern=r"^(viewer|operator|admin)$")
 
 
+class InviteOrgMemberRequest(BaseModel):
+    email: EmailStr
+    role: str = Field(..., pattern=r"^(viewer|operator|admin)$")
+    home_tenant_id: uuid.UUID | None = None
+    display_name: str = Field(default="", max_length=200)
+
+
+class InviteOrgMemberResponse(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    role: str
+    organization_id: uuid.UUID
+    home_tenant_id: uuid.UUID | None = None
+    invitation_url: str | None = None
+    expires_at: datetime | None = None
+    status: str = "invited"
+
+
 class OrgMemberUpdateRequest(BaseModel):
     role: str = Field(..., pattern=r"^(viewer|operator|admin)$")
+
+
+def _invitation_status_for_user(user: User | None) -> str | None:
+    if user is None:
+        return None
+    if user.invitation_token:
+        if user.invitation_expires_at and user.invitation_expires_at < datetime.now(timezone.utc):
+            return "expired"
+        return "pending"
+    if user.hashed_password:
+        return "accepted"
+    return None
 
 
 @router.get("/organizations/{organization_id}/members", response_model=list[OrgMemberResponse])
@@ -360,20 +393,25 @@ async def list_org_members(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
 
     result = await session.execute(
-        select(OrganizationMembership)
+        select(OrganizationMembership, User)
+        .join(User, User.id == OrganizationMembership.user_id)
         .where(OrganizationMembership.organization_id == organization_id)
         .order_by(OrganizationMembership.created_at.asc())
     )
-    rows = result.scalars().all()
+    rows = result.all()
     return [
         OrgMemberResponse(
-            id=m.id,
-            user_id=m.user_id,
-            organization_id=m.organization_id,
-            role=m.role,
-            created_at=m.created_at,
+            id=membership.id,
+            user_id=membership.user_id,
+            organization_id=membership.organization_id,
+            role=membership.role,
+            email=user.email,
+            display_name=user.display_name,
+            is_active=user.is_active,
+            invitation_status=_invitation_status_for_user(user),
+            created_at=membership.created_at,
         )
-        for m in rows
+        for membership, user in rows
     ]
 
 
@@ -395,6 +433,11 @@ async def add_org_member(
     org_result = await session.execute(select(Organization.id).where(Organization.id == organization_id))
     if org_result.scalar_one_or_none() is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    user_result = await session.execute(select(User).where(User.id == body.user_id))
+    user = user_result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     existing = await session.execute(
         select(OrganizationMembership).where(
@@ -430,7 +473,158 @@ async def add_org_member(
         user_id=membership.user_id,
         organization_id=membership.organization_id,
         role=membership.role,
+        email=user.email,
+        display_name=user.display_name,
+        is_active=user.is_active,
+        invitation_status=_invitation_status_for_user(user),
         created_at=membership.created_at,
+    )
+
+
+@router.post(
+    "/organizations/{organization_id}/invite-user",
+    response_model=InviteOrgMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def invite_org_member(
+    organization_id: uuid.UUID,
+    body: InviteOrgMemberRequest,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> InviteOrgMemberResponse:
+    """Invite a new organization member without requiring tenant selection in the UI."""
+    if not await authorize_org_admin(session, current_user, organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+    org_result = await session.execute(select(Organization.id).where(Organization.id == organization_id))
+    if org_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    if body.home_tenant_id is not None:
+        tenant_result = await session.execute(
+            select(Tenant.id, Tenant.organization_id).where(Tenant.id == body.home_tenant_id)
+        )
+        tenant_row = tenant_result.first()
+        if tenant_row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Home tenant not found")
+        if tenant_row.organization_id != organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Home tenant must belong to the selected organization",
+            )
+        selected_tenant_id = body.home_tenant_id
+    else:
+        tenant_result = await session.execute(
+            select(Tenant.id)
+            .where(Tenant.organization_id == organization_id)
+            .order_by(Tenant.is_active.desc(), Tenant.display_name.asc())
+        )
+        tenant_row = tenant_result.first()
+        if tenant_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Create at least one workspace in this organization before inviting members",
+            )
+        selected_tenant_id = tenant_row.id
+
+    normalized_email = body.email.strip().lower()
+    display_name = body.display_name.strip() or normalized_email.split("@")[0]
+    token = generate_invitation_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+
+    existing_user_result = await session.execute(
+        select(User).where(func.lower(User.email) == normalized_email)
+    )
+    existing_user = existing_user_result.scalar_one_or_none()
+    invitation_url: str | None = None
+    response_expires_at: datetime | None = None
+    response_status = "invited"
+
+    if existing_user is None:
+        user = User(
+            tenant_id=selected_tenant_id,
+            email=normalized_email,
+            hashed_password=None,
+            display_name=display_name,
+            role=body.role,
+            is_active=False,
+            invitation_token=token,
+            invitation_expires_at=expires_at,
+        )
+        session.add(user)
+        await session.flush()
+        invitation_url = f"{settings.FRONTEND_URL}/set-password?token={token}"
+        response_expires_at = expires_at
+    else:
+        user = existing_user
+        if existing_user.is_active:
+            response_status = "access_granted"
+        else:
+            user.tenant_id = selected_tenant_id
+            user.display_name = display_name
+            user.role = body.role
+            user.is_active = False
+            user.hashed_password = None
+            user.invitation_token = token
+            user.invitation_expires_at = expires_at
+            invitation_url = f"{settings.FRONTEND_URL}/set-password?token={token}"
+            response_expires_at = expires_at
+        session.add(user)
+        await session.flush()
+
+    membership_result = await session.execute(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user.id,
+        )
+    )
+    membership = membership_result.scalar_one_or_none()
+    if membership is None:
+        membership = OrganizationMembership(
+            organization_id=organization_id,
+            user_id=user.id,
+            role=body.role,
+        )
+        session.add(membership)
+    else:
+        membership.role = body.role
+        session.add(membership)
+
+    await session.flush()
+
+    if response_status == "invited" and invitation_url is not None:
+        await send_user_invitation_email(
+            email=user.email,
+            display_name=display_name,
+            invitation_url=invitation_url,
+        )
+
+    await record_event(
+        session,
+        action="org_member.invited" if response_status == "invited" else "org_member.access_granted",
+        actor_id=current_user.user_id,
+        actor_email=current_user.sub,
+        actor_role=current_user.role,
+        organization_id=organization_id,
+        entity_type="org_member",
+        entity_id=str(user.id),
+        after_state={
+            "role": body.role,
+            "email": user.email,
+            "bootstrap_tenant_id": str(selected_tenant_id),
+            "status": response_status,
+        },
+    )
+
+    return InviteOrgMemberResponse(
+        user_id=user.id,
+        email=user.email,
+        role=body.role,
+        organization_id=organization_id,
+        home_tenant_id=selected_tenant_id,
+        invitation_url=invitation_url,
+        expires_at=response_expires_at,
+        status=response_status,
     )
 
 
@@ -474,11 +668,18 @@ async def update_org_member(
         after_state={"role": body.role},
     )
 
+    user_result = await session.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+
     return OrgMemberResponse(
         id=membership.id,
         user_id=membership.user_id,
         organization_id=membership.organization_id,
         role=membership.role,
+        email=user.email if user else None,
+        display_name=user.display_name if user else None,
+        is_active=user.is_active if user else None,
+        invitation_status=_invitation_status_for_user(user),
         created_at=membership.created_at,
     )
 
@@ -601,145 +802,3 @@ async def _require_org_access(
     """Raise 403 if the user cannot access the organization."""
     if not await authorize_org_admin(session, current_user, organization_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
-
-
-# ─── API Key Management ────────────────────────────────────────────────────────
-
-
-class ApiKeyResponse(BaseModel):
-    id: uuid.UUID
-    name: str
-    key_prefix: str
-    expires_at: datetime | None
-    created_at: datetime
-
-
-class ApiKeyCreateResponse(ApiKeyResponse):
-    key: str  # Only returned once at creation
-
-
-class ApiKeyCreateRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255)
-    expires_in_days: int | None = Field(None, ge=1, le=3650)
-
-
-@router.get("/organizations/{organization_id}/api-keys", response_model=list[ApiKeyResponse])
-async def list_api_keys(
-    organization_id: uuid.UUID,
-    current_user: TokenData = Depends(get_authenticated_user),
-    session: AsyncSession = Depends(get_auth_session),
-) -> list[ApiKeyResponse]:
-    """List active API keys for an organization."""
-    await _require_org_access(session, current_user, organization_id)
-
-    result = await session.execute(
-        select(ApiKey)
-        .where(ApiKey.organization_id == organization_id, ApiKey.revoked_at.is_(None))
-        .order_by(ApiKey.created_at.desc())
-    )
-    keys = result.scalars().all()
-    return [
-        ApiKeyResponse(
-            id=k.id,
-            name=k.name,
-            key_prefix=k.key_prefix,
-            expires_at=k.expires_at,
-            created_at=k.created_at,
-        )
-        for k in keys
-    ]
-
-
-@router.post(
-    "/organizations/{organization_id}/api-keys",
-    response_model=ApiKeyCreateResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_api_key(
-    organization_id: uuid.UUID,
-    body: ApiKeyCreateRequest,
-    current_user: TokenData = Depends(get_authenticated_user),
-    session: AsyncSession = Depends(get_auth_session),
-) -> ApiKeyCreateResponse:
-    """Create a new API key for an organization."""
-    await _require_org_access(session, current_user, organization_id)
-
-    raw_key = f"airex_{secrets.token_urlsafe(32)}"
-    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
-    key_prefix = raw_key[:12]
-
-    expires_at = None
-    if body.expires_in_days:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
-
-    api_key = ApiKey(
-        organization_id=organization_id,
-        name=body.name.strip(),
-        key_hash=key_hash,
-        key_prefix=key_prefix,
-        expires_at=expires_at,
-        created_by=current_user.user_id,
-    )
-    session.add(api_key)
-    await session.flush()
-
-    await record_event(
-        session,
-        action="api_key.created",
-        actor_id=current_user.user_id,
-        actor_email=current_user.sub,
-        actor_role=current_user.role,
-        organization_id=organization_id,
-        entity_type="api_key",
-        entity_id=str(api_key.id),
-        after_state={"name": api_key.name, "expires_at": expires_at.isoformat() if expires_at else None},
-    )
-
-    return ApiKeyCreateResponse(
-        id=api_key.id,
-        name=api_key.name,
-        key_prefix=api_key.key_prefix,
-        expires_at=api_key.expires_at,
-        created_at=api_key.created_at,
-        key=raw_key,
-    )
-
-
-@router.delete(
-    "/organizations/{organization_id}/api-keys/{key_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def revoke_api_key(
-    organization_id: uuid.UUID,
-    key_id: uuid.UUID,
-    current_user: TokenData = Depends(get_authenticated_user),
-    session: AsyncSession = Depends(get_auth_session),
-) -> None:
-    """Revoke an API key."""
-    await _require_org_access(session, current_user, organization_id)
-
-    result = await session.execute(
-        select(ApiKey).where(
-            ApiKey.id == key_id,
-            ApiKey.organization_id == organization_id,
-            ApiKey.revoked_at.is_(None),
-        )
-    )
-    api_key = result.scalar_one_or_none()
-    if api_key is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
-
-    api_key.revoked_at = datetime.now(timezone.utc)
-    session.add(api_key)
-
-    await record_event(
-        session,
-        action="api_key.revoked",
-        actor_id=current_user.user_id,
-        actor_email=current_user.sub,
-        actor_role=current_user.role,
-        organization_id=organization_id,
-        entity_type="api_key",
-        entity_id=str(api_key.id),
-        before_state={"name": api_key.name},
-    )

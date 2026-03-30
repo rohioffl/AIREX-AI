@@ -45,7 +45,15 @@ class KGEdge(Base, TenantMixin):
     dst_entity_id: Mapped[str] = mapped_column(nullable=False)
     # weight: increases each time the same (src, rel, dst) triple is observed
     weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    causal_confidence: Mapped[float] = mapped_column(nullable=False, default=0.5)
     meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, default=_utcnow
+    )
+    valid_from: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, default=_utcnow
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, default=_utcnow
     )

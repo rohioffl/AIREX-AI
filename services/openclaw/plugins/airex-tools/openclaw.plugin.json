@@ -1,0 +1,11 @@
+{
+  "id": "airex-tools",
+  "name": "AIREX Investigation Tools",
+  "description": "Exposes AIREX forensic probes to OpenClaw investigation agents",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

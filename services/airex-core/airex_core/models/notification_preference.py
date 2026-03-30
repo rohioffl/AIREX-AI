@@ -7,14 +7,20 @@ from sqlalchemy import Boolean, String, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from airex_core.models.base import Base, TenantMixin
+from airex_core.models.base import Base
 
 
-class NotificationPreference(Base, TenantMixin):
-    """User notification preferences for Slack and Email."""
+class NotificationPreference(Base):
+    """User notification preferences for Slack and Email.
+
+    DB PK is (tenant_id, user_id) — no separate ``id`` column (not TenantMixin).
+    """
 
     __tablename__ = "notification_preferences"
 
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=False, primary_key=True
+    )
     user_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), nullable=False, primary_key=True
     )

@@ -493,11 +493,24 @@ def _parse_recommendation(data: dict[str, Any]) -> Recommendation:
     legacy (4-field) and enhanced (full) response formats gracefully.
     """
     # Core fields (required)
+    proposed_action = data.get("proposed_action") or data.get("action_id")
+    if proposed_action is None:
+        raise KeyError("proposed_action")
+
+    risk_value = data.get("risk_level") or data.get("risk")
+    if risk_value is None:
+        raise KeyError("risk_level")
+
     core = {
-        "root_cause": data["root_cause"],
-        "proposed_action": data["proposed_action"],
-        "risk_level": RiskLevel(data["risk_level"]),
+        "root_cause": data.get("root_cause") or data.get("reason") or data.get("summary") or "",
+        "proposed_action": proposed_action,
+        "risk_level": RiskLevel(risk_value),
         "confidence": float(data["confidence"]),
+        "action_type": str(data.get("action_type") or "execute_fix"),
+        "action_id": str(data.get("action_id") or proposed_action),
+        "target": str(data.get("target") or ""),
+        "params": data.get("params") if isinstance(data.get("params"), dict) else {},
+        "reason": str(data.get("reason") or data.get("summary") or ""),
     }
 
     # Enhanced fields (optional — graceful fallback)

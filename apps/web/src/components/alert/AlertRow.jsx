@@ -47,6 +47,7 @@ export default function AlertRow({
   const durationSec = alert.meta?._alert_duration_seconds
   const durationMin = durationSec ? Math.round(durationSec / 60) : null
   const incidentReason = alert.meta?.INCIDENT_REASON || alert.meta?.INCIDENT_DETAILS
+  const tenantLabel = alert.tenant_name || alert.tenant_display_name || null
 
   const isLightMode = document.body.classList.contains('light-mode')
   
@@ -114,7 +115,7 @@ export default function AlertRow({
         </div>
       )}
       <Link
-        to={`/incidents/${alert.id}`}
+        to={`/incidents/${alert.id}${alert.tenant_id ? `?tenant_id=${encodeURIComponent(alert.tenant_id)}` : ''}`}
         className="flex items-center gap-3 px-4 py-3 flex-1"
         style={{ textDecoration: 'none', color: 'inherit', display: 'flex', width: '100%', boxSizing: 'border-box' }}
       >
@@ -186,6 +187,20 @@ export default function AlertRow({
             }}>
               {alert.alert_type}
             </span>
+            {tenantLabel && (
+              <span
+                style={{
+                  color: 'var(--neon-cyan)',
+                  background: 'rgba(34,211,238,0.08)',
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  border: '1px solid rgba(34,211,238,0.16)',
+                }}
+              >
+                {tenantLabel}
+              </span>
+            )}
             {showHost && (
               <span className="flex items-center gap-1" style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
                 <Server size={10} />

@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Shield, Trash2, UserCog } from 'lucide-react'
+import { Mail, Plus, Shield, Trash2, UserCog } from 'lucide-react'
 
 import { useToasts } from '../../context/ToastContext'
 import {
   addOrgMember,
   fetchOrgMembers,
-  fetchUserAccessibleTenants,
   fetchUsers,
   removeOrgMember,
   updateOrgMember,
 } from '../../services/api'
 import { extractErrorMessage } from '../../utils/errorHandler'
+import InviteOrgMemberModal from './InviteOrgMemberModal'
 
 const inputCls = {
   background: 'var(--bg-input)',
@@ -33,16 +33,29 @@ function initials(label) {
   return (label || '?').trim().charAt(0).toUpperCase()
 }
 
-function roleCellColor(access) {
-  if (access?.membership_role) return 'var(--brand-orange)'
-  if (access) return 'var(--neon-green)'
-  return 'var(--text-muted)'
-}
-
-function roleCellLabel(access) {
-  if (access?.membership_role) return access.membership_role
-  if (access) return 'inherited'
-  return 'none'
+function memberStatusMeta(member) {
+  if (member?.invitation_status === 'expired') {
+    return {
+      label: 'Expired',
+      color: '#f87171',
+      background: 'rgba(248,113,113,0.1)',
+      border: '1px solid rgba(248,113,113,0.24)',
+    }
+  }
+  if (member?.invitation_status === 'pending' || member?.is_active === false) {
+    return {
+      label: 'Pending',
+      color: '#f59e0b',
+      background: 'rgba(245,158,11,0.1)',
+      border: '1px solid rgba(245,158,11,0.24)',
+    }
+  }
+  return {
+    label: 'Active',
+    color: '#22c55e',
+    background: 'rgba(34,197,94,0.1)',
+    border: '1px solid rgba(34,197,94,0.24)',
+  }
 }
 
 export default function AccessMatrixView({ organization, tenants = [], onInspectUser }) {
@@ -51,10 +64,10 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
   const [addUserId, setAddUserId] = useState('')
   const [addRole, setAddRole] = useState('operator')
   const [saving, setSaving] = useState(false)
-  const [tenantAccessByUserId, setTenantAccessByUserId] = useState({})
 
   const toast = useCallback((message, severity = 'LOW', title = 'Success') => {
     addToast({ title, message, severity })
@@ -76,19 +89,6 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
       const nextMembers = Array.isArray(membersData) ? membersData : []
       setMembers(nextMembers)
       setUsers(Array.isArray(usersData) ? usersData : (usersData?.items || []))
-      const tenantAccessRows = await Promise.all(
-        nextMembers.map(async (member) => ({
-          userId: String(member.user_id),
-          rows: await fetchUserAccessibleTenants(member.user_id),
-        }))
-      )
-      const nextAccessMap = {}
-      tenantAccessRows.forEach(({ userId, rows }) => {
-        nextAccessMap[userId] = Array.isArray(rows)
-          ? rows.filter((row) => String(row.organization_id) === String(organizationId))
-          : []
-      })
-      setTenantAccessByUserId(nextAccessMap)
     } catch (err) {
       toast(extractErrorMessage(err) || 'Failed to load organization access', 'CRITICAL', 'Error')
     } finally {
@@ -110,9 +110,9 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
     [members, users]
   )
 
-  const resolveUserLabel = useCallback((userId) => {
-    const user = userMap.get(String(userId))
-    return user?.display_name || user?.email || `${String(userId).slice(0, 8)}…`
+  const resolveUserLabel = useCallback((member) => {
+    const user = userMap.get(String(member?.user_id))
+    return member?.display_name || user?.display_name || member?.email || user?.email || `${String(member?.user_id).slice(0, 8)}…`
   }, [userMap])
 
   async function handleAdd() {
@@ -121,7 +121,6 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
     try {
       const created = await addOrgMember(organizationId, { user_id: addUserId, role: addRole })
       setMembers((current) => [...current, created])
-      setTenantAccessByUserId((current) => ({ ...current, [String(created.user_id)]: [] }))
       setAddUserId('')
       setAddRole('operator')
       setShowAdd(false)
@@ -151,11 +150,6 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
     try {
       await removeOrgMember(organizationId, userId)
       setMembers((current) => current.filter((member) => String(member.user_id) !== String(userId)))
-      setTenantAccessByUserId((current) => {
-        const next = { ...current }
-        delete next[String(userId)]
-        return next
-      })
       toast('Organization member removed')
     } catch (err) {
       toast(extractErrorMessage(err) || 'Failed to remove organization member', 'CRITICAL', 'Error')
@@ -167,10 +161,10 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Access Matrix
+            Organization Members
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
-            Review organization-level roles and open tenant access details for any member in {organization?.name || 'this organization'}.
+            Review organization-level roles for members in {organization?.name || 'this organization'} and open tenant access details only when needed.
           </p>
         </div>
         <button
@@ -180,6 +174,14 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
         >
           <Plus size={14} />
           Add Org Member
+        </button>
+        <button
+          onClick={() => setShowInvite(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold"
+          style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.24)' }}
+        >
+          <Mail size={14} />
+          Invite Org Member
         </button>
       </div>
 
@@ -213,6 +215,18 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
         </div>
       )}
 
+      {showInvite && (
+        <InviteOrgMemberModal
+          organization={organization}
+          tenants={tenants}
+          onClose={() => setShowInvite(false)}
+          onInvited={() => {
+            setShowInvite(false)
+            loadMembers()
+          }}
+        />
+      )}
+
       {loading ? (
         <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px 0' }}>Loading organization access…</div>
       ) : members.length === 0 ? (
@@ -221,36 +235,49 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid var(--border)' }}>
-          <table style={{ width: '100%', minWidth: 720, borderCollapse: 'separate', borderSpacing: 0 }}>
+          <table style={{ width: '100%', minWidth: 520, borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead style={{ background: 'var(--bg-elevated)' }}>
               <tr>
                 <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border)' }}>User</th>
                 <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border)' }}>Org Role</th>
-                {tenants.map((tenant) => (
-                  <th key={tenant.id} style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border)' }}>
-                    <div>{tenant.display_name || tenant.name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500, marginTop: 4 }}>{tenant.cloud?.toUpperCase?.() || 'N/A'}</div>
-                  </th>
-                ))}
                 <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border)' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {members.map((member) => {
-                const userAccessMap = new Map(
-                  (tenantAccessByUserId[String(member.user_id)] || []).map((row) => [String(row.id), row])
-                )
+                const statusMeta = memberStatusMeta(member)
                 return (
                   <tr key={member.id || member.user_id} style={{ background: 'var(--bg-input)' }}>
                     <td style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
                       <div className="flex items-center gap-3">
                         <div className="flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0" style={{ background: 'rgba(34,211,238,0.12)', color: 'var(--neon-cyan)', fontWeight: 700 }}>
-                          {initials(resolveUserLabel(member.user_id))}
+                          {initials(resolveUserLabel(member))}
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{resolveUserLabel(member.user_id)}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                            {String(member.user_id)}
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{resolveUserLabel(member)}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {member.email || userMap.get(String(member.user_id))?.email || String(member.user_id)}
+                          </div>
+                          <div style={{ marginTop: 8 }}>
+                            <span
+                              aria-label={`Organization member status for ${resolveUserLabel(member)}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: '3px 8px',
+                                borderRadius: 999,
+                                color: statusMeta.color,
+                                background: statusMeta.background,
+                                border: statusMeta.border,
+                                letterSpacing: '0.03em',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              {statusMeta.label}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -259,7 +286,7 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
                       <div className="flex items-center gap-2 min-w-[180px]">
                         <Shield size={14} style={{ color: 'var(--text-muted)' }} />
                         <select
-                          aria-label={`Organization role for ${resolveUserLabel(member.user_id)}`}
+                          aria-label={`Organization role for ${resolveUserLabel(member)}`}
                           value={member.role}
                           onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
                           style={{ ...inputCls, padding: '6px 10px' }}
@@ -270,24 +297,16 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
                         </select>
                       </div>
                     </td>
-                    {tenants.map((tenant) => {
-                      const access = userAccessMap.get(String(tenant.id))
-                      return (
-                        <td key={`${member.user_id}-${tenant.id}`} style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
-                          <div
-                            aria-label={`Access cell ${resolveUserLabel(member.user_id)} ${tenant.display_name || tenant.name}`}
-                            className="inline-flex items-center gap-2 rounded-lg px-3 py-2"
-                            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', color: roleCellColor(access), fontSize: 12, fontWeight: 700, textTransform: 'capitalize' }}
-                          >
-                            <span>{roleCellLabel(access)}</span>
-                          </div>
-                        </td>
-                      )
-                    })}
                     <td style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => onInspectUser?.(userMap.get(String(member.user_id)) || { id: member.user_id, display_name: resolveUserLabel(member.user_id) })}
+                          onClick={() => onInspectUser?.(userMap.get(String(member.user_id)) || {
+                            id: member.user_id,
+                            display_name: resolveUserLabel(member),
+                            email: member.email,
+                            is_active: member.is_active,
+                            invitation_status: member.invitation_status,
+                          })}
                           className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold"
                           style={{ background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.2)', color: 'var(--neon-cyan)' }}
                         >

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airex_core.actions.registry import get_action
 from airex_core.core.config import settings
 from airex_core.core.context_resolver import resolve_execution_context
+from airex_core.core.execution_safety import evaluate_execution_guard
 from airex_core.core.events import (
     emit_execution_completed,
     emit_execution_log,
@@ -197,6 +198,17 @@ async def execute_action(
             cloud=exec_ctx.cloud,
             environment=exec_ctx.environment,
         )
+
+        execution_guard = await evaluate_execution_guard(
+            session,
+            incident.tenant_id,
+            action_type,
+            exec_params,
+            exec_ctx=exec_ctx,
+        )
+        if not execution_guard.valid:
+            raise ValueError(f"Execution guard failed: {execution_guard.reason}")
+        exec_params["_execution_guard"] = execution_guard.model_dump()
 
         result = await asyncio.wait_for(
             action.execute(exec_params),

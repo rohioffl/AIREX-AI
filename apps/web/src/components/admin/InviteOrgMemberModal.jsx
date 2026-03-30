@@ -1,0 +1,216 @@
+import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Building2, Mail, X } from 'lucide-react'
+
+import { useToasts } from '../../context/ToastContext'
+import { inviteOrgMember } from '../../services/api'
+import { extractErrorMessage } from '../../utils/errorHandler'
+
+const inputCls = {
+  background: 'var(--bg-input)',
+  border: '1px solid var(--border)',
+  color: 'var(--text-primary)',
+  borderRadius: 8,
+  padding: '8px 12px',
+  fontSize: 13,
+  outline: 'none',
+  width: '100%',
+}
+
+const ROLE_OPTIONS = [
+  { value: 'viewer', label: 'Viewer' },
+  { value: 'operator', label: 'Operator' },
+  { value: 'admin', label: 'Admin' },
+]
+
+export default function InviteOrgMemberModal({ organization, tenants = [], onClose, onInvited }) {
+  const { addToast } = useToasts()
+  const [email, setEmail] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [role, setRole] = useState('operator')
+  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState(null)
+
+  const sortedTenants = useMemo(
+    () => [...tenants].sort((a, b) => String(a.display_name || a.name).localeCompare(String(b.display_name || b.name))),
+    [tenants]
+  )
+  const hasTenants = sortedTenants.length > 0
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!email.trim() || !hasTenants) return
+    setSaving(true)
+    try {
+      const data = await inviteOrgMember(organization.id, {
+        email: email.trim(),
+        display_name: displayName.trim(),
+        role,
+      })
+      setResult(data)
+      onInvited?.(data)
+      if (data.status === 'access_granted') {
+        addToast({ title: 'Access granted', message: `${data.email} was added to the organization`, severity: 'LOW' })
+      } else {
+        addToast({ title: 'Invitation sent', message: `Org invite sent to ${data.email}`, severity: 'LOW' })
+      }
+    } catch (err) {
+      addToast({ title: 'Error', message: extractErrorMessage(err) || 'Failed to invite organization member', severity: 'CRITICAL' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
+    >
+      <div
+        className="glass rounded-2xl p-6 w-full max-w-md space-y-5 relative"
+        style={{ border: '1px solid var(--border)', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+          aria-label="Close"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="flex items-center gap-2">
+          <Building2 size={18} style={{ color: 'var(--neon-cyan)' }} />
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', margin: 0 }}>
+            Invite Org Member to {organization?.name || 'Organization'}
+          </h3>
+        </div>
+
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+          The invited user will receive organization-wide access. No tenant selection is needed in this flow.
+        </p>
+
+        {!result ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                Email address <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                type="email"
+                required
+                aria-label="Org member invite email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="user@example.com"
+                style={inputCls}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                Display name <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
+              </label>
+              <input
+                type="text"
+                aria-label="Org member invite display name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Jane Doe"
+                maxLength={200}
+                style={inputCls}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Organization role</label>
+              <select value={role} onChange={(e) => setRole(e.target.value)} style={inputCls} aria-label="Invited org member role">
+                {ROLE_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {!hasTenants ? (
+              <div
+                className="rounded-xl p-3"
+                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.24)' }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#f87171' }}>
+                  Create a workspace first
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  This organization does not have any workspaces yet. Add one before inviting org members.
+                </div>
+              </div>
+            ) : (
+              <div
+                className="rounded-xl p-3"
+                style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.24)' }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--neon-cyan)' }}>
+                  Org access covers all workspaces
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  Members invited here inherit access across the organization and can switch between available workspaces after they sign in.
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end pt-1">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving || !email.trim() || !hasTenants}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                style={{ background: 'var(--gradient-primary)', color: '#fff' }}
+              >
+                <Mail size={14} />
+                {saving ? 'Sending…' : 'Send Invite'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-xl p-4 space-y-2" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.24)' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#22c55e' }}>
+                {result.status === 'access_granted' ? 'Access granted' : 'Invitation sent'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {result.status === 'access_granted'
+                  ? (
+                    <>
+                      <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong> already had an account and has now been added to this organization.
+                    </>
+                  )
+                  : (
+                    <>
+                      An organization invite has been sent to <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong>. It expires in 7 days.
+                    </>
+                  )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--gradient-primary)', color: '#fff' }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  )
+}

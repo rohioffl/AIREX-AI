@@ -2,6 +2,7 @@
 
 import time
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 import redis.asyncio as aioredis
 import structlog
@@ -14,11 +15,11 @@ from app.api.routes import (
     admin_auth,
     analytics,
     anomalies,
-    audit_events,
     auth,
     chat,
+    cloud_accounts,
     dlq,
-    health_checks,
+    internal_tools,
     integrations,
     incidents,
     knowledge_base,
@@ -34,7 +35,6 @@ from app.api.routes import (
     runbook_executions,
     runbooks,
     settings as settings_router,
-    site24x7,
     sse,
     templates,
     tenant_members,
@@ -44,6 +44,7 @@ from app.api.routes import (
 )
 from airex_core.core.config import settings
 from airex_core.core.events import set_redis
+from airex_core.core.investigation_bridge import InvestigationBridge
 from airex_core.core.logging import setup_logging
 from airex_core.core.csrf import CSRFMiddleware
 from airex_core.core.metrics import http_request_duration_seconds
@@ -52,6 +53,7 @@ from airex_core.core.metrics import http_request_duration_seconds
 setup_logging(json_output=False)
 
 logger = structlog.get_logger()
+openclaw_bridge = InvestigationBridge()
 
 
 @asynccontextmanager
@@ -125,6 +127,28 @@ async def health_check():
     return {"status": "ok", "service": "airex-backend"}
 
 
+@app.get("/health/openclaw")
+async def health_check_openclaw():
+    parsed = urlparse(settings.OPENCLAW_GATEWAY_URL)
+    gateway = {
+        "enabled": settings.OPENCLAW_ENABLED,
+        "url": settings.OPENCLAW_GATEWAY_URL,
+        "host": parsed.hostname or "",
+        "port": parsed.port,
+        "has_token": bool(settings.OPENCLAW_GATEWAY_TOKEN),
+    }
+
+    probe = await openclaw_bridge.ping()
+    status = "ok" if probe.get("reachable") else "degraded"
+
+    return {
+        "status": status,
+        "service": "airex-openclaw-bridge",
+        "gateway": gateway,
+        "probe": probe,
+    }
+
+
 # Prometheus metrics endpoint
 @app.get("/metrics")
 async def prometheus_metrics():
@@ -149,6 +173,11 @@ app.include_router(
     webhooks.router,
     prefix=f"{settings.API_V1_STR}/webhooks",
     tags=["webhooks"],
+)
+app.include_router(
+    internal_tools.router,
+    prefix=f"{settings.API_V1_STR}/internal/tools",
+    tags=["internal-tools"],
 )
 app.include_router(
     incidents.router,
@@ -176,11 +205,6 @@ app.include_router(
     tags=["organizations"],
 )
 app.include_router(
-    audit_events.router,
-    prefix=f"{settings.API_V1_STR}",
-    tags=["audit-events"],
-)
-app.include_router(
     platform_admin.router,
     prefix=f"{settings.API_V1_STR}/platform",
     tags=["platform-admin"],
@@ -201,6 +225,11 @@ app.include_router(
     tags=["integrations"],
 )
 app.include_router(
+    cloud_accounts.router,
+    prefix=f"{settings.API_V1_STR}",
+    tags=["cloud-accounts"],
+)
+app.include_router(
     users.router,
     prefix=f"{settings.API_V1_STR}/users",
     tags=["users"],
@@ -219,16 +248,6 @@ app.include_router(
     settings_router.router,
     prefix=f"{settings.API_V1_STR}/settings",
     tags=["settings"],
-)
-app.include_router(
-    health_checks.router,
-    prefix=f"{settings.API_V1_STR}/health-checks",
-    tags=["health-checks"],
-)
-app.include_router(
-    site24x7.router,
-    prefix=f"{settings.API_V1_STR}/site24x7",
-    tags=["site24x7"],
 )
 app.include_router(
     analytics.router,

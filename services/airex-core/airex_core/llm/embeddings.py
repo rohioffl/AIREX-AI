@@ -14,6 +14,11 @@ from airex_core.llm import build_llm_headers, configure_litellm
 
 logger = structlog.get_logger()
 
+_PROXY_EMBEDDING_MODEL_ALIASES = {
+    "text-embedding-3-large": "text-embedding",
+    "text-embedding-3-small": "text-embedding",
+}
+
 
 class EmbeddingsClient:
     """Thin wrapper for litellm embeddings with instrumentation."""
@@ -44,13 +49,7 @@ class EmbeddingsClient:
 
         ai_request_total.labels(model=self._model).inc()
 
-        # When routing through a LiteLLM proxy, use the openai/
-        # prefix so the local litellm SDK treats it as an
-        # OpenAI-compatible endpoint and forwards to the proxy.
-        effective_model = self._model
-        if settings.LLM_BASE_URL:
-            if not self._model.startswith("openai/"):
-                effective_model = f"openai/{self._model}"
+        effective_model = self._resolve_effective_model()
 
         kwargs: dict[str, object] = {
             "model": effective_model,
@@ -96,6 +95,19 @@ class EmbeddingsClient:
                 error_type="embedding_failure",
             ).inc()
             raise RuntimeError("Embedding request failed") from exc
+
+    def _resolve_effective_model(self) -> str:
+        """Normalize embedding model names for local proxy routing."""
+
+        effective_model = self._model
+        if settings.LLM_BASE_URL:
+            effective_model = _PROXY_EMBEDDING_MODEL_ALIASES.get(
+                effective_model,
+                effective_model,
+            )
+            if not effective_model.startswith("openai/"):
+                effective_model = f"openai/{effective_model}"
+        return effective_model
 
 
 __all__ = ["EmbeddingsClient"]

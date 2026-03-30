@@ -57,6 +57,15 @@ docker-compose up -d                         # full stack
 docker-compose run migrate                   # run migrations in container
 ```
 
+### OpenClaw gateway (optional — Phase 2 InvestigationBridge)
+```bash
+./scripts/openclaw-setup.sh && ./scripts/openclaw-seed-config.sh
+# npm: npm install -g openclaw && openclaw onboard && openclaw gateway --port 18789
+docker compose --env-file .env -f services/openclaw/docker-compose.yml up -d
+# docker compose -f docker-compose.openclaw.yml up -d openclaw-gateway   # thin wrapper (same stack)
+```
+See `services/openclaw/README.md`, `docs/openclaw_local_setup.md`, and `services/openclaw/env.example`.
+
 ### Pre-PR Validation
 ```bash
 cd services/airex-core && python3 -m compileall airex_core
@@ -72,6 +81,7 @@ cd ../apps/web && npm run lint && npm run test && npm run build
 ```
 services/airex-core/  # shared package (models/services/core/schemas/cloud/llm/actions/...)
 services/airex-api/   # FastAPI runtime package + Dockerfile
+services/openclaw/    # optional OpenClaw gateway Docker compose + env (Phase 2)
 services/airex-worker/# ARQ worker runtime package + Dockerfile
 apps/web/             # React 19 + Vite 7 frontend + Dockerfile
 config/               # Static config samples; tenant registry + credentials metadata live in PostgreSQL

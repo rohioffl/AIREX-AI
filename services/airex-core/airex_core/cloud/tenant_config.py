@@ -589,3 +589,272 @@ def resolve_tenant_id_by_name(tenant_name: str, config_path: str = "") -> str:
     if config and config.tenant_id:
         return config.tenant_id
     return ""
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Multi-Account Credential Resolution  (§7.4 of the SM plan)
+# ═══════════════════════════════════════════════════════════════════
+
+
+async def get_effective_cloud_config(
+    tenant_id: str,
+    cloud_account_binding_id: str | None = None,
+    db_session: Any = None,
+) -> AWSConfig | GCPConfig | None:
+    """Return a fully-merged cloud config for *one* binding.
+
+    Resolution order (§7.4):
+      1. If ``cloud_account_binding_id`` is provided — load that binding row.
+      2. Else load the default binding for the tenant (``is_default = true``).
+      3. Merge ``binding.config_json`` into a typed config object.
+      4. If ``binding.credentials_secret_arn`` is set — fetch JSON from
+         AWS Secrets Manager and overlay static keys / SA JSON.
+      5. If no binding found — fall back to legacy ``get_tenant_config``
+         (single-account JSONB on the ``tenants`` row).
+
+    Args:
+        tenant_id: UUID string of the tenant.
+        cloud_account_binding_id: UUID string of the specific binding to use.
+            Pass ``None`` to use the default binding.
+        db_session: Optional async SQLAlchemy session.  A new connection is
+            opened (and closed) when ``None`` is given.
+
+    Returns:
+        ``AWSConfig`` for AWS bindings, ``GCPConfig`` for GCP bindings, or
+        ``None`` if no binding or legacy config exists.
+    """
+    binding_row = await _fetch_binding(tenant_id, cloud_account_binding_id, db_session)
+
+    if binding_row is None:
+        # Fall back to legacy single-account JSONB on the tenants table
+        logger.debug(
+            "effective_cloud_config_fallback_legacy",
+            tenant_id=tenant_id,
+            binding_id=cloud_account_binding_id,
+        )
+        return _legacy_config_for_tenant(tenant_id)
+
+    provider: str = binding_row["provider"]
+    config_json: dict = binding_row["config_json"] or {}
+    secret_arn: str | None = binding_row["credentials_secret_arn"]
+    binding_id: str = str(binding_row["id"])
+
+    logger.debug(
+        "effective_cloud_config_binding_loaded",
+        tenant_id=tenant_id,
+        binding_id=binding_id,
+        provider=provider,
+        has_secret_arn=bool(secret_arn),
+    )
+
+    if provider == "aws":
+        return _build_aws_config(config_json, secret_arn, tenant_id, binding_id)
+    if provider == "gcp":
+        return _build_gcp_config(config_json, secret_arn, tenant_id, binding_id)
+
+    logger.warning(
+        "effective_cloud_config_unknown_provider",
+        provider=provider,
+        binding_id=binding_id,
+    )
+    return None
+
+
+# ── Internal helpers ──────────────────────────────────────────────
+
+
+async def _fetch_binding(
+    tenant_id: str,
+    binding_id: str | None,
+    db_session: Any,
+) -> dict | None:
+    """Fetch a single cloud_account_bindings row as a plain dict.
+
+    Uses asyncpg directly (same pattern as ``_fetch_active_tenants``) so this
+    module stays free of a SQLAlchemy session dependency at import time.
+    """
+    import json as _json
+
+    try:
+        import asyncpg
+        from airex_core.core.config import settings
+
+        sync_url = settings.DATABASE_URL.replace(
+            "postgresql+asyncpg://", "postgresql://"
+        )
+
+        if binding_id:
+            query = """
+                SELECT id, tenant_id, provider, config_json,
+                       credentials_secret_arn, is_default
+                FROM cloud_account_bindings
+                WHERE tenant_id = $1::uuid AND id = $2::uuid
+                LIMIT 1
+            """
+            params = (tenant_id, binding_id)
+        else:
+            query = """
+                SELECT id, tenant_id, provider, config_json,
+                       credentials_secret_arn, is_default
+                FROM cloud_account_bindings
+                WHERE tenant_id = $1::uuid AND is_default = true
+                LIMIT 1
+            """
+            params = (tenant_id,)
+
+        conn = await asyncpg.connect(
+            sync_url,
+            timeout=_DB_CONNECT_TIMEOUT_SECONDS,
+            command_timeout=_DB_FETCH_TIMEOUT_SECONDS,
+        )
+        await conn.set_type_codec(
+            "jsonb",
+            encoder=_json.dumps,
+            decoder=_json.loads,
+            schema="pg_catalog",
+        )
+        try:
+            row = await conn.fetchrow(query, *params)
+        finally:
+            await conn.close()
+
+        if row is None:
+            return None
+        return dict(row)
+
+    except Exception as exc:
+        logger.warning(
+            "effective_cloud_config_binding_fetch_failed",
+            tenant_id=tenant_id,
+            binding_id=binding_id,
+            error=str(exc),
+        )
+        return None
+
+
+def _build_aws_config(
+    config_json: dict,
+    secret_arn: str | None,
+    tenant_id: str,
+    binding_id: str,
+) -> AWSConfig:
+    """Build AWSConfig from binding config_json, overlaying Secrets Manager material."""
+    aws = AWSConfig(
+        region=config_json.get("region", ""),
+        role_arn=config_json.get("role_arn", ""),
+        role_name=config_json.get("role_name", ""),
+        account_id=str(config_json.get("account_id", "")),
+        external_id=config_json.get("external_id", ""),
+        ssm_document=config_json.get("ssm_document", "AWS-RunShellScript"),
+        ssm_timeout=int(config_json.get("ssm_timeout", 30)),
+        log_group_prefix=config_json.get("log_group_prefix", ""),
+    )
+
+    if not secret_arn:
+        return aws
+
+    # Overlay static credentials from Secrets Manager
+    try:
+        from airex_core.cloud.secret_resolver import (  # noqa: PLC0415
+            SecretResolverError,
+            get_secret_json,
+        )
+
+        payload = get_secret_json(secret_arn, tenant_id=tenant_id)
+        static = payload.get("static", {})
+        if static.get("access_key_id") and static.get("secret_access_key"):
+            aws.access_key_id = static["access_key_id"]
+            aws.secret_access_key = static["secret_access_key"]
+            if static.get("region") and not aws.region:
+                aws.region = static["region"]
+    except Exception as exc:  # SecretResolverError or import error
+        logger.error(
+            "effective_cloud_config_secret_fetch_failed",
+            binding_id=binding_id,
+            tenant_id=tenant_id,
+            error=str(exc),
+        )
+
+    return aws
+
+
+def _build_gcp_config(
+    config_json: dict,
+    secret_arn: str | None,
+    tenant_id: str,
+    binding_id: str,
+) -> GCPConfig:
+    """Build GCPConfig from binding config_json, overlaying Secrets Manager SA JSON."""
+    gcp = GCPConfig(
+        project_id=config_json.get("project_id", ""),
+        zone=config_json.get("zone", ""),
+        os_login_user=config_json.get("os_login_user", ""),
+        log_explorer_enabled=bool(config_json.get("log_explorer_enabled", True)),
+    )
+
+    if not secret_arn:
+        return gcp
+
+    # Overlay service account key from Secrets Manager
+    try:
+        from airex_core.cloud.secret_resolver import (  # noqa: PLC0415
+            SecretResolverError,
+            get_secret_json,
+        )
+        import json as _json  # noqa: PLC0415
+
+        payload = get_secret_json(secret_arn, tenant_id=tenant_id)
+        # Store SA JSON as a string (matches GCPConfig.service_account_key contract)
+        if payload.get("kind") == "gcp_service_account" or payload.get("type") == "service_account":
+            gcp.service_account_key = _json.dumps(payload)
+            if payload.get("project_id") and not gcp.project_id:
+                gcp.project_id = payload["project_id"]
+    except Exception as exc:
+        logger.error(
+            "effective_cloud_config_secret_fetch_failed",
+            binding_id=binding_id,
+            tenant_id=tenant_id,
+            error=str(exc),
+        )
+
+    return gcp
+
+
+def _legacy_config_for_tenant(tenant_id: str) -> AWSConfig | GCPConfig | None:
+    """Return the legacy single-account config from the tenants JSONB columns.
+
+    Scans cached tenant entries for a matching tenant_id and returns the
+    appropriate cloud config dataclass.  Returns ``None`` when not found.
+    """
+    with _CACHE_LOCK:
+        cached = dict(_config_cache)
+
+    for _name, raw in cached.get("tenants", {}).items():
+        if str(raw.get("tenant_id", "")) == tenant_id:
+            cloud = raw.get("cloud", "aws")
+            if cloud == "gcp" and raw.get("gcp"):
+                gcp_raw = raw["gcp"]
+                return GCPConfig(
+                    project_id=gcp_raw.get("project_id", ""),
+                    zone=gcp_raw.get("zone", ""),
+                    service_account_key=gcp_raw.get("service_account_key", ""),
+                    os_login_user=gcp_raw.get("os_login_user", ""),
+                    log_explorer_enabled=gcp_raw.get("log_explorer_enabled", True),
+                )
+            if raw.get("aws"):
+                aws_raw = raw["aws"]
+                return AWSConfig(
+                    region=aws_raw.get("region", ""),
+                    profile=aws_raw.get("profile", ""),
+                    ssm_document=aws_raw.get("ssm_document", "AWS-RunShellScript"),
+                    ssm_timeout=aws_raw.get("ssm_timeout", 30),
+                    log_group_prefix=aws_raw.get("log_group_prefix", ""),
+                    account_id=str(aws_raw.get("account_id", "")),
+                    role_arn=aws_raw.get("role_arn", ""),
+                    role_name=aws_raw.get("role_name", ""),
+                    external_id=aws_raw.get("external_id", ""),
+                    credentials_file=aws_raw.get("credentials_file", ""),
+                    access_key_id=aws_raw.get("access_key_id", ""),
+                    secret_access_key=aws_raw.get("secret_access_key", ""),
+                )
+    return None

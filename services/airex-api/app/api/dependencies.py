@@ -2,6 +2,7 @@
 FastAPI dependencies for tenant context, DB sessions, Redis, and RBAC.
 """
 
+import hmac
 import hashlib
 import uuid
 from collections.abc import AsyncGenerator
@@ -164,6 +165,26 @@ def require_authenticated_user(current_user: TokenData | None) -> TokenData:
             detail="Authentication required",
         )
     return current_user
+
+
+async def require_internal_tool_access(
+    x_internal_tool_token: str | None = Header(None, alias="X-Internal-Tool-Token"),
+) -> None:
+    """Require the shared secret used by the internal OpenClaw tool server."""
+    configured_token = settings.OPENCLAW_TOOL_SERVER_TOKEN or settings.OPENCLAW_GATEWAY_TOKEN
+    if not configured_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Internal tool server token is not configured",
+        )
+    if not x_internal_tool_token or not hmac.compare_digest(
+        x_internal_tool_token,
+        configured_token,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid internal tool token",
+        )
 
 
 async def get_authenticated_user(

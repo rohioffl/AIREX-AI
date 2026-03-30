@@ -323,7 +323,6 @@ async def discover_instance_cached(
     project_id: str = "",
     region: str = "",
     sa_key_path: str = "",
-    aws_profile: str = "",
     aws_config: AWSConfig | None = None,
     redis: Any = None,
 ) -> DiscoveredInstance | None:

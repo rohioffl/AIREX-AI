@@ -1,7 +1,7 @@
 """Tests for Confidence Validator — Phase 6 Operational Polish."""
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -13,6 +13,8 @@ def _make_incident(alert_type: str = "high_cpu") -> MagicMock:
     inc.id = uuid.uuid4()
     inc.tenant_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
     inc.alert_type = alert_type
+    inc.meta = {}
+    inc.evidence = []
     return inc
 
 
@@ -51,7 +53,7 @@ class TestValidateConfidence:
         session = _make_session(kg_count=1)
         incident = _make_incident()
 
-        result = await validate_confidence(
+        await validate_confidence(
             session=session,
             incident=incident,
             proposed_action="restart_service",
@@ -161,7 +163,7 @@ class TestValidateConfidence:
 
     @pytest.mark.asyncio
     async def test_result_always_has_required_keys(self):
-        """All three keys must always be present in the result dict."""
+        """Core keys and composite confidence metadata must always be present."""
         session = _make_session(kg_count=0)
         incident = _make_incident()
 
@@ -175,3 +177,54 @@ class TestValidateConfidence:
             assert "valid" in result
             assert "warning" in result
             assert "kg_resolution_count" in result
+            assert "confidence_breakdown" in result
+            assert "grounding_summary" in result
+            assert "composite_confidence" in result["confidence_breakdown"]
+
+    @pytest.mark.asyncio
+    async def test_composite_confidence_penalizes_high_confidence_without_kg_support(self):
+        session = _make_session(kg_count=0)
+        incident = _make_incident()
+
+        result = await validate_confidence(
+            session=session,
+            incident=incident,
+            proposed_action="restart_service",
+            confidence=0.92,
+        )
+
+        breakdown = result["confidence_breakdown"]
+        assert breakdown["model_confidence"] == 0.92
+        assert breakdown["composite_confidence"] < breakdown["model_confidence"]
+        assert breakdown["hallucination_penalty"] > 0
+
+    @pytest.mark.asyncio
+    async def test_composite_confidence_rewards_grounded_openclaw_evidence(self):
+        session = _make_session(kg_count=2)
+        incident = _make_incident()
+        incident.meta = {
+            "openclaw": {
+                "affected_entities": ["host:web-01", "service:checkout"],
+                "raw_refs": {
+                    "forensic_tools": ["cpu_diagnostics", "log_analysis"],
+                    "cpu_diagnostics": "PID 1325 java -jar app.jar at 96% CPU",
+                },
+            }
+        }
+        incident.evidence = [
+            MagicMock(tool_name="openclaw", raw_output="CPU investigation complete"),
+            MagicMock(tool_name="cpu_diagnostics", raw_output="Overall CPU Usage: 96%"),
+        ]
+
+        result = await validate_confidence(
+            session=session,
+            incident=incident,
+            proposed_action="kill_process",
+            confidence=0.88,
+        )
+
+        breakdown = result["confidence_breakdown"]
+        assert breakdown["tool_grounding_score"] > 0.5
+        assert breakdown["evidence_strength_score"] > 0.5
+        assert breakdown["kg_match_score"] > 0
+        assert "OpenClaw forensic tool" in result["grounding_summary"]

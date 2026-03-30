@@ -2,6 +2,7 @@
   "name": "airex-e2e",
   "private": true,
   "scripts": {
+    "setup": "npx playwright install --with-deps chromium",
     "test": "npx playwright test",
     "test:headed": "npx playwright test --headed",
     "test:ui": "npx playwright test --ui",

@@ -15,9 +15,6 @@ import RejectedPage from './pages/RejectedPage'
 import DashboardPage from './pages/DashboardPage'
 import LiveFeed from './pages/LiveFeed'
 import SettingsPage from './pages/SettingsPage'
-import SuperAdminPage from './pages/SuperAdminPage'
-import HealthChecksPage from './pages/HealthChecksPage'
-import LiveMonitoringPage from './pages/LiveMonitoringPage'
 import SetPasswordPage from './pages/SetPasswordPage'
 import NotFoundPage from './pages/NotFoundPage'
 import AnalyticsPage from './pages/AnalyticsPage'
@@ -29,8 +26,8 @@ import ProfilePage from './pages/ProfilePage'
 import OrganizationsAdminPage from './pages/admin/OrganizationsAdminPage'
 import TenantWorkspaceAdminPage from './pages/admin/TenantWorkspaceAdminPage'
 import IntegrationsAdminPage from './pages/admin/IntegrationsAdminPage'
+import CloudAccountsPage from './pages/admin/CloudAccountsPage'
 import PlatformAdminPage from './pages/PlatformAdminPage'
-import OrgSettingsPage from './pages/OrgSettingsPage'
 
 export default function App() {
   return (
@@ -58,7 +55,7 @@ export default function App() {
                       <Route path="/dashboard" element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
                       <Route path="/incidents/:id" element={<ErrorBoundary><IncidentDetail /></ErrorBoundary>} />
                       <Route path="/alerts" element={<ErrorBoundary><AlertsPage /></ErrorBoundary>} />
-                      <Route path="/proactive" element={<Navigate to="/health-checks/site24x7?tab=ai-alerts" replace />} />
+
                       <Route path="/rejected" element={<ErrorBoundary><RejectedPage /></ErrorBoundary>} />
                       <Route path="/live" element={<ErrorBoundary><LiveFeed /></ErrorBoundary>} />
                       <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
@@ -68,12 +65,11 @@ export default function App() {
                       <Route path="/runbooks" element={<ErrorBoundary><RunbooksPage /></ErrorBoundary>} />
                       <Route path="/patterns" element={<ErrorBoundary><PatternsPage /></ErrorBoundary>} />
                       <Route path="/profile" element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
-                      <Route path="/org-settings" element={<ErrorBoundary><OrgSettingsPage /></ErrorBoundary>} />
-                      <Route path="/health-checks" element={<ErrorBoundary><LiveMonitoringPage /></ErrorBoundary>} />
-                      <Route path="/health-checks/site24x7" element={<ErrorBoundary><HealthChecksPage /></ErrorBoundary>} />
+                      <Route path="/org-settings" element={<Navigate to="/dashboard" replace />} />
+
                       <Route path="/org-admin" element={
                         <RequireRole access="organizations_admin">
-                          <ErrorBoundary><SuperAdminPage /></ErrorBoundary>
+                          <Navigate to="/admin/organizations" replace />
                         </RequireRole>
                       } />
                       <Route path="/admin/organizations" element={
@@ -89,6 +85,11 @@ export default function App() {
                       <Route path="/admin/integrations" element={
                         <RequireRole access="tenant_admin">
                           <ErrorBoundary><IntegrationsAdminPage /></ErrorBoundary>
+                        </RequireRole>
+                      } />
+                      <Route path="/admin/cloud-accounts" element={
+                        <RequireRole access="tenant_admin">
+                          <ErrorBoundary><CloudAccountsPage /></ErrorBoundary>
                         </RequireRole>
                       } />
                       <Route path="*" element={<NotFoundPage />} />

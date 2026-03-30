@@ -35,8 +35,19 @@ api.interceptors.request.use((config) => {
     config.headers['X-CSRF-Token'] = csrf
   }
   const activeTenantId = typeof window !== 'undefined' ? localStorage.getItem(ACTIVE_TENANT_KEY) : null
-  if (activeTenantId) {
+  const requestPath = String(config.url || '')
+  const isTenantNeutralAuthRoute =
+    requestPath.startsWith('/auth/login') ||
+    requestPath.startsWith('/auth/google') ||
+    requestPath.startsWith('/auth/refresh') ||
+    requestPath.startsWith('/auth/admin/login') ||
+    requestPath.startsWith('/auth/admin/google') ||
+    requestPath.startsWith('/auth/register')
+
+  if (activeTenantId && !isTenantNeutralAuthRoute) {
     config.headers['X-Active-Tenant-Id'] = activeTenantId
+  } else {
+    delete config.headers['X-Active-Tenant-Id']
   }
   return config
 })
@@ -71,7 +82,17 @@ api.interceptors.response.use(
   }
 )
 
-export async function fetchIncidents({ state, severity, alertType, search, host_key, limit = 50, cursor, offset = 0 } = {}) {
+export async function fetchIncidents({
+  state,
+  severity,
+  alertType,
+  search,
+  host_key,
+  limit = 50,
+  cursor,
+  offset = 0,
+  organizationId = null,
+} = {}) {
   const params = { limit }
   if (state) params.state = state
   if (severity) params.severity = severity
@@ -80,7 +101,10 @@ export async function fetchIncidents({ state, severity, alertType, search, host_
   if (host_key) params.host_key = host_key
   if (cursor) params.cursor = cursor
   else if (offset) params.offset = offset
-  const res = await api.get('/incidents/', { params })
+  const url = organizationId
+    ? `/incidents/organizations/${organizationId}`
+    : '/incidents/'
+  const res = await api.get(url, { params })
   return res.data
 }
 
@@ -105,8 +129,12 @@ export async function fetchAuthMe(tenantId = null) {
   return res.data
 }
 
-export async function fetchIncident(id) {
-  const res = await api.get(`/incidents/${id}`)
+export async function fetchIncident(id, tenantId = null) {
+  const headers = {}
+  if (tenantId) {
+    headers['X-Active-Tenant-Id'] = tenantId
+  }
+  const res = await api.get(`/incidents/${id}`, { headers })
   return res.data
 }
 
@@ -159,25 +187,6 @@ export async function fetchUser(id) {
   return res.data
 }
 
-export async function createUser(data) {
-  const res = await api.post('/users/', data)
-  return res.data
-}
-
-export async function updateUser(id, data) {
-  const res = await api.patch(`/users/${id}`, data)
-  return res.data
-}
-
-export async function deleteUser(id) {
-  await api.delete(`/users/${id}`)
-}
-
-export async function resendInvitation(userId) {
-  const res = await api.post(`/users/${userId}/resend-invitation`)
-  return res.data
-}
-
 // Acknowledge incident
 export async function acknowledgeIncident(id) {
   const res = await api.post(`/incidents/${id}/acknowledge`)
@@ -211,11 +220,6 @@ export async function createOrganization(data) {
   return res.data
 }
 
-export async function updateOrganization(organizationId, data) {
-  const res = await api.put(`/organizations/${organizationId}`, data)
-  return res.data
-}
-
 export async function fetchOrganizationTenants(organizationId) {
   const res = await api.get(`/organizations/${organizationId}/tenants`)
   return res.data
@@ -234,6 +238,11 @@ export async function fetchOrgMembers(organizationId) {
 
 export async function addOrgMember(organizationId, data) {
   const res = await api.post(`/organizations/${organizationId}/members`, data)
+  return res.data
+}
+
+export async function inviteOrgMember(organizationId, data) {
+  const res = await api.post(`/organizations/${organizationId}/invite-user`, data)
   return res.data
 }
 
@@ -266,9 +275,16 @@ export async function removeTenantMember(tenantId, userId) {
   await api.delete(`/tenants/${tenantId}/members/${userId}`)
 }
 
-// Accessible tenants for the current authenticated user
-export async function fetchUserAccessibleTenants() {
-  const res = await api.get('/tenants/accessible')
+export async function inviteTenantUser(tenantId, data) {
+  const res = await api.post(`/tenants/${tenantId}/invite-user`, data)
+  return res.data
+}
+
+// Accessible tenants for a specific user when provided, otherwise the current authenticated user
+export async function fetchUserAccessibleTenants(userId = null) {
+  const res = userId
+    ? await api.get(`/users/${userId}/accessible-tenants`)
+    : await api.get('/tenants/accessible')
   return res.data
 }
 
@@ -285,15 +301,6 @@ export async function fetchProjects(tenantId) {
 export async function createProject(tenantId, data) {
   const res = await api.post(`/tenants/${tenantId}/projects`, data)
   return res.data
-}
-
-export async function updateProject(projectId, data) {
-  const res = await api.put(`/projects/${projectId}`, data)
-  return res.data
-}
-
-export async function deleteProject(projectId) {
-  await api.delete(`/projects/${projectId}`)
 }
 
 export async function fetchIntegrationTypes({ includeDisabled = false } = {}) {
@@ -407,11 +414,6 @@ export async function clearDLQ() {
   return res.data
 }
 
-// Incident soft delete
-export async function deleteIncident(id) {
-  await api.delete(`/incidents/${id}`)
-}
-
 // Incident AI Chat
 export async function sendChatMessage(incidentId, message) {
   const res = await api.post(`/incidents/${incidentId}/chat`, { message })
@@ -498,34 +500,7 @@ export async function exportIncidents(format = 'json', filters = {}) {
   return res.data
 }
 
-// Restore
-export async function restoreIncident(incidentId) {
-  const res = await api.post(`/incidents/${incidentId}/restore`)
-  return res.data
-}
-
-// Health checks (Phase 6 ARE — Proactive Monitoring)
-export async function fetchHealthCheckDashboard() {
-  const res = await api.get('/health-checks/dashboard')
-  return res.data
-}
-
-export async function fetchTargetHistory(targetType, targetId, { limit = 100 } = {}) {
-  const res = await api.get(`/health-checks/targets/${targetType}/${targetId}/history`, { params: { limit } })
-  return res.data
-}
-
-export async function triggerHealthCheck() {
-  const res = await api.post('/health-checks/run')
-  return res.data
-}
-
-export async function fetchMonitorInventory({ refresh = false } = {}) {
-  const res = await api.get('/health-checks/monitors', { params: refresh ? { refresh: true } : {} })
-  return res.data
-}
-
-// Alert history widget (7-day degraded/down counts from health_checks)
+// Alert history widget (7-day degraded/down counts from metrics)
 export async function fetchAlertHistory({ days = 7 } = {}) {
   const res = await api.get('/metrics/alert-history', { params: { days } })
   return res.data
@@ -562,88 +537,15 @@ export async function fetchTemplates(activeOnly = false) {
   return res.data
 }
 
-export async function getTemplate(templateId) {
-  const res = await api.get(`/templates/${templateId}`)
-  return res.data
-}
-
-export async function createTemplate(data) {
-  const res = await api.post('/templates', data)
-  return res.data
-}
-
-export async function updateTemplate(templateId, data) {
-  const res = await api.put(`/templates/${templateId}`, data)
-  return res.data
-}
-
-export async function deleteTemplate(templateId) {
-  await api.delete(`/templates/${templateId}`)
-}
-
 // Knowledge base
 export async function fetchKnowledgeBase(params = {}) {
   const res = await api.get('/knowledge-base', { params })
   return res.data
 }
 
-export async function getKnowledgeBaseEntry(entryId) {
-  const res = await api.get(`/knowledge-base/${entryId}`)
-  return res.data
-}
-
-export async function createKnowledgeBaseEntry(data) {
-  const res = await api.post('/knowledge-base', data)
-  return res.data
-}
-
-export async function updateKnowledgeBaseEntry(entryId, data) {
-  const res = await api.put(`/knowledge-base/${entryId}`, data)
-  return res.data
-}
-
-export async function deleteKnowledgeBaseEntry(entryId) {
-  await api.delete(`/knowledge-base/${entryId}`)
-}
-
 // Report templates
 export async function fetchReports(activeOnly = false) {
   const res = await api.get('/reports', { params: { active_only: activeOnly } })
-  return res.data
-}
-
-export async function getReport(templateId) {
-  const res = await api.get(`/reports/${templateId}`)
-  return res.data
-}
-
-export async function createReport(data) {
-  const res = await api.post('/reports', data)
-  return res.data
-}
-
-export async function updateReport(templateId, data) {
-  const res = await api.put(`/reports/${templateId}`, data)
-  return res.data
-}
-
-export async function deleteReport(templateId) {
-  await api.delete(`/reports/${templateId}`)
-}
-
-export async function generateReport(templateId) {
-  const res = await api.post(`/reports/${templateId}/generate`)
-  return res.data
-}
-
-// Patterns
-export async function fetchPatterns(windowDays = 30) {
-  const res = await api.get('/patterns', { params: { window_days: windowDays } })
-  return res.data
-}
-
-export async function getPattern(patternId) {
-  const res = await api.get(`/patterns/${patternId}`)
   return res.data
 }
 
@@ -676,78 +578,7 @@ export async function fetchRunbooks(activeOnly = false, alertType = null) {
   return res.data
 }
 
-export async function getRunbook(runbookId) {
-  const res = await api.get(`/runbooks/${runbookId}`)
-  return res.data
-}
-
-export async function createRunbook(data) {
-  const res = await api.post('/runbooks', data)
-  return res.data
-}
-
-export async function updateRunbook(runbookId, data) {
-  const res = await api.put(`/runbooks/${runbookId}`, data)
-  return res.data
-}
-
-export async function deleteRunbook(runbookId) {
-  await api.delete(`/runbooks/${runbookId}`)
-}
-
-export async function duplicateRunbook(runbookId) {
-  const res = await api.post(`/runbooks/${runbookId}/duplicate`)
-  return res.data
-}
-
-export async function fetchRunbookVersions(runbookId) {
-  const res = await api.get(`/runbooks/${runbookId}/versions`)
-  return res.data
-}
-
-// Runbook Executions
-export async function startRunbookExecution(incidentId, runbookId) {
-  const res = await api.post(`/incidents/${incidentId}/run-runbook`, { runbook_id: runbookId })
-  return res.data
-}
-
-export async function getRunbookExecution(incidentId) {
-  const res = await api.get(`/incidents/${incidentId}/runbook-execution`)
-  return res.data
-}
-
-export async function getRunbookExecutionById(executionId) {
-  const res = await api.get(`/runbook-executions/${executionId}`)
-  return res.data
-}
-
-export async function completeRunbookStep(executionId, stepOrder, notes = null) {
-  const res = await api.post(
-    `/runbook-executions/${executionId}/steps/${stepOrder}/complete`,
-    { notes }
-  )
-  return res.data
-}
-
-export async function skipRunbookStep(executionId, stepOrder, notes = null) {
-  const res = await api.post(
-    `/runbook-executions/${executionId}/steps/${stepOrder}/skip`,
-    { notes }
-  )
-  return res.data
-}
-
-export async function abandonRunbookExecution(executionId) {
-  const res = await api.post(`/runbook-executions/${executionId}/abandon`)
-  return res.data
-}
-
-// Grafana Dashboards
-export async function fetchGrafanaTemplates(category = null) {
-  const params = category ? { category } : {}
-  const res = await api.get('/grafana-dashboards/templates', { params })
-  return res.data
-}
+// Note: Runbook management functions removed (unused)
 
 
 // Notification preferences
@@ -792,24 +623,47 @@ export async function fetchOrganization(orgId) {
   return res.data
 }
 
-// API Keys
-export async function fetchApiKeys(orgId) {
-  const res = await api.get(`/organizations/${orgId}/api-keys`)
+// ── Cloud Account Bindings ─────────────────────────────────────────────────────
+
+function tenantHeader(tenantId) {
+  return tenantId ? { 'X-Active-Tenant-Id': tenantId } : {}
+}
+
+export async function fetchCloudAccounts(provider = null, tenantId = null) {
+  const params = provider ? { provider } : {}
+  const res = await api.get('/cloud-accounts', { params, headers: tenantHeader(tenantId) })
   return res.data
 }
 
-export async function createApiKey(orgId, data) {
-  const res = await api.post(`/organizations/${orgId}/api-keys`, data)
+export async function fetchCloudAccount(bindingId, tenantId = null) {
+  const res = await api.get(`/cloud-accounts/${bindingId}`, { headers: tenantHeader(tenantId) })
   return res.data
 }
 
-export async function revokeApiKey(orgId, keyId) {
-  await api.delete(`/organizations/${orgId}/api-keys/${keyId}`)
+export async function createCloudAccount(data, tenantId = null) {
+  const res = await api.post('/cloud-accounts', data, { headers: tenantHeader(tenantId) })
+  return res.data
 }
 
-// Audit Events
-export async function fetchAuditEvents(orgId, params = {}) {
-  const res = await api.get(`/organizations/${orgId}/audit-events`, { params })
+export async function updateCloudAccount(bindingId, data, tenantId = null) {
+  const res = await api.put(`/cloud-accounts/${bindingId}`, data, { headers: tenantHeader(tenantId) })
+  return res.data
+}
+
+export async function updateCloudAccountCredentials(bindingId, data, tenantId = null) {
+  const res = await api.put(`/cloud-accounts/${bindingId}/credentials`, data, { headers: tenantHeader(tenantId) })
+  return res.data
+}
+
+export async function deleteCloudAccount(bindingId, deleteSecret = false, tenantId = null) {
+  await api.delete(`/cloud-accounts/${bindingId}`, {
+    params: { delete_secret: deleteSecret },
+    headers: tenantHeader(tenantId),
+  })
+}
+
+export async function testCloudAccount(bindingId, tenantId = null) {
+  const res = await api.post(`/cloud-accounts/${bindingId}/test`, null, { headers: tenantHeader(tenantId) })
   return res.data
 }
 

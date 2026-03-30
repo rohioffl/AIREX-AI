@@ -5,13 +5,16 @@ Sends notifications on critical incident state changes based on per-user
 NotificationPreference settings and writes NotificationDeliveryLog audit rows.
 """
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
-import smtplib
+from html import escape
 from typing import Any
 
 import aiohttp
+import boto3
 import structlog
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -202,6 +205,55 @@ async def _send_slack_to_url(
         return False
 
 
+def _email_configured() -> bool:
+    """Return True when the shared email sender has enough config to send mail."""
+    return bool(settings.EMAIL_FROM)
+
+
+def _email_region() -> str:
+    """Return the SES region, falling back to the general AWS region."""
+    return settings.AWS_SES_REGION or settings.AWS_REGION
+
+
+async def _send_email_via_ses(
+    *,
+    subject: str,
+    recipient: str,
+    text_content: str,
+    html_content: str,
+    success_event: str,
+    error_event: str,
+    log_context: dict[str, Any],
+) -> bool:
+    """Send an email using AWS SES with the task's IAM role credentials."""
+    if not _email_configured():
+        logger.warning("email_not_configured", recipient=recipient)
+        return False
+
+    def _send() -> None:
+        ses_client = boto3.client("ses", region_name=_email_region())
+        ses_client.send_email(
+            Source=settings.EMAIL_FROM,
+            Destination={"ToAddresses": [recipient]},
+            Message={
+                "Subject": {"Data": subject, "Charset": "UTF-8"},
+                "Body": {
+                    "Text": {"Data": text_content, "Charset": "UTF-8"},
+                    "Html": {"Data": html_content, "Charset": "UTF-8"},
+                },
+            },
+        )
+
+    try:
+        await asyncio.to_thread(_send)
+    except (BotoCoreError, ClientError, OSError) as exc:
+        logger.error(error_event, recipient=recipient, error=str(exc), **log_context)
+        return False
+
+    logger.info(success_event, recipient=recipient, **log_context)
+    return True
+
+
 async def send_email_notification(
     incident_id: str,
     tenant_id: str,
@@ -212,30 +264,13 @@ async def send_email_notification(
     message: str | None = None,
 ) -> bool:
     """
-    Send email notification via SMTP.
+    Send email notification via AWS SES.
 
     Returns True if sent successfully, False otherwise.
     """
     correlation_id = incident_id
 
-    if not all(
-        [
-            settings.EMAIL_SMTP_HOST,
-            settings.EMAIL_FROM,
-        ]
-    ):
-        return False
-
-    try:
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"[AIREX] {severity.value}: {title}"
-        msg["From"] = settings.EMAIL_FROM
-        msg["To"] = recipient
-
-        text_content = f"""
+    text_content = f"""
 Incident {incident_id} - {state.value}
 
 Severity: {severity.value}
@@ -245,49 +280,32 @@ Title: {title}
 View details: /incidents/{incident_id}
 """
 
-        html_content = f"""
+    html_content = f"""
 <html>
 <body>
-<h2>Incident {incident_id} - {state.value}</h2>
-<p><strong>Severity:</strong> {severity.value}</p>
-<p><strong>Title:</strong> {title}</p>
-{f"<p>{message}</p>" if message else ""}
-<p><a href="/incidents/{incident_id}">View Details</a></p>
+<h2>Incident {escape(incident_id)} - {escape(state.value)}</h2>
+<p><strong>Severity:</strong> {escape(severity.value)}</p>
+<p><strong>Title:</strong> {escape(title)}</p>
+{f"<p>{escape(message)}</p>" if message else ""}
+<p><a href="/incidents/{escape(incident_id)}">View Details</a></p>
 </body>
 </html>
 """
 
-        msg.attach(MIMEText(text_content, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        # Use async SMTP if available, otherwise sync
-        # For production, use aiosmtplib or send via background task
-        with smtplib.SMTP(
-            settings.EMAIL_SMTP_HOST,
-            settings.EMAIL_SMTP_PORT,
-        ) as server:
-            if settings.EMAIL_SMTP_USER and settings.EMAIL_SMTP_PASSWORD:
-                server.starttls()
-                server.login(settings.EMAIL_SMTP_USER, settings.EMAIL_SMTP_PASSWORD)
-            server.send_message(msg)
-
-        logger.info(
-            "email_notification_sent",
-            correlation_id=correlation_id,
-            incident_id=incident_id,
-            tenant_id=tenant_id,
-            recipient=recipient,
-            state=state.value,
-        )
-        return True
-    except (OSError, smtplib.SMTPException) as exc:
-        logger.error(
-            "email_notification_error",
-            correlation_id=correlation_id,
-            incident_id=incident_id,
-            error=str(exc),
-        )
-        return False
+    return await _send_email_via_ses(
+        subject=f"[AIREX] {severity.value}: {title}",
+        recipient=recipient,
+        text_content=text_content,
+        html_content=html_content,
+        success_event="email_notification_sent",
+        error_event="email_notification_error",
+        log_context={
+            "correlation_id": correlation_id,
+            "incident_id": incident_id,
+            "tenant_id": tenant_id,
+            "state": state.value,
+        },
+    )
 
 
 async def notify_incident_state_change(
@@ -348,7 +366,7 @@ async def notify_incident_state_change(
                     channel="email",
                     state_transition=f"{old_state.value}->{new_state.value}",
                     status="sent" if ok else "failed",
-                    error_message=None if ok else "SMTP delivery failed",
+                    error_message=None if ok else "SES delivery failed",
                 )
                 session.add(log)
 
@@ -399,25 +417,11 @@ async def send_user_invitation_email(
 
     Returns True if sent successfully, False otherwise.
     """
-    if not all(
-        [
-            settings.EMAIL_SMTP_HOST,
-            settings.EMAIL_FROM,
-        ]
-    ):
+    if not _email_configured():
         logger.warning("email_not_configured", email=email)
         return False
 
-    try:
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Welcome to AIREX - Set Your Password"
-        msg["From"] = settings.EMAIL_FROM
-        msg["To"] = email
-
-        text_content = f"""
+    text_content = f"""
 Welcome to AIREX, {display_name}!
 
 You've been invited to join the AIREX incident management platform.
@@ -433,15 +437,15 @@ Best regards,
 AIREX Team
 """
 
-        html_content = f"""
+    html_content = f"""
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-    <h2 style="color: #6366f1;">Welcome to AIREX, {display_name}!</h2>
+    <h2 style="color: #6366f1;">Welcome to AIREX, {escape(display_name)}!</h2>
     <p>You've been invited to join the AIREX incident management platform.</p>
     <p>To get started, please set your password by clicking the button below:</p>
     <div style="text-align: center; margin: 30px 0;">
-      <a href="{invitation_url}" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
+      <a href="{escape(invitation_url, quote=True)}" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
         Set Your Password
       </a>
     </div>
@@ -459,32 +463,18 @@ AIREX Team
 </html>
 """
 
-        msg.attach(MIMEText(text_content, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        # Use async SMTP if available, otherwise sync
-        with smtplib.SMTP(
-            settings.EMAIL_SMTP_HOST,
-            settings.EMAIL_SMTP_PORT,
-        ) as server:
-            if settings.EMAIL_SMTP_USER and settings.EMAIL_SMTP_PASSWORD:
-                server.starttls()
-                server.login(settings.EMAIL_SMTP_USER, settings.EMAIL_SMTP_PASSWORD)
-            server.send_message(msg)
-
-        logger.info(
-            "user_invitation_email_sent",
-            email=email,
-            display_name=display_name,
-        )
-        return True
-    except (OSError, smtplib.SMTPException) as exc:
-        logger.error(
-            "user_invitation_email_error",
-            email=email,
-            error=str(exc),
-        )
-        return False
+    return await _send_email_via_ses(
+        subject="Welcome to AIREX - Set Your Password",
+        recipient=email,
+        text_content=text_content,
+        html_content=html_content,
+        success_event="user_invitation_email_sent",
+        error_event="user_invitation_email_error",
+        log_context={
+            "email": email,
+            "display_name": display_name,
+        },
+    )
 
 
 async def send_password_reset_email(
@@ -497,25 +487,11 @@ async def send_password_reset_email(
 
     Returns True if sent successfully, False otherwise.
     """
-    if not all(
-        [
-            settings.EMAIL_SMTP_HOST,
-            settings.EMAIL_FROM,
-        ]
-    ):
+    if not _email_configured():
         logger.warning("email_not_configured", email=email)
         return False
 
-    try:
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "AIREX - Reset Your Password"
-        msg["From"] = settings.EMAIL_FROM
-        msg["To"] = email
-
-        text_content = f"""
+    text_content = f"""
 Hello {display_name},
 
 You requested to reset your password for your AIREX account.
@@ -531,16 +507,16 @@ Best regards,
 AIREX Team
 """
 
-        html_content = f"""
+    html_content = f"""
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
     <h2 style="color: #6366f1;">Reset Your Password</h2>
-    <p>Hello {display_name},</p>
+    <p>Hello {escape(display_name)},</p>
     <p>You requested to reset your password for your AIREX account.</p>
     <p>Click the button below to set a new password:</p>
     <div style="text-align: center; margin: 30px 0;">
-      <a href="{reset_url}" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
+      <a href="{escape(reset_url, quote=True)}" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
         Reset Password
       </a>
     </div>
@@ -558,28 +534,15 @@ AIREX Team
 </html>
 """
 
-        msg.attach(MIMEText(text_content, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        with smtplib.SMTP(
-            settings.EMAIL_SMTP_HOST,
-            settings.EMAIL_SMTP_PORT,
-        ) as server:
-            if settings.EMAIL_SMTP_USER and settings.EMAIL_SMTP_PASSWORD:
-                server.starttls()
-                server.login(settings.EMAIL_SMTP_USER, settings.EMAIL_SMTP_PASSWORD)
-            server.send_message(msg)
-
-        logger.info(
-            "password_reset_email_sent",
-            email=email,
-            display_name=display_name,
-        )
-        return True
-    except (OSError, smtplib.SMTPException) as exc:
-        logger.error(
-            "password_reset_email_error",
-            email=email,
-            error=str(exc),
-        )
-        return False
+    return await _send_email_via_ses(
+        subject="AIREX - Reset Your Password",
+        recipient=email,
+        text_content=text_content,
+        html_content=html_content,
+        success_event="password_reset_email_sent",
+        error_event="password_reset_email_error",
+        log_context={
+            "email": email,
+            "display_name": display_name,
+        },
+    )

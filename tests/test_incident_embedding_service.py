@@ -43,3 +43,23 @@ class TestBuildIncidentSummary:
         incident.meta = {"recommendation_note": "x" * 100}
         summary = build_incident_summary(incident)
         assert summary.endswith(" …")
+
+    def test_uses_recommendation_contract_when_present(self):
+        incident = _make_incident()
+        incident.meta = {
+            "recommendation_contract": {
+                "action_type": "execute_fix",
+                "action_id": "restart_service",
+                "target": "web-1",
+                "params": {"service_name": "nginx"},
+                "reason": "Service is unhealthy",
+                "confidence": 0.82,
+                "risk": "MED",
+                "root_cause": "Runaway process",
+            }
+        }
+
+        summary = build_incident_summary(incident)
+
+        assert "restart_service" in summary
+        assert "Runaway process" in summary

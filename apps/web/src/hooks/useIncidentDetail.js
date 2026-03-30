@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { fetchIncident } from '../services/api'
 import { createSSEConnection } from '../services/sse'
 
-export default function useIncidentDetail(id) {
+export default function useIncidentDetail(id, tenantId = null) {
   const [incident, setIncident] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -17,14 +17,14 @@ export default function useIncidentDetail(id) {
     if (!silent) setLoading(true)
     setError(null)
     try {
-      const data = await fetchIncident(id)
+      const data = await fetchIncident(id, tenantId)
       setIncident(data)
     } catch (err) {
       setError(err.message)
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [id])
+  }, [id, tenantId])
 
   useEffect(() => {
     load()

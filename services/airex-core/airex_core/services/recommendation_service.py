@@ -14,18 +14,26 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from airex_core.actions.registry import ACTION_REGISTRY
 from airex_core.core.config import settings
+from airex_core.core.execution_safety import (
+    estimate_action_impact,
+    evaluate_execution_guard,
+)
 from airex_core.core.events import emit_recommendation_ready
 from airex_core.core.metrics import ai_failure_total, ai_request_total
+from airex_core.core.openclaw_recommendation_bridge import OpenClawRecommendationBridge
 from airex_core.core.policy import check_policy, evaluate_approval
+from airex_core.core.context_resolver import resolve_execution_context
 from airex_core.core.state_machine import transition_state
 from airex_core.llm.client import LLMClient
 from airex_core.models.enums import IncidentState
 from airex_core.models.incident import Incident
+from airex_core.schemas.recommendation_contract import ConfidenceBreakdown, RecommendationContract
 from airex_core.services.rag_context import build_structured_context
 
 logger = structlog.get_logger()
 
 llm_client = LLMClient()
+openclaw_recommendation_bridge = OpenClawRecommendationBridge()
 
 
 async def generate_recommendation(
@@ -96,20 +104,34 @@ async def generate_recommendation(
         incident.meta = meta
         flag_modified(incident, "meta")
 
-    ai_request_total.labels(model="primary").inc()
-
     # Adjust confidence based on historical feedback
     base_confidence_adjustment = await _get_confidence_adjustment(
         session, incident.tenant_id, incident.alert_type
     )
 
-    recommendation = await llm_client.generate_recommendation(
-        alert_type=incident.alert_type,
-        evidence=evidence_text,
-        severity=incident.severity.value,
-        context=context,
-        redis=redis,
-    )
+    recommendation = None
+    if settings.OPENCLAW_ENABLED:
+        ai_request_total.labels(model="openclaw").inc()
+        try:
+            recommendation = await openclaw_recommendation_bridge.generate_recommendation(
+                alert_type=incident.alert_type,
+                evidence=evidence_text,
+                severity=incident.severity.value,
+                context=context,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            log.warning("openclaw_recommendation_failed", error=str(exc))
+            ai_failure_total.labels(model="openclaw", error_type="call_failed").inc()
+
+    if recommendation is None:
+        ai_request_total.labels(model="primary").inc()
+        recommendation = await llm_client.generate_recommendation(
+            alert_type=incident.alert_type,
+            evidence=evidence_text,
+            severity=incident.severity.value,
+            context=context,
+            redis=redis,
+        )
 
     # Apply confidence adjustment from feedback learning
     if recommendation and base_confidence_adjustment != 0:
@@ -185,10 +207,8 @@ async def generate_recommendation(
         )
         return
 
-    # Store recommendation in incident meta (serialize enums to strings)
-    rec_dict = recommendation.model_dump()
-    rec_dict = _serialize_recommendation(rec_dict)
-    meta["recommendation"] = rec_dict
+    confidence_breakdown = _default_confidence_breakdown(recommendation.confidence)
+    grounding_summary = "Composite confidence unavailable; using model confidence only."
 
     # ── Phase 6: Confidence Validator ─────────────────────────────
     try:
@@ -200,6 +220,16 @@ async def generate_recommendation(
             proposed_action=recommendation.proposed_action,
             confidence=recommendation.confidence,
         )
+        confidence_breakdown = _coerce_confidence_breakdown(
+            cv_result.get("confidence_breakdown"),
+            fallback_confidence=recommendation.confidence,
+        )
+        grounding_summary = str(
+            cv_result.get("grounding_summary")
+            or _default_grounding_summary(confidence_breakdown.composite_confidence)
+        )
+        meta["confidence_breakdown"] = confidence_breakdown.model_dump()
+        meta["grounding_summary"] = grounding_summary
         if not cv_result["valid"] and cv_result.get("warning"):
             meta["_confidence_warning"] = cv_result["warning"]
             log.warning(
@@ -207,8 +237,43 @@ async def generate_recommendation(
                 warning=cv_result["warning"],
                 kg_count=cv_result.get("kg_resolution_count"),
             )
+        else:
+            meta.pop("_confidence_warning", None)
     except Exception as exc:
         log.warning("confidence_validator_error", error=str(exc))
+        meta["confidence_breakdown"] = confidence_breakdown.model_dump()
+        meta["grounding_summary"] = grounding_summary
+
+    impact_estimate = estimate_action_impact(
+        recommendation.proposed_action,
+        recommendation.params,
+        risk_level=recommendation.risk_level,
+        blast_radius=recommendation.blast_radius,
+    )
+    execution_guard = await evaluate_execution_guard(
+        session,
+        incident.tenant_id,
+        recommendation.proposed_action,
+        recommendation.params,
+        exec_ctx=resolve_execution_context(recommendation.params),
+    )
+    meta["impact_estimate"] = impact_estimate.model_dump()
+    meta["execution_guard"] = execution_guard.model_dump()
+
+    # Store the execution-facing contract as the source of truth, while
+    # keeping the legacy recommendation view for existing consumers.
+    contract = RecommendationContract.from_recommendation(
+        recommendation,
+        confidence_breakdown=confidence_breakdown,
+        grounding_summary=grounding_summary,
+        impact_estimate=impact_estimate,
+        execution_guard=execution_guard,
+    )
+    contract_dict = contract.model_dump()
+    rec_dict = contract.to_legacy_recommendation()
+    rec_dict = _serialize_recommendation(rec_dict)
+    meta["recommendation_contract"] = contract_dict
+    meta["recommendation"] = rec_dict
 
     # ── Phase 6: Reviewer Agent ────────────────────────────────────
     try:
@@ -221,9 +286,10 @@ async def generate_recommendation(
         log.warning("reviewer_agent_error", error=str(exc))
 
     # Evaluate approval policy (confidence-gated + senior approval)
+    approval_confidence = confidence_breakdown.composite_confidence
     decision = evaluate_approval(
         action_type=recommendation.proposed_action,
-        confidence=recommendation.confidence,
+        confidence=approval_confidence,
         risk_level=recommendation.risk_level,
     )
 
@@ -232,6 +298,8 @@ async def generate_recommendation(
     meta["_approval_reason"] = decision.reason
     meta["_confidence_met"] = decision.confidence_met
     meta["_senior_required"] = decision.senior_required
+    meta["_approval_confidence"] = approval_confidence
+    meta["_approval_confidence_source"] = "composite"
 
     incident.meta = meta
     flag_modified(incident, "meta")
@@ -242,6 +310,7 @@ async def generate_recommendation(
         action=recommendation.proposed_action,
         risk=recommendation.risk_level.value,
         confidence=recommendation.confidence,
+        composite_confidence=approval_confidence,
         approval_level=decision.level.value,
         requires_human=decision.requires_human,
     )
@@ -283,6 +352,37 @@ def _serialize_recommendation(rec_dict: dict) -> dict:
                 alt["risk_level"] = arl.value if hasattr(arl, "value") else arl
 
     return rec_dict
+
+
+def _coerce_confidence_breakdown(
+    payload: object,
+    *,
+    fallback_confidence: float,
+) -> ConfidenceBreakdown:
+    if isinstance(payload, ConfidenceBreakdown):
+        return payload
+    if isinstance(payload, dict):
+        return ConfidenceBreakdown.model_validate(payload)
+    return _default_confidence_breakdown(fallback_confidence)
+
+
+def _default_confidence_breakdown(confidence: float) -> ConfidenceBreakdown:
+    return ConfidenceBreakdown(
+        model_confidence=confidence,
+        evidence_strength_score=0.0,
+        tool_grounding_score=0.0,
+        kg_match_score=0.0,
+        hallucination_penalty=0.0,
+        composite_confidence=confidence,
+        warning="",
+    )
+
+
+def _default_grounding_summary(confidence: float) -> str:
+    return (
+        "Composite confidence unavailable; "
+        f"using model confidence {confidence:.0%}."
+    )
 
 
 async def _get_confidence_adjustment(

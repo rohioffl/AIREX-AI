@@ -82,6 +82,16 @@ export interface AlternativeRecommendation {
   risk_level?: RiskLevel
 }
 
+export interface ConfidenceBreakdown {
+  model_confidence: number
+  evidence_strength_score: number
+  tool_grounding_score: number
+  kg_match_score: number
+  hallucination_penalty: number
+  composite_confidence: number
+  warning?: string
+}
+
 export interface Recommendation {
   root_cause: string
   proposed_action: string
@@ -96,6 +106,10 @@ export interface Recommendation {
   verification_criteria?: string[]
   reasoning_chain?: ReasoningStep[]
   evidence_annotations?: Record<string, string>
+  confidence_breakdown?: ConfidenceBreakdown | null
+  grounding_summary?: string
+  impact_estimate?: ImpactEstimate | null
+  execution_guard?: ExecutionGuard | null
 }
 
 export interface ReasoningStep {
@@ -111,6 +125,29 @@ export interface ApprovalMeta {
   _approval_reason?: string
   _confidence_met?: boolean
   _senior_required?: boolean
+  _approval_confidence?: number
+  _approval_confidence_source?: 'model' | 'composite'
+}
+
+export interface ImpactEstimate {
+  cost_delta: 'low' | 'medium' | 'high'
+  dependency_pressure: 'low' | 'medium' | 'high'
+  resource_limit_risk: 'low' | 'medium' | 'high'
+  blast_radius_summary: string
+  scale_delta?: number | null
+  notes?: string[]
+}
+
+export interface ExecutionGuard {
+  valid: boolean
+  reason: string
+  enforcement_mode: 'legacy' | 'strict'
+  credential_scope_valid: boolean
+  cluster_ownership_valid: boolean
+  namespace_scope_valid: boolean
+  cross_tenant_denied: boolean
+  binding_id?: string
+  target_scope: Record<string, string>
 }
 
 export interface PaginatedIncidents {

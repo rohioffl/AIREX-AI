@@ -345,7 +345,7 @@ export default function AIAnalysisPanel({ incident }) {
                 <pre style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: 11,
-                  color: 'var(--terminal-text)',
+                  color: 'var(--text-primary)',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   lineHeight: 1.5,

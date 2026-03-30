@@ -296,7 +296,7 @@ async def list_accessible_tenants(
             rows = await conn.execute(
                 select(Tenant).where(Tenant.is_active.is_(True)).order_by(Tenant.name.asc())
             )
-            for tenant in rows.scalars().all():
+            for tenant in rows.all():
                 result.append(
                     AccessibleTenantEntry(
                         id=str(tenant.id),
@@ -349,7 +349,7 @@ async def list_accessible_tenants(
                 ),
             ).order_by(Tenant.name.asc())
         )
-        for tenant in rows.scalars().all():
+        for tenant in rows.all():
             if tenant.id in explicit_roles:
                 eff_role = explicit_roles[tenant.id]
             elif tenant.organization_id and tenant.organization_id in org_roles:

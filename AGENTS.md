@@ -89,6 +89,7 @@ npm run test -- --run "Incident*"
 ```bash
 cd e2e
 npm install
+npm run setup   # install Chromium + system deps (required in sandbox/CI/Codex)
 npm run test
 npm run test:headed
 npm run test:ui

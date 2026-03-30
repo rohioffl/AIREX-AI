@@ -84,10 +84,3 @@ export async function acceptInvitationWithGoogle(invitationToken, idToken) {
   return res.data
 }
 
-export function isAuthenticated() {
-  return hasValidAccessToken()
-}
-
-export function getToken() {
-  return readAccessToken()
-}

@@ -50,7 +50,18 @@ export function AuthProvider({ children }) {
     if (resolvedTenantId) {
       persistActiveTenantId(resolvedTenantId)
     }
-    const me = await fetchAuthMe(resolvedTenantId)
+    let me
+    try {
+      me = await fetchAuthMe(resolvedTenantId)
+    } catch (error) {
+      const detail = error?.response?.data?.detail
+      if (detail === 'Tenant not found' && resolvedTenantId) {
+        persistActiveTenantId(null)
+        me = await fetchAuthMe(null)
+      } else {
+        throw error
+      }
+    }
     const nextUser = buildUser(parsed, me)
     setUser(nextUser)
     setSessionContext(me)

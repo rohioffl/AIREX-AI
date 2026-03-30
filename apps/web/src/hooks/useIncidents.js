@@ -8,7 +8,15 @@ export default function useIncidents(initialFilters = {}) {
   const [error, setError] = useState(null)
   const [connected, setConnected] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
-  const [filters, setFilters] = useState({ state: null, severity: null, alertType: null, search: null, host_key: null, ...initialFilters })
+  const [filters, setFilters] = useState({
+    state: null,
+    severity: null,
+    alertType: null,
+    search: null,
+    host_key: null,
+    organizationId: null,
+    ...initialFilters,
+  })
   const [nextCursor, setNextCursor] = useState(null)
   const [hasMore, setHasMore] = useState(false)
   const [total, setTotal] = useState(null)
@@ -45,6 +53,18 @@ export default function useIncidents(initialFilters = {}) {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    setFilters((prev) => {
+      if (prev.organizationId === (initialFilters.organizationId || null)) {
+        return prev
+      }
+      return {
+        ...prev,
+        organizationId: initialFilters.organizationId || null,
+      }
+    })
+  }, [initialFilters.organizationId])
 
   // Background refresh so repeated alerts (meta/updated_at changes) show up.
   useEffect(() => {

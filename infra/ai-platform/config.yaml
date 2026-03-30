@@ -3,24 +3,28 @@ model_list:
   - model_name: gemini-2.0-flash
     litellm_params:
       model: gemini/gemini-2.0-flash
+      drop_params: true
 
   # Fallback model: Amazon Nova Lite via AWS Bedrock
   - model_name: nova-lite
     litellm_params:
       model: bedrock/amazon.nova-lite-v1:0
+      drop_params: true
 
   # Amazon Nova Pro (higher quality fallback)
   - model_name: nova-pro
     litellm_params:
       model: bedrock/amazon.nova-pro-v1:0
+      drop_params: true
 
   # Embedding Model: Bedrock Titan Text Embeddings v2 (max 1024 dims)
   - model_name: text-embedding
     litellm_params:
       model: bedrock/amazon.titan-embed-text-v2:0
       dimensions: 1024
+      drop_params: true
 
 litellm_settings:
-  # Disable callbacks that require external keys we don't have
+  drop_params: true
   success_callback: []
   failure_callback: []

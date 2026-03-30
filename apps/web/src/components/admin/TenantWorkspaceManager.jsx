@@ -126,7 +126,7 @@ function DetailField({ label, value, mono = false, tone = 'var(--text-heading)' 
   )
 }
 
-export default function TenantWorkspaceManager({ mode = 'workspace' }) {
+export default function TenantWorkspaceManager({ mode = 'workspace', initialOrganizationId = null }) {
   const { addToast } = useToasts()
   const { user } = useAuth()
   const [search, setSearch] = useState('')
@@ -171,6 +171,7 @@ export default function TenantWorkspaceManager({ mode = 'workspace' }) {
   } = useTenantWorkspace({
     onError: (message) => toast(message, 'error'),
     loadDetails: !isPlatformInventoryMode,
+    initialOrganizationId,
   })
 
   const filtered = useMemo(() => {

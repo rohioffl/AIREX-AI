@@ -8,7 +8,7 @@ import {
   fetchTenants,
 } from '../services/api'
 
-export function useTenantWorkspace({ onError, loadDetails = true }) {
+export function useTenantWorkspace({ onError, loadDetails = true, initialOrganizationId = null }) {
   const onErrorRef = useRef(onError)
   const [organizations, setOrganizations] = useState([])
   const [activeOrganizationId, setActiveOrganizationId] = useState(null)
@@ -74,7 +74,9 @@ export function useTenantWorkspace({ onError, loadDetails = true }) {
       const orgData = await fetchOrganizations().catch(() => [])
       const nextOrganizations = Array.isArray(orgData) ? orgData : []
       setOrganizations(nextOrganizations)
-      const nextOrganizationId = nextOrganizations[0]?.id || null
+      const nextOrganizationId = nextOrganizations.some((org) => org.id === initialOrganizationId)
+        ? initialOrganizationId
+        : (nextOrganizations[0]?.id || null)
       setActiveOrganizationId(nextOrganizationId)
       await loadTenants(nextOrganizationId, null)
     } catch {
@@ -82,7 +84,7 @@ export function useTenantWorkspace({ onError, loadDetails = true }) {
     } finally {
       setLoading(false)
     }
-  }, [loadTenants, reportError])
+  }, [initialOrganizationId, loadTenants, reportError])
 
   const reloadWorkspace = useCallback(async () => {
     try {
@@ -117,6 +119,13 @@ export function useTenantWorkspace({ onError, loadDetails = true }) {
   useEffect(() => {
     bootstrapWorkspace()
   }, [bootstrapWorkspace])
+
+  useEffect(() => {
+    if (!initialOrganizationId) return
+    if (initialOrganizationId === activeOrganizationId) return
+    if (organizations.length > 0 && !organizations.some((org) => org.id === initialOrganizationId)) return
+    changeOrganization(initialOrganizationId)
+  }, [activeOrganizationId, changeOrganization, initialOrganizationId, organizations])
 
   useEffect(() => {
     if (!loadDetails) {

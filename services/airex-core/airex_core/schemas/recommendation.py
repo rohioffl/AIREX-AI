@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 from airex_core.models.enums import RiskLevel
@@ -37,6 +39,11 @@ class Recommendation(BaseModel):
     proposed_action: str
     risk_level: RiskLevel
     confidence: float = Field(ge=0.0, le=1.0)
+    action_type: str = "execute_fix"
+    action_id: str = ""
+    target: str = ""
+    params: dict[str, Any] = Field(default_factory=dict)
+    reason: str = ""
 
     # ── Enhanced fields (Phase 6) ────────────────────────────────
     summary: str = ""
@@ -49,7 +56,15 @@ class Recommendation(BaseModel):
     evidence_annotations: list[str] = Field(default_factory=list)
     verification_criteria: list[str] = Field(default_factory=list)
 
-    @field_validator("root_cause", "proposed_action", mode="before")
+    @field_validator(
+        "root_cause",
+        "proposed_action",
+        "action_type",
+        "action_id",
+        "target",
+        "reason",
+        mode="before",
+    )
     @classmethod
     def normalize_core_text_fields(cls, value: object) -> object:
         if isinstance(value, str):

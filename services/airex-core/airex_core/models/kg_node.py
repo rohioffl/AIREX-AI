@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import uuid
+import hashlib
+import json
 from datetime import datetime, timezone
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Index, PrimaryKeyConstraint, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from airex_core.core.config import settings
@@ -15,6 +16,10 @@ from airex_core.models.base import Base, TenantMixin
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _state_hash_default() -> str:
+    return hashlib.sha256(json.dumps({}, sort_keys=True).encode()).hexdigest()[:16]
 
 
 class KGNode(Base, TenantMixin):
@@ -43,6 +48,14 @@ class KGNode(Base, TenantMixin):
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(settings.LLM_EMBEDDING_DIMENSION), nullable=True
     )
+    observed_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, default=_utcnow
+    )
+    valid_from: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, default=_utcnow
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    state_hash: Mapped[str] = mapped_column(nullable=False, default=_state_hash_default)
     last_seen_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, default=_utcnow
     )

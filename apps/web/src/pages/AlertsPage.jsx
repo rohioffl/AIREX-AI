@@ -12,6 +12,8 @@ import ConnectionBanner from '../components/common/ConnectionBanner'
 import AlertRow from '../components/alert/AlertRow'
 import CreateIncidentModal from '../components/incident/CreateIncidentModal'
 import { exportIncidents, bulkApprove, bulkReject } from '../services/api'
+import { useAuth } from '../context/AuthContext'
+import { isAllTenantsScopeForOrganization } from '../utils/workspaceScope'
 import { extractErrorMessage } from '../utils/errorHandler'
 
 const ACTION_STATES = ['RECOMMENDATION_READY', 'AWAITING_APPROVAL']
@@ -35,13 +37,18 @@ const SORT_OPTIONS = [
 
 export default function AlertsPage() {
   const location = useLocation()
+  const { activeOrganization } = useAuth()
   const searchParams = new URLSearchParams(location.search)
   const urlSearch = searchParams.get('search') || ''
   const hostFilter = searchParams.get('host') || ''
+  const organizationId = isAllTenantsScopeForOrganization(activeOrganization?.id)
+    ? activeOrganization?.id
+    : null
 
   const { incidents, loading, error, connected, reconnecting, reload, setFilters } = useIncidents({ 
     search: urlSearch || null,
-    host_key: hostFilter || null
+    host_key: hostFilter || null,
+    organizationId,
   })
   const [alertFilter, setAlertFilter] = useState('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -70,9 +77,18 @@ export default function AlertsPage() {
     setFilters(prev => ({
       ...prev,
       search: urlSearch || null,
-      host_key: hostFilter || null
+      host_key: hostFilter || null,
+      organizationId,
     }))
-  }, [urlSearch, hostFilter, setFilters])
+  }, [urlSearch, hostFilter, organizationId, setFilters])
+
+  useEffect(() => {
+    if (!organizationId) return
+    setSelectedIncidents(new Set())
+    setShowRejectInput(false)
+    setRejectReason('')
+    setBulkError(null)
+  }, [organizationId])
 
   const toggleSelect = (id) => {
     setSelectedIncidents(prev => {
@@ -97,6 +113,10 @@ export default function AlertsPage() {
   }
 
   const handleExport = async () => {
+    if (organizationId) {
+      setExportError('Export is only available inside a single tenant workspace.')
+      return
+    }
     setExportError(null)
     try {
       const filters = {}
@@ -336,7 +356,7 @@ export default function AlertsPage() {
         <div>
           <h2 className="flex items-center gap-3" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
             <AlertTriangle size={24} style={{ color: 'var(--brand-orange)' }} />
-            Active Alerts
+            {organizationId ? 'Organization Alerts' : 'Active Alerts'}
             {counts.all > 0 && (
               <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-bold"
                 style={{ background: counts.critical > 0 ? 'rgba(244,63,94,0.15)' : 'rgba(251,146,60,0.15)', color: counts.critical > 0 ? 'var(--color-accent-red)' : 'var(--brand-orange)' }}>
@@ -348,7 +368,13 @@ export default function AlertsPage() {
             </span>
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
-            {totalFiltered > 0 ? `Showing ${visibleAlerts.length} of ${totalFiltered} alerts` : 'Incidents requiring attention, sorted by severity.'}
+            {totalFiltered > 0
+              ? `Showing ${visibleAlerts.length} of ${totalFiltered} alerts`
+              : (
+                  organizationId
+                    ? 'Alerts across all tenant workspaces in this organization.'
+                    : 'Incidents requiring attention, sorted by severity.'
+                )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -370,7 +396,7 @@ export default function AlertsPage() {
           </button>
           <button
             onClick={handleExport}
-            disabled={visibleAlerts.length === 0}
+            disabled={visibleAlerts.length === 0 || Boolean(organizationId)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all disabled:opacity-50"
             style={{
               background: 'var(--bg-elevated)',
@@ -379,7 +405,7 @@ export default function AlertsPage() {
               fontSize: 13,
               fontWeight: 600,
             }}
-            title="Export to CSV"
+            title={organizationId ? 'Switch into a tenant workspace to export alerts' : 'Export to CSV'}
           >
             <Download size={14} />
             Export
@@ -607,22 +633,28 @@ export default function AlertsPage() {
                 border: selectedIncidents.size > 0 ? '1px solid rgba(99,102,241,0.3)' : '1px solid var(--border)',
               }}
             >
-              {/* Select All checkbox */}
-              <label className="flex items-center gap-2 cursor-pointer select-none" style={{ flexShrink: 0 }}>
-                <input
-                  type="checkbox"
-                  checked={selectedIncidents.size === visibleAlerts.length && visibleAlerts.length > 0}
-                  onChange={toggleSelectAll}
-                  className="w-4 h-4 rounded cursor-pointer"
-                  style={{ accentColor: 'var(--neon-indigo)' }}
-                />
-                <span style={{ fontSize: 12, fontWeight: 600, color: selectedIncidents.size > 0 ? 'var(--neon-indigo)' : 'var(--text-secondary)' }}>
-                  {selectedIncidents.size > 0 ? `${selectedIncidents.size} selected` : 'Select all'}
+              {organizationId ? (
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Cross-tenant view enabled. Open an alert to switch into its tenant workspace before taking action.
                 </span>
-              </label>
+              ) : (
+                <>
+                  {/* Select All checkbox */}
+                  <label className="flex items-center gap-2 cursor-pointer select-none" style={{ flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIncidents.size === visibleAlerts.length && visibleAlerts.length > 0}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded cursor-pointer"
+                      style={{ accentColor: 'var(--neon-indigo)' }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: selectedIncidents.size > 0 ? 'var(--neon-indigo)' : 'var(--text-secondary)' }}>
+                      {selectedIncidents.size > 0 ? `${selectedIncidents.size} selected` : 'Select all'}
+                    </span>
+                  </label>
 
-              {/* Bulk actions — only visible when something is selected */}
-              {selectedIncidents.size > 0 && (
+                  {/* Bulk actions — only visible when something is selected */}
+                  {selectedIncidents.size > 0 && (
                 <>
                   <div style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
                   {/* Approve only for "Needs Action" mode where approval is meaningful */}
@@ -722,6 +754,8 @@ export default function AlertsPage() {
                     </span>
                   )}
                 </>
+                  )}
+                </>
               )}
             </div>
             <div className="space-y-1.5" style={{ width: '100%', maxWidth: '100%' }}>
@@ -735,8 +769,8 @@ export default function AlertsPage() {
                     manualReview={manualReview}
                     manualReason={manualReason}
                     manualAt={alert.meta?._manual_review_at}
-                    selected={selectedIncidents.has(alert.id)}
-                    onSelect={toggleSelect}
+                    selected={organizationId ? false : selectedIncidents.has(alert.id)}
+                    onSelect={organizationId ? null : toggleSelect}
                   />
                 )
               })}

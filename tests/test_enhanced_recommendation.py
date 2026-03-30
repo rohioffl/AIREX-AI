@@ -1,7 +1,6 @@
 """Tests for enhanced recommendation schema and parse_recommendation (Phase 6)."""
 
 import pytest
-from pydantic import ValidationError
 
 from airex_core.llm.client import _parse_recommendation
 from airex_core.models.enums import RiskLevel
@@ -134,6 +133,27 @@ class TestEnhancedRecommendation:
         assert len(data["alternatives"]) == 1
         assert data["alternatives"][0]["action"] == "flush_cache"
 
+    def test_openclaw_contract_fields_round_trip(self):
+        rec = Recommendation(
+            root_cause="CPU saturation on checkout-api",
+            proposed_action="scale_instances",
+            risk_level=RiskLevel.HIGH,
+            confidence=0.91,
+            action_type="execute_fix",
+            action_id="scale_instances",
+            target="checkout-api",
+            params={"replicas": 5},
+            reason="CPU > 90% for 5 minutes",
+        )
+
+        data = rec.model_dump()
+
+        assert data["action_type"] == "execute_fix"
+        assert data["action_id"] == "scale_instances"
+        assert data["target"] == "checkout-api"
+        assert data["params"] == {"replicas": 5}
+        assert data["reason"] == "CPU > 90% for 5 minutes"
+
 
 # ═══════════════════════════════════════════════════════════════════
 #  _parse_recommendation Tests
@@ -178,6 +198,28 @@ class TestParseRecommendation:
         assert rec.blast_radius == "single_instance"
         assert len(rec.evidence_annotations) == 2
         assert len(rec.verification_criteria) == 2
+
+    def test_openclaw_contract_fields_parsed(self):
+        data = {
+            "action_type": "execute_fix",
+            "action_id": "scale_instances",
+            "target": "checkout-api",
+            "params": {"replicas": 5},
+            "reason": "CPU > 90% for 5 minutes",
+            "risk": "HIGH",
+            "confidence": 0.91,
+            "root_cause": "CPU saturation caused by insufficient capacity",
+        }
+
+        rec = _parse_recommendation(data)
+
+        assert rec.proposed_action == "scale_instances"
+        assert rec.risk_level == RiskLevel.HIGH
+        assert rec.action_type == "execute_fix"
+        assert rec.action_id == "scale_instances"
+        assert rec.target == "checkout-api"
+        assert rec.params == {"replicas": 5}
+        assert rec.reason == "CPU > 90% for 5 minutes"
 
     def test_reasoning_chain_parsed(self):
         data = {
@@ -377,3 +419,61 @@ class TestSerializeRecommendation:
         rec_dict = {"risk_level": RiskLevel.MED}
         result = _serialize_recommendation(rec_dict)
         assert result["risk_level"] == "MED"
+
+
+class TestRecommendationContract:
+    def test_builds_contract_from_internal_recommendation(self):
+        from airex_core.schemas.recommendation_contract import RecommendationContract
+
+        rec = Recommendation(
+            root_cause="CPU saturation",
+            proposed_action="scale_instances",
+            risk_level=RiskLevel.HIGH,
+            confidence=0.91,
+            summary="Scale checkout-api",
+            rationale="CPU has remained above threshold",
+            target="checkout-api",
+            params={"replicas": 5},
+        )
+
+        contract = RecommendationContract.from_recommendation(rec)
+
+        assert contract.action_type == "execute_fix"
+        assert contract.action_id == "scale_instances"
+        assert contract.target == "checkout-api"
+        assert contract.params == {"replicas": 5}
+        assert contract.reason == "CPU has remained above threshold"
+
+    def test_legacy_view_preserves_current_consumers(self):
+        from airex_core.schemas.recommendation_contract import ConfidenceBreakdown, RecommendationContract
+
+        contract = RecommendationContract(
+            action_type="execute_fix",
+            action_id="restart_service",
+            target="web-01",
+            params={"service_name": "nginx"},
+            reason="Service is unresponsive",
+            confidence=0.83,
+            risk="MED",
+            root_cause="Runaway process",
+            summary="Restart nginx on web-01",
+            confidence_breakdown=ConfidenceBreakdown(
+                model_confidence=0.83,
+                evidence_strength_score=0.6,
+                tool_grounding_score=0.7,
+                kg_match_score=0.33,
+                hallucination_penalty=0.0,
+                composite_confidence=0.725,
+            ),
+            grounding_summary="3 evidence source(s) considered; grounding checks passed",
+        )
+
+        legacy = contract.to_legacy_recommendation()
+
+        assert legacy["proposed_action"] == "restart_service"
+        assert legacy["risk_level"] == "MED"
+        assert legacy["confidence"] == 0.83
+        assert legacy["params"] == {"service_name": "nginx"}
+        assert legacy["summary"] == "Restart nginx on web-01"
+        assert legacy["confidence_breakdown"]["composite_confidence"] == 0.725
+        assert legacy["grounding_summary"] == "3 evidence source(s) considered; grounding checks passed"

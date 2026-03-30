@@ -1,16 +1,26 @@
-import { useState, useEffect, useRef, forwardRef } from 'react'
+import { useState, useEffect, useRef, forwardRef, useCallback, useMemo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion as Motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, AlertTriangle, Settings,
   Sun, Moon, Bell, BellRing, PanelLeftClose, PanelLeft, Search, LogOut,
-  X, ChevronRight, Clock, Zap, Ban, HeartPulse, TrendingUp, BookOpen,
+  X, ChevronRight, Clock, Zap, Ban, TrendingUp, BookOpen,
   Terminal, Layers, BarChart3, ShieldCheck, ClipboardList, Building2, Check
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { fetchIncidents, fetchUserAccessibleTenants } from '../../services/api'
 import { createSSEConnection } from '../../services/sse'
+import {
+  getActiveOrganizationIdOverride,
+  setActiveOrganizationIdOverride,
+} from '../../utils/organizationScope'
+import {
+  getAllTenantsScopeValue,
+  getTenantScopeValue,
+  getWorkspaceScope,
+  setWorkspaceScope,
+} from '../../utils/workspaceScope'
 import {
   canAccessRoute,
   normalizeRole,
@@ -29,16 +39,13 @@ const NAV_ITEMS = [
   { label: 'Analytics', path: '/analytics', icon: TrendingUp, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Knowledge Base', path: '/knowledge-base', icon: BookOpen, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Rejected', path: '/rejected', icon: Ban, roles: ['admin', 'operator', 'viewer'] },
-  { label: 'Live Monitoring', path: '/health-checks', icon: HeartPulse, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Runbooks', path: '/runbooks', icon: Terminal, roles: ['admin', 'operator'] },
   { label: 'Proactive', path: '/patterns', icon: Layers, roles: ['admin', 'operator', 'viewer'] },
   { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin', 'operator'] },
   { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
-  { label: 'Org Settings', path: '/org-settings', icon: Building2, roles: ['admin'] },
   { label: 'Platform Admin', path: '/admin', icon: ShieldCheck, access: 'platform_admin' },
-  { label: 'Org Admin', path: '/org-admin', icon: Building2, access: 'organizations_admin' },
+  { label: 'Org Admin', path: '/admin/organizations', icon: Building2, access: 'organizations_admin' },
   { label: 'Tenant Workspaces', path: '/admin/workspaces', icon: Layers, access: 'tenant_admin' },
-  { label: 'Integrations', path: '/admin/integrations', icon: Zap, access: 'tenant_admin' },
 ]
 
 const ROUTE_TITLES = {
@@ -48,18 +55,16 @@ const ROUTE_TITLES = {
   '/knowledge-base':         { label: 'Knowledge Base',   parent: null },
   '/rejected':               { label: 'Rejected',         parent: null },
   '/live':                   { label: 'Live Feed',        parent: null },
-  '/health-checks':          { label: 'Live Monitoring',  parent: null },
-  '/health-checks/site24x7': { label: 'Site24x7',         parent: 'Live Monitoring' },
   '/runbooks':               { label: 'Runbooks',         parent: null },
   '/patterns':               { label: 'Proactive',        parent: null },
   '/reports':                { label: 'Reports',          parent: null },
   '/settings':               { label: 'Settings',         parent: null },
-  '/org-settings':           { label: 'Org Settings',     parent: null },
   '/org-admin':              { label: 'Org Admin',        parent: null },
   '/admin':                  { label: 'Platform Admin',   parent: null },
-  '/admin/organizations':    { label: 'Organizations',    parent: null },
+  '/admin/organizations':    { label: 'Org Admin',        parent: null },
   '/admin/workspaces':       { label: 'Tenant Workspaces', parent: null },
   '/admin/integrations':     { label: 'Integrations',     parent: null },
+  '/admin/cloud-accounts':   { label: 'Cloud Accounts',   parent: null },
   '/profile':               { label: 'Profile',           parent: 'Account' },
 }
 
@@ -98,7 +103,12 @@ export default function Layout({ children }) {
     setSearchQuery(urlSearchParam)
   }
 
-  const isActive = (path) => location.pathname.startsWith(path)
+  const isActive = (path) => {
+    if (path === '/admin') {
+      return location.pathname === '/admin'
+    }
+    return location.pathname === path || location.pathname.startsWith(`${path}/`)
+  }
 
   const handleLogout = () => {
     logout()
@@ -260,6 +270,7 @@ export default function Layout({ children }) {
           currentUserId={user?.userId || user?.user_id || null}
           navigate={navigate}
           collapsed={collapsed}
+          currentPath={`${location.pathname}${location.search}`}
         />
 
         {/* Nav */}
@@ -582,15 +593,32 @@ function WorkspaceRoleBadge({ membershipRole, active }) {
   )
 }
 
-function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, activeTenant, switchTenant, currentUserId, navigate, collapsed }) {
-  const [open, setOpen] = useState(false)
+function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, activeTenant, switchTenant, currentUserId, navigate, collapsed, currentPath }) {
+  const [orgOpen, setOrgOpen] = useState(false)
+  const [tenantOpen, setTenantOpen] = useState(false)
   const [switching, setSwitching] = useState(null)
   const [accessibleTenants, setAccessibleTenants] = useState([])
+  const [workspaceScope, setWorkspaceScopeState] = useState(() => getWorkspaceScope())
+  const [organizationOverrideId, setOrganizationOverrideId] = useState(() => getActiveOrganizationIdOverride())
   const ref = useRef(null)
+  const routeOrganizationId = useMemo(() => {
+    if (!currentPath || !currentPath.includes('?')) {
+      return null
+    }
+    try {
+      const search = currentPath.slice(currentPath.indexOf('?'))
+      return new URLSearchParams(search).get('org_id')
+    } catch {
+      return null
+    }
+  }, [currentPath])
 
   useEffect(() => {
     function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOrgOpen(false)
+        setTenantOpen(false)
+      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -637,131 +665,405 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
     }
   })
 
+  const displayOrganization = (
+    organizations.find((organization) => String(organization.id) === String(organizationOverrideId))
+    || activeOrganization
+    || organizations[0]
+    || null
+  )
+  const currentOrganizationId = String(
+    organizationOverrideId
+    || displayOrganization?.id
+    || activeTenant?.organization_id
+    || ''
+  )
+  const visibleOrganizations = organizations || []
+
+  const currentOrgTenants = visibleTenants.filter((tenant) => (
+    String(tenant.organization_id) === currentOrganizationId
+  ))
+  const hasOrgWideAccess = String(activeOrganization?.role || '').toLowerCase() !== 'tenant_member'
+  const showAllTenantsOption = currentOrgTenants.length > 1 && hasOrgWideAccess
+  const allTenantsScopeValue = getAllTenantsScopeValue(currentOrganizationId)
+  const isAllTenantsSelected = Boolean(
+    showAllTenantsOption && allTenantsScopeValue && workspaceScope === allTenantsScopeValue
+  )
+
+  const supportsAllTenantsPath = useCallback((path) => {
+    if (!path) return false
+    return (
+      path.startsWith('/alerts')
+      || path.startsWith('/admin/workspaces')
+      || path.startsWith('/admin/organizations')
+    )
+  }, [])
+
+  const getTenantTargetPath = useCallback(() => {
+    if (!currentPath || currentPath === '/') {
+      return '/dashboard'
+    }
+    return currentPath
+  }, [currentPath])
+
+  const getAllTenantsTargetPath = useCallback(() => {
+    if (supportsAllTenantsPath(currentPath)) {
+      return currentPath
+    }
+    return '/alerts'
+  }, [currentPath, supportsAllTenantsPath])
+
+  useEffect(() => {
+    if (!activeTenant?.id) return
+    if (isAllTenantsSelected) return
+    const nextScope = getTenantScopeValue(activeTenant.id)
+    if (workspaceScope !== nextScope) {
+      setWorkspaceScopeState(nextScope)
+      setWorkspaceScope(nextScope)
+    }
+  }, [activeTenant?.id, isAllTenantsSelected, workspaceScope])
+
+  useEffect(() => {
+    if (!routeOrganizationId) {
+      return
+    }
+    if (organizationOverrideId === String(routeOrganizationId)) {
+      return
+    }
+    setOrganizationOverrideId(String(routeOrganizationId))
+    setActiveOrganizationIdOverride(String(routeOrganizationId))
+  }, [organizationOverrideId, routeOrganizationId])
+
+  useEffect(() => {
+    if (!activeOrganization?.id) return
+    const currentActiveOrgId = String(activeOrganization.id)
+    if (routeOrganizationId) {
+      return
+    }
+    if (organizationOverrideId && organizationOverrideId !== currentActiveOrgId) {
+      return
+    }
+    if (organizationOverrideId) {
+      setOrganizationOverrideId(null)
+      setActiveOrganizationIdOverride(null)
+    }
+  }, [activeOrganization?.id, organizationOverrideId, routeOrganizationId])
+
   const handleSwitch = async (tenant) => {
-    if (String(tenant.id) === String(activeTenant?.id)) { setOpen(false); return }
+    if (String(tenant.id) === String(activeTenant?.id)) {
+      const nextScope = getTenantScopeValue(tenant.id)
+      setWorkspaceScopeState(nextScope)
+      setWorkspaceScope(nextScope)
+      setOrganizationOverrideId(null)
+      setActiveOrganizationIdOverride(null)
+      setOrgOpen(false)
+      setTenantOpen(false)
+      return
+    }
     setSwitching(tenant.id)
     try {
       await switchTenant(tenant.id)
-      navigate('/dashboard', { replace: false })
+      const nextScope = getTenantScopeValue(tenant.id)
+      setWorkspaceScopeState(nextScope)
+      setWorkspaceScope(nextScope)
+      setOrganizationOverrideId(null)
+      setActiveOrganizationIdOverride(null)
+      navigate(getTenantTargetPath(), { replace: false })
     } finally {
       setSwitching(null)
-      setOpen(false)
+      setOrgOpen(false)
+      setTenantOpen(false)
     }
   }
 
+  const handleOrganizationSwitch = async (organization) => {
+    const orgTenants = visibleTenants.filter((tenant) => String(tenant.organization_id) === String(organization.id))
+    const targetTenant = orgTenants.find((tenant) => String(tenant.id) === String(activeTenant?.id)) || orgTenants[0]
+    if (!targetTenant) {
+      setOrganizationOverrideId(String(organization.id))
+      setActiveOrganizationIdOverride(String(organization.id))
+      setTenantOpen(false)
+      setOrgOpen(false)
+      navigate(`/admin/organizations?org_id=${encodeURIComponent(organization.id)}`, { replace: false })
+      return
+    }
+    await handleSwitch(targetTenant)
+  }
+
+  const isTenantInCurrentOrganization = currentOrgTenants.some(
+    (tenant) => String(tenant.id) === String(activeTenant?.id)
+  )
+  const tenantScopeLabel = isAllTenantsSelected
+    ? 'All Tenants'
+    : currentOrgTenants.length === 0
+      ? 'No Workspace'
+      : isTenantInCurrentOrganization
+        ? (activeTenant?.display_name || activeTenant?.name || 'Workspace')
+        : 'Select Workspace'
+
   // Active display name
-  const displayName = activeOrganization?.name || activeOrganization?.slug || 'Select Workspace'
+  const displayName = displayOrganization?.name || displayOrganization?.slug || 'Select Organization'
   const initial = displayName.charAt(0).toUpperCase()
 
   return (
     <div className="relative" ref={ref} style={{ padding: collapsed ? '8px 6px' : '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2.5 rounded-lg transition-all"
-        style={{
-          padding: collapsed ? '8px 0' : '8px 10px',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          background: open ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
-          border: '1px solid',
-          borderColor: open ? 'rgba(99,102,241,0.25)' : 'var(--border)',
-          cursor: 'pointer',
-          color: 'var(--text-primary)',
-        }}
-      >
-        <div
-          className="flex items-center justify-center flex-shrink-0 rounded-md"
-          style={{
-            width: 28, height: 28,
-            background: 'var(--gradient-cyan)',
-            color: '#fff', fontWeight: 700, fontSize: 12,
-          }}
-        >
-          {initial}
-        </div>
-        {!collapsed && (
-          <>
-            <div className="flex flex-col min-w-0 flex-1 text-left" style={{ gap: 1 }}>
-              <span className="truncate max-w-[130px]" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }} title={displayName}>
-                {displayName}
-              </span>
-              {activeTenant && (
-                <span className="truncate max-w-[130px]" style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--neon-cyan)', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.8 }}>
-                  {activeTenant.display_name || activeTenant.name}
-                </span>
-              )}
-            </div>
-            <ChevronRight size={12} style={{ color: 'var(--text-muted)', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0 }} />
-          </>
-        )}
-      </button>
-
-      <AnimatePresence>
-        {open && !collapsed && (
-          <Motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -4 }}
-            transition={{ duration: 0.12, ease: 'easeOut' }}
-            style={{
-              position: 'absolute', top: 'calc(100% + 4px)', left: 12, zIndex: 60,
-              width: 'calc(100% - 24px)', transformOrigin: 'top left',
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
-              overflow: 'hidden',
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="relative">
+          <button
+            onClick={() => {
+              setOrgOpen((open) => !open)
+              setTenantOpen(false)
             }}
-            onClick={(e) => e.stopPropagation()}
+            className="w-full flex items-center gap-2.5 rounded-lg transition-all"
+            style={{
+              padding: collapsed ? '8px 0' : '8px 10px',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              background: orgOpen ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
+              border: '1px solid',
+              borderColor: orgOpen ? 'rgba(99,102,241,0.25)' : 'var(--border)',
+              cursor: 'pointer',
+              color: 'var(--text-primary)',
+            }}
           >
-            <div style={{ padding: '10px 12px 6px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Switch Workspace
-              </span>
+            <div
+              className="flex items-center justify-center flex-shrink-0 rounded-md"
+              style={{
+                width: 28, height: 28,
+                background: 'var(--gradient-cyan)',
+                color: '#fff', fontWeight: 700, fontSize: 12,
+              }}
+            >
+              {initial}
             </div>
-            
-            <div style={{ padding: 6, maxHeight: 300, overflowY: 'auto' }}>
-              {visibleTenants.length === 0 && (
-                <div style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-                  <div style={{ marginBottom: 4, fontWeight: 600, color: 'var(--text-secondary)' }}>No workspace access</div>
-                  Contact your organization admin to request access.
+            {!collapsed && (
+              <>
+                <div className="flex flex-col min-w-0 flex-1 text-left">
+                  <span className="truncate max-w-[130px]" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }}>
+                    {displayName}
+                  </span>
                 </div>
+                <ChevronRight size={12} style={{ color: 'var(--text-muted)', transform: orgOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0 }} />
+              </>
+            )}
+          </button>
+
+          <AnimatePresence>
+            {orgOpen && !collapsed && (
+              <Motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                transition={{ duration: 0.12, ease: 'easeOut' }}
+                style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 60,
+                  width: '100%',
+                  transformOrigin: 'top left',
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
+                  overflow: 'hidden',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ padding: '10px 12px 6px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Switch Organization
+                  </span>
+                </div>
+                <div style={{ padding: 6, maxHeight: 280, overflowY: 'auto' }}>
+                  {visibleOrganizations.map((organization) => {
+                    const isActive = String(organization.id) === currentOrganizationId
+                    const hasWorkspaces = visibleTenants.some(
+                      (tenant) => String(tenant.organization_id) === String(organization.id)
+                    )
+                    return (
+                      <button
+                        key={organization.id}
+                        onClick={() => {
+                          if (!hasWorkspaces) {
+                            setOrganizationOverrideId(String(organization.id))
+                            setActiveOrganizationIdOverride(String(organization.id))
+                            setOrgOpen(false)
+                            setTenantOpen(false)
+                            navigate(`/admin/organizations?org_id=${encodeURIComponent(organization.id)}`, { replace: false })
+                            return
+                          }
+                          handleOrganizationSwitch(organization)
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
+                        style={{
+                          background: isActive ? 'rgba(34,211,238,0.06)' : 'transparent',
+                          cursor: isActive ? 'default' : 'pointer',
+                          opacity: hasWorkspaces ? 1 : 0.68,
+                        }}
+                      >
+                        <div
+                          className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0"
+                          style={{ background: isActive ? 'var(--gradient-cyan)' : 'var(--bg-input)', border: '1px solid var(--border)', color: isActive ? '#fff' : 'var(--text-muted)', fontWeight: 700, fontSize: 12 }}
+                        >
+                          {(organization.name || 'O').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div style={{ fontSize: 13, fontWeight: 600, color: isActive ? 'var(--neon-cyan)' : 'var(--text-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {organization.name}
+                          </div>
+                          {!hasWorkspaces && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              No workspaces
+                            </div>
+                          )}
+                        </div>
+                        {isActive && <Check size={14} style={{ color: '#22d3ee', flexShrink: 0 }} />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </Motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {!collapsed && (
+          <div className="relative">
+            <button
+              onClick={() => {
+                setTenantOpen((open) => !open)
+                setOrgOpen(false)
+              }}
+              className="w-full flex items-center gap-2.5 rounded-lg transition-all"
+              style={{
+                padding: '8px 10px',
+                justifyContent: 'flex-start',
+                background: tenantOpen ? 'rgba(34,211,238,0.08)' : 'rgba(255,255,255,0.03)',
+                border: '1px solid',
+                borderColor: tenantOpen ? 'rgba(34,211,238,0.25)' : 'var(--border)',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <div
+                className="flex items-center justify-center flex-shrink-0 rounded-md"
+                style={{
+                  width: 28, height: 28,
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-muted)', fontWeight: 700, fontSize: 12,
+                }}
+              >
+                {tenantScopeLabel.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex flex-col min-w-0 flex-1 text-left">
+                <span className="truncate max-w-[130px]" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)' }}>
+                  {tenantScopeLabel}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Workspace Scope
+                </span>
+              </div>
+              <ChevronRight size={12} style={{ color: 'var(--text-muted)', transform: tenantOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0 }} />
+            </button>
+
+            <AnimatePresence>
+              {tenantOpen && (
+                <Motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                  transition={{ duration: 0.12, ease: 'easeOut' }}
+                  style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 60,
+                    width: '100%',
+                    transformOrigin: 'top left',
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
+                    overflow: 'hidden',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ padding: '10px 12px 6px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Switch Workspace
+                    </span>
+                  </div>
+
+                  <div style={{ padding: 6, maxHeight: 300, overflowY: 'auto' }}>
+                    {showAllTenantsOption && (
+                      <button
+                        onClick={() => {
+                          setWorkspaceScopeState(allTenantsScopeValue)
+                          setWorkspaceScope(allTenantsScopeValue)
+                          navigate(getAllTenantsTargetPath(), { replace: false })
+                          setTenantOpen(false)
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
+                        style={{
+                          background: isAllTenantsSelected ? 'rgba(34,211,238,0.06)' : 'transparent',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div
+                          className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0"
+                          style={{ background: isAllTenantsSelected ? 'var(--gradient-cyan)' : 'var(--bg-input)', border: '1px solid var(--border)', color: isAllTenantsSelected ? '#fff' : 'var(--text-muted)', fontWeight: 700, fontSize: 12 }}
+                        >
+                          A
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div style={{ fontSize: 13, fontWeight: 600, color: isAllTenantsSelected ? 'var(--neon-cyan)' : 'var(--text-heading)' }}>
+                            All Tenants
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                            View all workspaces in this organization
+                          </div>
+                        </div>
+                        {isAllTenantsSelected && <Check size={14} style={{ color: '#22d3ee', flexShrink: 0 }} />}
+                      </button>
+                    )}
+
+                    {currentOrgTenants.length === 0 && (
+                      <div style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+                        No workspace access
+                      </div>
+                    )}
+
+                    {currentOrgTenants.map((tenant) => {
+                      const isActive = String(tenant.id) === String(activeTenant?.id) && !isAllTenantsSelected
+                      const isSwitching = switching === tenant.id
+                      return (
+                        <button
+                          key={tenant.id}
+                          onClick={() => handleSwitch(tenant)}
+                          disabled={isSwitching}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
+                          style={{
+                            background: isActive ? 'rgba(34,211,238,0.06)' : 'transparent',
+                            cursor: isActive ? 'default' : 'pointer',
+                            opacity: isSwitching ? 0.6 : 1,
+                          }}
+                        >
+                          <div
+                            className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0"
+                            style={{ background: isActive ? 'var(--gradient-cyan)' : 'var(--bg-input)', border: '1px solid var(--border)', color: isActive ? '#fff' : 'var(--text-muted)', fontWeight: 700, fontSize: 12 }}
+                          >
+                            {tenant.display_name ? tenant.display_name.charAt(0).toUpperCase() : <Building2 size={14} />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div style={{ fontSize: 13, fontWeight: 600, color: isActive ? 'var(--neon-cyan)' : 'var(--text-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {tenant.display_name || tenant.name}
+                            </div>
+                            <div style={{ fontSize: 11, fontFamily: 'var(--font-sans)', color: 'var(--text-muted)' }}>
+                              {tenant.cloud?.toUpperCase?.() || 'N/A'}
+                            </div>
+                          </div>
+                          <WorkspaceRoleBadge membershipRole={tenant.membership_role} active={isActive} />
+                          {isActive && <Check size={14} style={{ color: '#22d3ee', flexShrink: 0 }} />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </Motion.div>
               )}
-              {visibleTenants.map(tenant => {
-                const isActive = String(tenant.id) === String(activeTenant?.id)
-                const isSwitching = switching === tenant.id
-                return (
-                  <button
-                    key={tenant.id}
-                    onClick={() => handleSwitch(tenant)}
-                    disabled={isSwitching}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
-                    style={{
-                      background: isActive ? 'rgba(34,211,238,0.06)' : 'transparent',
-                      cursor: isActive ? 'default' : 'pointer',
-                      opacity: isSwitching ? 0.6 : 1,
-                    }}
-                  >
-                    <div
-                      className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0"
-                      style={{ background: isActive ? 'var(--gradient-cyan)' : 'var(--bg-input)', border: '1px solid var(--border)', color: isActive ? '#fff' : 'var(--text-muted)', fontWeight: 700, fontSize: 12 }}
-                    >
-                      {tenant.display_name ? tenant.display_name.charAt(0).toUpperCase() : <Building2 size={14} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div style={{ fontSize: 13, fontWeight: 600, color: isActive ? 'var(--neon-cyan)' : 'var(--text-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {tenant.display_name || tenant.name}
-                      </div>
-                      <div style={{ fontSize: 11, fontFamily: 'var(--font-sans)', color: 'var(--text-muted)' }}>
-                        {tenant.organization_name} · {tenant.cloud?.toUpperCase?.() || 'N/A'}
-                      </div>
-                    </div>
-                    <WorkspaceRoleBadge membershipRole={tenant.membership_role} active={isActive} />
-                    {isActive && <Check size={14} style={{ color: '#22d3ee', flexShrink: 0 }} />}
-                  </button>
-                )
-              })}
-            </div>
-          </Motion.div>
+            </AnimatePresence>
+          </div>
         )}
-      </AnimatePresence>
+      </div>
     </div>
   )
 }

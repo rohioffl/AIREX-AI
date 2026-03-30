@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Sequence
 from typing import Any
 
 import structlog
@@ -29,6 +30,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from airex_core.core.config import settings
 from airex_core.core.events import emit_evidence_added, emit_investigation_progress
+from airex_core.core.investigation_bridge import InvestigationBridge
 from airex_core.core.knowledge_graph import knowledge_graph
 from airex_core.core.state_machine import transition_state
 from airex_core.investigations import INVESTIGATION_REGISTRY
@@ -45,6 +47,7 @@ from airex_core.models.incident import Incident
 from airex_core.services.anomaly_detector import annotate_probe_results, summarize_anomalies
 
 logger = structlog.get_logger()
+openclaw_bridge = InvestigationBridge()
 
 
 def _should_use_cloud_investigation(meta: dict[str, Any]) -> bool:
@@ -52,6 +55,57 @@ def _should_use_cloud_investigation(meta: dict[str, Any]) -> bool:
     cloud = (meta.get("_cloud") or "").lower()
     has_target = meta.get("_has_cloud_target", False)
     return cloud in ("gcp", "aws") and has_target
+
+
+def _build_timeline_observations(
+    results: Sequence[InvestigationResult],
+    anomaly_summary: dict[str, Any] | None = None,
+) -> list[str]:
+    observations: list[str] = []
+    for result in results:
+        if isinstance(result, ProbeResult):
+            for metric_name, value in result.metrics.items():
+                if isinstance(value, (int, float, str, bool)):
+                    observations.append(f"{result.tool_name}:{metric_name}={value}")
+        raw_output = getattr(result, "raw_output", "")
+        if isinstance(raw_output, str):
+            first_line = next((line.strip() for line in raw_output.splitlines() if line.strip()), "")
+            if first_line:
+                observations.append(first_line)
+
+    if anomaly_summary:
+        observations.append(
+            f"anomalies={anomaly_summary.get('total_count', 0)} critical={anomaly_summary.get('critical_count', 0)}"
+        )
+    return list(dict.fromkeys(observations))[:12]
+
+
+def _build_timeline_metrics(results: Sequence[InvestigationResult]) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    for result in results:
+        if not isinstance(result, ProbeResult):
+            continue
+        for metric_name, value in result.metrics.items():
+            if isinstance(value, (int, float, str, bool)):
+                metrics[f"{result.tool_name}.{metric_name}"] = value
+    return metrics
+
+
+def _extract_config_snapshot(results: Sequence[InvestigationResult]) -> tuple[str | None, dict[str, Any] | None]:
+    for result in results:
+        if not isinstance(result, ProbeResult):
+            continue
+        if result.tool_name not in {"change_detection_aws", "change_detection_gcp", "change_detection"}:
+            continue
+        metrics = dict(result.metrics or {})
+        if not metrics:
+            continue
+        config_name = (
+            str(metrics.get("resource_name") or metrics.get("service_name") or metrics.get("instance_id") or "deployment")
+            .strip()
+        )
+        return config_name, metrics
+    return None, None
 
 
 async def run_investigation(
@@ -95,6 +149,11 @@ async def run_investigation(
             IncidentState.INVESTIGATING,
             reason="Investigation started",
         )
+
+    if settings.OPENCLAW_ENABLED:
+        used_openclaw = await _run_openclaw_investigation(session, incident, log)
+        if used_openclaw:
+            return
 
     # ── Resolve primary probe ────────────────────────────────────
     use_cloud = _should_use_cloud_investigation(meta)
@@ -420,11 +479,220 @@ async def run_investigation(
             host=host,
             service_name=service_name,
         )
+        config_name, config_snapshot = _extract_config_snapshot(all_results)
+        await knowledge_graph.record_incident_timeline(
+            session=session,
+            tenant_id=incident.tenant_id,
+            incident_id=incident.id,
+            alert_type=incident.alert_type,
+            service_name=service_name,
+            host=host,
+            observations=_build_timeline_observations(all_results, anomaly_summary),
+            metrics=_build_timeline_metrics(all_results),
+            config_name=config_name,
+            config_snapshot=config_snapshot,
+        )
     except Exception as exc:
         log.warning("kg_entity_upsert_failed", error=str(exc))
 
     # Auto-trigger AI recommendation generation
     await _enqueue_recommendation(incident, log)
+
+
+async def _run_openclaw_investigation(
+    session: AsyncSession,
+    incident: Incident,
+    log: structlog.stdlib.BoundLogger,
+) -> bool:
+    """Try OpenClaw first and fall back to static probes on any bridge failure."""
+    meta = incident.meta or {}
+    service_name = meta.get("service_name") or meta.get("_service_name")
+
+    try:
+        kg_context = await knowledge_graph.get_context_for_incident(
+            session,
+            incident.tenant_id,
+            incident.alert_type,
+            service_name=service_name,
+        )
+    except Exception as exc:
+        log.warning("openclaw_kg_context_failed", error=str(exc))
+        kg_context = None
+
+    try:
+        contract = await openclaw_bridge.run(
+            incident,
+            timeout=settings.OPENCLAW_REQUEST_TIMEOUT,
+            kg_context=kg_context,
+        )
+    except Exception as exc:
+        failure_meta = dict(incident.meta or {})
+        failure_meta["openclaw_run"] = {
+            "agent_tool_calls": [],
+            "agent_used_tools": [],
+            "agent_fallback_used": True,
+            "agent_failure_reason": str(exc),
+        }
+        incident.meta = failure_meta
+        flag_modified(incident, "meta")
+        await session.flush()
+        log.warning("openclaw_bridge_failed_falling_back", error=str(exc))
+        return False
+
+    await persist_openclaw_evidence_contract(
+        session=session,
+        incident=incident,
+        contract=contract,
+        log=log,
+    )
+
+    await transition_state(
+        session,
+        incident,
+        IncidentState.RECOMMENDATION_READY,
+        reason=f"OpenClaw investigation complete: {contract.summary}",
+    )
+    await _enqueue_recommendation(incident, log)
+    return True
+
+
+async def _upsert_openclaw_entities(
+    *,
+    session: AsyncSession,
+    incident: Incident,
+    affected_entities: Sequence[str],
+) -> None:
+    if not affected_entities:
+        return
+
+    incident_entity_id = f"incident:{incident.id}"
+    await knowledge_graph.upsert_node(
+        session=session,
+        tenant_id=incident.tenant_id,
+        entity_id=incident_entity_id,
+        entity_type="incident",
+        label=str(incident.id),
+        properties={"alert_type": incident.alert_type},
+    )
+
+    for entity in affected_entities:
+        entity_type, _, entity_name = entity.partition(":")
+        if not entity_type or not entity_name:
+            continue
+        await knowledge_graph.upsert_node(
+            session=session,
+            tenant_id=incident.tenant_id,
+            entity_id=entity,
+            entity_type=entity_type,
+            label=entity_name,
+            properties={"source": "openclaw"},
+        )
+        await knowledge_graph.add_edge(
+            session=session,
+            tenant_id=incident.tenant_id,
+            src_entity_id=incident_entity_id,
+            relation="affected",
+            dst_entity_id=entity,
+            meta={"incident_id": str(incident.id)},
+        )
+
+
+async def persist_openclaw_evidence_contract(
+    *,
+    session: AsyncSession,
+    incident: Incident,
+    contract: Any,
+    log: structlog.stdlib.BoundLogger | None = None,
+) -> Evidence:
+    """Persist a normalized OpenClaw evidence contract onto an incident."""
+
+    evidence = Evidence(
+        tenant_id=incident.tenant_id,
+        incident_id=incident.id,
+        tool_name="openclaw",
+        raw_output=contract.model_dump_json(),
+    )
+    session.add(evidence)
+    await session.flush()
+
+    meta = dict(incident.meta or {})
+    meta["openclaw"] = contract.model_dump()
+    meta["openclaw_run"] = _extract_openclaw_run_meta(contract.raw_refs)
+    meta["probe_results"] = [
+        {
+            "tool_name": "openclaw",
+            "signals": contract.signals,
+            "affected_entities": contract.affected_entities,
+            "confidence": contract.confidence,
+        }
+    ]
+    meta["probe_count"] = 1
+    meta["investigation_summary"] = contract.summary
+    incident.meta = meta
+    flag_modified(incident, "meta")
+    await session.flush()
+
+    try:
+        await emit_evidence_added(
+            tenant_id=str(incident.tenant_id),
+            incident_id=str(incident.id),
+            tool_name="openclaw",
+            evidence_id=str(evidence.id),
+        )
+    except Exception:
+        pass
+
+    try:
+        await _upsert_openclaw_entities(
+            session=session,
+            incident=incident,
+            affected_entities=contract.affected_entities,
+        )
+        current_meta = incident.meta or {}
+        host = current_meta.get("_private_ip") or current_meta.get("_instance_id")
+        service_name = current_meta.get("service_name") or current_meta.get("_service_name")
+        await knowledge_graph.record_incident_timeline(
+            session=session,
+            tenant_id=incident.tenant_id,
+            incident_id=incident.id,
+            alert_type=incident.alert_type,
+            service_name=service_name,
+            host=host,
+            observations=contract.signals,
+            metrics={
+                "openclaw.confidence": contract.confidence,
+                "openclaw.affected_entity_count": len(contract.affected_entities),
+            },
+        )
+    except Exception as exc:
+        if log is not None:
+            log.warning("openclaw_kg_entity_upsert_failed", error=str(exc))
+
+    return evidence
+
+
+def _extract_openclaw_run_meta(raw_refs: Any) -> dict[str, Any]:
+    if not isinstance(raw_refs, dict):
+        return {
+            "agent_tool_calls": [],
+            "agent_used_tools": [],
+            "agent_fallback_used": False,
+            "agent_failure_reason": "",
+        }
+
+    agent_tool_calls = raw_refs.get("agent_tool_calls")
+    agent_used_tools = raw_refs.get("agent_used_tools")
+    return {
+        "agent_tool_calls": agent_tool_calls if isinstance(agent_tool_calls, list) else [],
+        "agent_used_tools": agent_used_tools if isinstance(agent_used_tools, list) else [],
+        "agent_fallback_used": bool(raw_refs.get("agent_fallback_used", False)),
+        "agent_failure_reason": str(raw_refs.get("agent_failure_reason") or ""),
+        "forensic_tools": (
+            raw_refs.get("forensic_tools")
+            if isinstance(raw_refs.get("forensic_tools"), list)
+            else []
+        ),
+    }
 
 
 async def _run_all_probes(

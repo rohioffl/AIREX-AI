@@ -101,6 +101,10 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
     () => new Map(accessibleTenants.map((tenant) => [String(tenant.id), tenant])),
     [accessibleTenants]
   )
+  const scopedAccessibleTenants = useMemo(
+    () => accessibleTenants.filter((tenant) => tenants.some((scopedTenant) => String(scopedTenant.id) === String(tenant.id))),
+    [accessibleTenants, tenants]
+  )
 
   async function handleAssign(tenantId) {
     const role = draftRoles[String(tenantId)] || 'viewer'
@@ -171,7 +175,7 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
               Access Summary
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8 }}>
-              {accessibleTenants.length} tenant workspace{accessibleTenants.length === 1 ? '' : 's'} currently visible to this user.
+              {scopedAccessibleTenants.length} tenant workspace{scopedAccessibleTenants.length === 1 ? '' : 's'} currently visible to this user in this organization.
             </div>
           </div>
 

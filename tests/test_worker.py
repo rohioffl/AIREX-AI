@@ -219,34 +219,6 @@ async def test_approval_sla_check_fans_out_across_active_tenants(monkeypatch):
         session.commit.assert_awaited_once()
 
 
-@pytest.mark.asyncio
-async def test_proactive_health_check_fans_out_across_active_tenants(monkeypatch):
-    tenant_ids = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
-    run_health_checks = AsyncMock(
-        side_effect=[
-            {"checks_created": 2, "incidents_created": 1, "down_count": 1, "degraded_count": 0},
-            {"checks_created": 1, "incidents_created": 0, "down_count": 0, "degraded_count": 1},
-            {"checks_created": 3, "incidents_created": 2, "down_count": 2, "degraded_count": 0},
-        ]
-    )
-    redis = AsyncMock()
-
-    def fake_load_attr(module_path, attr_name):
-        mapping = {
-            ("airex_core.services.health_check_service", "run_health_checks"): run_health_checks,
-        }
-        return mapping[(module_path, attr_name)]
-
-    monkeypatch.setattr(worker, "_load_attr", fake_load_attr)
-    monkeypatch.setattr(worker, "_list_active_tenant_ids", AsyncMock(return_value=tenant_ids))
-    monkeypatch.setattr(worker, "_get_settings", lambda: SimpleNamespace(HEALTH_CHECK_ENABLED=True))
-
-    await worker.proactive_health_check({"job_id": "job-health", "redis": redis})
-
-    assert run_health_checks.await_count == 3
-    assert [call.args[0] for call in run_health_checks.await_args_list] == tenant_ids
-    assert all(call.kwargs["redis"] is redis for call in run_health_checks.await_args_list)
-
 
 def _tenant_session_factory_by_tenant(sessions):
     @asynccontextmanager

@@ -1,0 +1,64 @@
+# OpenClaw AI gateway — optional sidecar for AIREX Phase 2 (InvestigationBridge).
+# Paths are relative to this file (services/openclaw/); defaults resolve to repo-root .local/
+#
+# From repository root:
+#   ./scripts/openclaw-setup.sh
+#   docker compose -f services/openclaw/docker-compose.yml up -d
+#
+# With main stack (set OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789 for API/worker):
+#   docker compose -f docker-compose.yml -f services/openclaw/docker-compose.yml up -d
+#
+# Docs: ../../docs/openclaw_local_setup.md
+
+services:
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      TZ: ${OPENCLAW_TZ:-UTC}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      OPENCLAW_TOOL_SERVER_TOKEN: ${OPENCLAW_TOOL_SERVER_TOKEN:-${OPENCLAW_GATEWAY_TOKEN:-}}
+      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: ${OPENCLAW_ALLOW_INSECURE_PRIVATE_WS:-}
+      AIREX_TOOLS_BASE_URL: ${AIREX_TOOLS_BASE_URL:-http://host.docker.internal:8000}
+      AIREX_TOOL_TIMEOUT_MS: ${AIREX_TOOL_TIMEOUT_MS:-30000}
+      # Gemini (Google AI Studio) — OpenClaw `google/*` models; optional if you use Bedrock only
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GEMINI_API_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION_NAME:-us-east-1}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR:-../../.local/openclaw/config}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR:-../../.local/openclaw/workspace}:/home/node/.openclaw/workspace
+      - ./plugins/airex-tools:/home/node/.openclaw/extensions/airex-tools:ro
+    ports:
+      - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+      - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    restart: unless-stopped
+    # --allow-unconfigured: start without prior `openclaw onboard` (empty mounted config).
+    # For production-like runs, run onboarding once, then remove this flag.
+    command:
+      - node
+      - dist/index.js
+      - gateway
+      - --bind
+      - ${OPENCLAW_GATEWAY_BIND:-lan}
+      - --port
+      - "18789"
+      - --allow-unconfigured
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s

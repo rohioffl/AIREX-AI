@@ -37,7 +37,6 @@ phases:
             -e "s|__SECRET_LITELLM_MASTER_KEY_ARN__|$SECRET_LITELLM_MASTER_KEY_ARN|g" \
             -e "s|__SECRET_SITE24X7_CLIENT_SECRET_ARN__|$SECRET_SITE24X7_CLIENT_SECRET_ARN|g" \
             -e "s|__SECRET_SITE24X7_REFRESH_TOKEN_ARN__|$SECRET_SITE24X7_REFRESH_TOKEN_ARN|g" \
-            -e "s|__SECRET_EMAIL_SMTP_PASSWORD_ARN__|$SECRET_EMAIL_SMTP_PASSWORD_ARN|g" \
             -e "s|__LLM_BASE_URL__|$LLM_BASE_URL|g" \
             -e "s|__LLM_PRIMARY_MODEL__|$LLM_PRIMARY_MODEL|g" \
             -e "s|__LLM_FALLBACK_MODEL__|$LLM_FALLBACK_MODEL|g" \
@@ -47,9 +46,6 @@ phases:
             -e "s|__SITE24X7_CLIENT_ID__|$SITE24X7_CLIENT_ID|g" \
             -e "s|__SITE24X7_BASE_URL__|$SITE24X7_BASE_URL|g" \
             -e "s|__SITE24X7_ACCOUNTS_URL__|$SITE24X7_ACCOUNTS_URL|g" \
-            -e "s|__EMAIL_SMTP_HOST__|$EMAIL_SMTP_HOST|g" \
-            -e "s|__EMAIL_SMTP_PORT__|$EMAIL_SMTP_PORT|g" \
-            -e "s|__EMAIL_SMTP_USER__|$EMAIL_SMTP_USER|g" \
             -e "s|__EMAIL_FROM__|$EMAIL_FROM|g" \
             deployment/ecs/task-definitions/airex-api.json > "$OUT_DIR/airex-api.json"
       - |

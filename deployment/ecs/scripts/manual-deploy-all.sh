@@ -3,13 +3,47 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
-ENV_FILE="${MANUAL_DEPLOY_ENV_FILE:-$ROOT_DIR/.manual-deploy.env}"
+
+DEPLOY_ENV="${DEPLOY_ENV:-prod}"
+ENV_FILE="${MANUAL_DEPLOY_ENV_FILE:-}"
+ENV_FILE_EXPLICIT="false"
 
 SKIP_IMAGES="false"
 SKIP_MIGRATIONS="false"
 SKIP_BACKEND_DEPLOY="false"
 SKIP_FRONTEND_DEPLOY="false"
 IMAGE_TAG="${IMAGE_TAG:-}"
+
+validate_env() {
+  local env_name="$1"
+
+  case "$env_name" in
+    dev|prod)
+      ;;
+    *)
+      echo "Unsupported environment: $env_name" >&2
+      echo "Expected one of: dev, prod" >&2
+      exit 1
+      ;;
+  esac
+}
+
+default_env_file() {
+  local env_name="$1"
+  local candidate="$ROOT_DIR/.manual-deploy.${env_name}.env"
+
+  if [[ -f "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return
+  fi
+
+  if [[ "$env_name" == "prod" ]]; then
+    printf '%s\n' "$ROOT_DIR/.manual-deploy.env"
+    return
+  fi
+
+  printf '%s\n' "$candidate"
+}
 
 usage() {
   cat <<'EOF'
@@ -18,7 +52,8 @@ Usage: deployment/ecs/scripts/manual-deploy-all.sh [options]
 Deploys backend images + ECS services + frontend (S3/CloudFront) manually.
 
 Options:
-  --env-file <path>      Path to env file (default: deployment/ecs/.manual-deploy.env)
+  --env <dev|prod>       Deployment environment (default: prod)
+  --env-file <path>      Path to env file (overrides environment default)
   --image-tag <tag>      Image tag for API/worker/litellm (default: current git sha)
   --skip-images          Skip docker build/push step
   --skip-migrations      Skip alembic migration step
@@ -33,33 +68,47 @@ Required env vars for backend deploy step:
   LOG_GROUP_API LOG_GROUP_WORKER LOG_GROUP_LITELLM LOG_GROUP_LANGFUSE
   SECRET_DATABASE_URL_ARN SECRET_REDIS_URL_ARN SECRET_APP_SECRET_KEY_ARN
   SECRET_LITELLM_MASTER_KEY_ARN SECRET_GEMINI_API_KEY_ARN
-  SECRET_SITE24X7_CLIENT_SECRET_ARN SECRET_SITE24X7_REFRESH_TOKEN_ARN SECRET_EMAIL_SMTP_PASSWORD_ARN
+  SECRET_SITE24X7_CLIENT_SECRET_ARN SECRET_SITE24X7_REFRESH_TOKEN_ARN
   SECRET_LANGFUSE_PUBLIC_KEY_ARN SECRET_LANGFUSE_SECRET_KEY_ARN
   SECRET_LANGFUSE_DATABASE_URL_ARN SECRET_LANGFUSE_NEXTAUTH_SECRET_ARN SECRET_LANGFUSE_SALT_ARN
   LLM_BASE_URL LLM_PRIMARY_MODEL LLM_FALLBACK_MODEL LLM_EMBEDDING_MODEL
-  CORS_ORIGINS FRONTEND_URL GOOGLE_OAUTH_CLIENT_ID SITE24X7_ENABLED SITE24X7_CLIENT_ID SITE24X7_BASE_URL SITE24X7_ACCOUNTS_URL EMAIL_SMTP_HOST EMAIL_SMTP_PORT EMAIL_SMTP_USER EMAIL_FROM LANGFUSE_HOST NEXTAUTH_URL
+  CORS_ORIGINS FRONTEND_URL GOOGLE_OAUTH_CLIENT_ID SITE24X7_ENABLED SITE24X7_CLIENT_ID SITE24X7_BASE_URL SITE24X7_ACCOUNTS_URL EMAIL_FROM LANGFUSE_HOST NEXTAUTH_URL
 
 Required env vars for frontend deploy step:
   CLOUDFRONT_DISTRIBUTION_ID
 
 Optional vars:
-  ECR_API_REPO (default: airex-prod-api)
-  ECR_WORKER_REPO (default: airex-prod-worker)
-  ECR_LITELLM_REPO (default: airex-prod-litellm)
-  FRONTEND_BUCKET (default: airex-prod-frontend-<account_id>)
-  FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID (default: /airex/prod/frontend/google_oauth_client_id)
-  BACKEND_DATABASE_URL_SECRET_ID (default: /airex/prod/backend/database_url)
-  ECS_SERVICE_API (default: airex-prod-api)
-  ECS_SERVICE_WORKER (default: airex-prod-worker)
-  ECS_SERVICE_LITELLM (default: airex-prod-litellm)
-  ECS_SERVICE_LANGFUSE (default: airex-prod-langfuse)
+  ECR_API_REPO (default: airex-<env>-api)
+  ECR_WORKER_REPO (default: airex-<env>-worker)
+  ECR_LITELLM_REPO (default: airex-<env>-litellm)
+  TASKDEF_FAMILY_API (default: airex-<env>-api)
+  TASKDEF_FAMILY_WORKER (default: airex-<env>-worker)
+  TASKDEF_FAMILY_LITELLM (default: airex-<env>-litellm)
+  TASKDEF_FAMILY_LANGFUSE (default: airex-<env>-langfuse)
+  LOG_GROUP_API (default: /ecs/airex-<env>-api)
+  LOG_GROUP_WORKER (default: /ecs/airex-<env>-worker)
+  LOG_GROUP_LITELLM (default: /ecs/airex-<env>-litellm)
+  LOG_GROUP_LANGFUSE (default: /ecs/airex-<env>-langfuse)
+  FRONTEND_BUCKET (default: airex-<env>-frontend-<account_id>)
+  FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID (default: /airex/<env>/frontend/google_oauth_client_id)
+  BACKEND_DATABASE_URL_SECRET_ID (default: /airex/<env>/backend/database_url)
+  ECS_CLUSTER (default: airex-<env>-cluster)
+  ECS_SERVICE_API (default: airex-<env>-api)
+  ECS_SERVICE_WORKER (default: airex-<env>-worker)
+  ECS_SERVICE_LITELLM (default: airex-<env>-litellm)
+  ECS_SERVICE_LANGFUSE (default: airex-<env>-langfuse)
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --env)
+      DEPLOY_ENV="${2,,}"
+      shift 2
+      ;;
     --env-file)
       ENV_FILE="$2"
+      ENV_FILE_EXPLICIT="true"
       shift 2
       ;;
     --image-tag)
@@ -93,6 +142,15 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+validate_env "$DEPLOY_ENV"
+
+if [[ "$ENV_FILE_EXPLICIT" != "true" ]]; then
+  ENV_FILE="$(default_env_file "$DEPLOY_ENV")"
+fi
+
+export DEPLOY_ENV
+PROJECT_PREFIX="airex-$DEPLOY_ENV"
 
 if [[ -f "$ENV_FILE" ]]; then
   echo "Loading env from $ENV_FILE"
@@ -128,9 +186,9 @@ export AWS_REGION
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 
-ECR_API_REPO="${ECR_API_REPO:-airex-prod-api}"
-ECR_WORKER_REPO="${ECR_WORKER_REPO:-airex-prod-worker}"
-ECR_LITELLM_REPO="${ECR_LITELLM_REPO:-airex-prod-litellm}"
+ECR_API_REPO="${ECR_API_REPO:-$PROJECT_PREFIX-api}"
+ECR_WORKER_REPO="${ECR_WORKER_REPO:-$PROJECT_PREFIX-worker}"
+ECR_LITELLM_REPO="${ECR_LITELLM_REPO:-$PROJECT_PREFIX-litellm}"
 
 if [[ -z "$IMAGE_TAG" ]]; then
   IMAGE_TAG="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
@@ -141,17 +199,29 @@ export WORKER_IMAGE="$ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG"
 export LITELLM_IMAGE="$ECR_REGISTRY/$ECR_LITELLM_REPO:$IMAGE_TAG"
 export LANGFUSE_IMAGE="${LANGFUSE_IMAGE:-public.ecr.aws/langfuse/langfuse:2}"
 
-export ECS_CLUSTER="${ECS_CLUSTER:-airex-prod-cluster}"
-export ECS_SERVICE_API="${ECS_SERVICE_API:-airex-prod-api}"
-export ECS_SERVICE_WORKER="${ECS_SERVICE_WORKER:-airex-prod-worker}"
-export ECS_SERVICE_LITELLM="${ECS_SERVICE_LITELLM:-airex-prod-litellm}"
-export ECS_SERVICE_LANGFUSE="${ECS_SERVICE_LANGFUSE:-airex-prod-langfuse}"
+export ECS_CLUSTER="${ECS_CLUSTER:-$PROJECT_PREFIX-cluster}"
+export ECS_SERVICE_API="${ECS_SERVICE_API:-$PROJECT_PREFIX-api}"
+export ECS_SERVICE_WORKER="${ECS_SERVICE_WORKER:-$PROJECT_PREFIX-worker}"
+export ECS_SERVICE_LITELLM="${ECS_SERVICE_LITELLM:-$PROJECT_PREFIX-litellm}"
+export ECS_SERVICE_LANGFUSE="${ECS_SERVICE_LANGFUSE:-$PROJECT_PREFIX-langfuse}"
 
-FRONTEND_BUCKET="${FRONTEND_BUCKET:-airex-prod-frontend-$ACCOUNT_ID}"
-FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID="${FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID:-/airex/prod/frontend/google_oauth_client_id}"
-BACKEND_DATABASE_URL_SECRET_ID="${BACKEND_DATABASE_URL_SECRET_ID:-/airex/prod/backend/database_url}"
+export TASKDEF_FAMILY_API="${TASKDEF_FAMILY_API:-$PROJECT_PREFIX-api}"
+export TASKDEF_FAMILY_WORKER="${TASKDEF_FAMILY_WORKER:-$PROJECT_PREFIX-worker}"
+export TASKDEF_FAMILY_LITELLM="${TASKDEF_FAMILY_LITELLM:-$PROJECT_PREFIX-litellm}"
+export TASKDEF_FAMILY_LANGFUSE="${TASKDEF_FAMILY_LANGFUSE:-$PROJECT_PREFIX-langfuse}"
+
+export LOG_GROUP_API="${LOG_GROUP_API:-/ecs/$PROJECT_PREFIX-api}"
+export LOG_GROUP_WORKER="${LOG_GROUP_WORKER:-/ecs/$PROJECT_PREFIX-worker}"
+export LOG_GROUP_LITELLM="${LOG_GROUP_LITELLM:-/ecs/$PROJECT_PREFIX-litellm}"
+export LOG_GROUP_LANGFUSE="${LOG_GROUP_LANGFUSE:-/ecs/$PROJECT_PREFIX-langfuse}"
+
+FRONTEND_BUCKET="${FRONTEND_BUCKET:-$PROJECT_PREFIX-frontend-$ACCOUNT_ID}"
+FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID="${FRONTEND_GOOGLE_CLIENT_ID_SECRET_ID:-/airex/$DEPLOY_ENV/frontend/google_oauth_client_id}"
+BACKEND_DATABASE_URL_SECRET_ID="${BACKEND_DATABASE_URL_SECRET_ID:-/airex/$DEPLOY_ENV/backend/database_url}"
 
 echo "Deploy context:"
+echo "  DEPLOY_ENV=$DEPLOY_ENV"
+echo "  ENV_FILE=$ENV_FILE"
 echo "  AWS_REGION=$AWS_REGION"
 echo "  ACCOUNT_ID=$ACCOUNT_ID"
 echo "  IMAGE_TAG=$IMAGE_TAG"
@@ -206,11 +276,11 @@ if [[ "$SKIP_BACKEND_DEPLOY" != "true" ]]; then
     LOG_GROUP_API LOG_GROUP_WORKER LOG_GROUP_LITELLM LOG_GROUP_LANGFUSE
     SECRET_DATABASE_URL_ARN SECRET_REDIS_URL_ARN SECRET_APP_SECRET_KEY_ARN
     SECRET_LITELLM_MASTER_KEY_ARN SECRET_GEMINI_API_KEY_ARN
-    SECRET_SITE24X7_CLIENT_SECRET_ARN SECRET_SITE24X7_REFRESH_TOKEN_ARN SECRET_EMAIL_SMTP_PASSWORD_ARN
+    SECRET_SITE24X7_CLIENT_SECRET_ARN SECRET_SITE24X7_REFRESH_TOKEN_ARN
     SECRET_LANGFUSE_PUBLIC_KEY_ARN SECRET_LANGFUSE_SECRET_KEY_ARN
     SECRET_LANGFUSE_DATABASE_URL_ARN SECRET_LANGFUSE_NEXTAUTH_SECRET_ARN SECRET_LANGFUSE_SALT_ARN
     LLM_BASE_URL LLM_PRIMARY_MODEL LLM_FALLBACK_MODEL LLM_EMBEDDING_MODEL
-    CORS_ORIGINS FRONTEND_URL GOOGLE_OAUTH_CLIENT_ID SITE24X7_ENABLED SITE24X7_CLIENT_ID SITE24X7_BASE_URL SITE24X7_ACCOUNTS_URL EMAIL_SMTP_HOST EMAIL_SMTP_PORT EMAIL_SMTP_USER EMAIL_FROM LANGFUSE_HOST NEXTAUTH_URL
+    CORS_ORIGINS FRONTEND_URL GOOGLE_OAUTH_CLIENT_ID SITE24X7_ENABLED SITE24X7_CLIENT_ID SITE24X7_BASE_URL SITE24X7_ACCOUNTS_URL EMAIL_FROM LANGFUSE_HOST NEXTAUTH_URL
   )
   for name in "${required_backend_env[@]}"; do
     require_env "$name"

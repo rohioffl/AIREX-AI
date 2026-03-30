@@ -11,7 +11,9 @@ class Settings(BaseSettings):
     """Application settings. Loaded from environment / .env file."""
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/airex"
+    DATABASE_URL: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/airex?ssl=disable"
+    )
     # Optional separate DB for platform_admins table (falls back to DATABASE_URL if empty)
     PLATFORM_ADMIN_DATABASE_URL: str = ""
 
@@ -41,7 +43,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: str | None = None
     LLM_API_VERSION: str | None = None
     LLM_CORRELATION_HEADER: str = "X-Correlation-ID"
-    LLM_EMBEDDING_MODEL: str = "text-embedding-3-large"
+    LLM_EMBEDDING_MODEL: str = "text-embedding"
     LLM_EMBEDDING_TIMEOUT: int = 15
     LLM_EMBEDDING_DIMENSION: int = 1024
     VERTEX_PROJECT: str = "smartops-automation"
@@ -55,6 +57,15 @@ class Settings(BaseSettings):
     RAG_SNIPPET_MAX_CHARS: int = 600
     RAG_INCIDENT_SUMMARY_MAX_CHARS: int = 1600
     RAG_SIMILARITY_THRESHOLD: float = 0.7  # cosine distance; lower = more similar
+
+    # ── OpenClaw gateway (Phase 2 — InvestigationBridge) ───────────
+    # See docs/openclaw_local_setup.md and services/openclaw/env.example
+    OPENCLAW_ENABLED: bool = False
+    OPENCLAW_GATEWAY_URL: str = "http://127.0.0.1:18789"
+    OPENCLAW_GATEWAY_TOKEN: str = ""
+    OPENCLAW_REQUEST_TIMEOUT: int = 120
+    OPENCLAW_AGENT_ID: str = "controller"
+    OPENCLAW_TOOL_SERVER_TOKEN: str = ""
 
     # Timeouts (seconds)
     INVESTIGATION_TIMEOUT: int = 60
@@ -88,14 +99,6 @@ class Settings(BaseSettings):
     REVIEWER_AGENT_ENABLED: bool = True
     REVIEWER_AGENT_TIMEOUT: int = 20  # seconds
 
-    # ── Proactive Health Checks (Phase 6 ARE) ───────────────────
-    HEALTH_CHECK_ENABLED: bool = True
-    HEALTH_CHECK_INTERVAL_MINUTES: int = 5
-    HEALTH_CHECK_MAX_MONITORS: int = 6000  # max Site24x7 monitors per run
-    HEALTH_CHECK_INCIDENT_COOLDOWN_MINUTES: int = (
-        30  # min gap between auto-incidents per target
-    )
-
     # Webhook signature verification (empty = skip in dev)
     WEBHOOK_SECRET: str = ""
 
@@ -104,6 +107,12 @@ class Settings(BaseSettings):
 
     # Multi-tenancy
     DEV_TENANT_ID: str = "00000000-0000-0000-0000-000000000000"
+
+    # ── Tenant Credentials / AWS Secrets Manager ─────────────────
+    # TTL for in-process secret cache (seconds); 0 disables caching
+    TENANT_SECRET_CACHE_TTL_SECONDS: int = 60
+    # Prefix used when constructing Secrets Manager paths for tenant/integration secrets
+    AWS_SECRETS_PREFIX: str = "/airex/prod"
 
     # ── Cloud Provider Settings ──────────────────────────────────
     # GCP
@@ -115,6 +124,7 @@ class Settings(BaseSettings):
 
     # AWS
     AWS_REGION: str = "ap-south-1"
+    AWS_SES_REGION: str = ""
     AWS_PROFILE: str = ""  # empty = use instance role / default creds
     AWS_SSM_DOCUMENT: str = "AWS-RunShellScript"
     AWS_SSM_TIMEOUT: int = 30  # seconds to wait for SSM command
@@ -140,10 +150,6 @@ class Settings(BaseSettings):
 
     # Notifications
     SLACK_WEBHOOK_URL: str = ""
-    EMAIL_SMTP_HOST: str = ""
-    EMAIL_SMTP_PORT: int = 587
-    EMAIL_SMTP_USER: str = ""
-    EMAIL_SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = ""
 
     model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}

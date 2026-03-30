@@ -7,10 +7,10 @@ This directory contains production deployment scaffolding for:
 - Frontend on S3 + CloudFront
 - Secrets Manager (secrets) + SSM Parameter Store (non-secrets)
 
-Production rule for this stack:
+Environment rule for this stack:
 
 - secrets are stored in AWS Secrets Manager, not in Terraform tfvars files
-- production is the only environment targeted right now; staging can be added later
+- prod is the active AWS environment today; dev can use the same manual deploy flow if matching AWS resources and secrets exist
 - ACM certificates and GitHub/CodePipeline wiring are managed manually outside Terraform
 
 ## Target Topology
@@ -142,22 +142,29 @@ Recommended order:
 
 ### One-shot manual deploy script
 
-For manual production deploys from a trusted runner, use:
+For manual deploys from a trusted runner, use:
 
 ```bash
-cp deployment/ecs/.manual-deploy.env.example deployment/ecs/.manual-deploy.env
-# fill deployment/ecs/.manual-deploy.env
-deployment/ecs/scripts/manual-deploy-all.sh
+cp deployment/ecs/.manual-deploy.prod.env.example deployment/ecs/.manual-deploy.prod.env
+# fill deployment/ecs/.manual-deploy.prod.env
+deployment/ecs/scripts/manual-deploy-all.sh --env prod
 ```
 
 Useful flags:
 
 ```bash
-deployment/ecs/scripts/manual-deploy-all.sh --image-tag <tag>
-deployment/ecs/scripts/manual-deploy-all.sh --skip-images
-deployment/ecs/scripts/manual-deploy-all.sh --skip-frontend
-deployment/ecs/scripts/manual-deploy-all.sh --skip-backend
+deployment/ecs/scripts/manual-deploy-all.sh --env dev
+deployment/ecs/scripts/manual-deploy-all.sh --env prod --image-tag <tag>
+deployment/ecs/scripts/manual-deploy-all.sh --env prod --skip-images
+deployment/ecs/scripts/manual-deploy-all.sh --env prod --skip-frontend
+deployment/ecs/scripts/manual-deploy-all.sh --env prod --skip-backend
 ```
+
+Environment-specific env-file resolution:
+
+- `--env prod` looks for `deployment/ecs/.manual-deploy.prod.env`, then falls back to the legacy `deployment/ecs/.manual-deploy.env`
+- `--env dev` looks for `deployment/ecs/.manual-deploy.dev.env`
+- `--env-file <path>` overrides either default
 
 ### Secrets policy
 

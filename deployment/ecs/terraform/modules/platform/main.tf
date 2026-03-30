@@ -92,26 +92,6 @@ resource "aws_secretsmanager_secret" "langfuse_secret_key" {
   tags = local.tags
 }
 
-resource "aws_secretsmanager_secret" "email_smtp_host" {
-  name = "/${var.project_name}/${var.environment}/backend/email_smtp_host"
-  tags = local.tags
-}
-
-resource "aws_secretsmanager_secret" "email_smtp_port" {
-  name = "/${var.project_name}/${var.environment}/backend/email_smtp_port"
-  tags = local.tags
-}
-
-resource "aws_secretsmanager_secret" "email_smtp_user" {
-  name = "/${var.project_name}/${var.environment}/backend/email_smtp_user"
-  tags = local.tags
-}
-
-resource "aws_secretsmanager_secret" "email_smtp_password" {
-  name = "/${var.project_name}/${var.environment}/backend/email_smtp_password"
-  tags = local.tags
-}
-
 resource "aws_secretsmanager_secret" "email_from" {
   name = "/${var.project_name}/${var.environment}/backend/email_from"
   tags = local.tags
@@ -228,10 +208,6 @@ data "aws_iam_policy_document" "execution_secrets_access" {
       aws_secretsmanager_secret.langfuse_salt.arn,
       aws_secretsmanager_secret.langfuse_public_key.arn,
       aws_secretsmanager_secret.langfuse_secret_key.arn,
-      aws_secretsmanager_secret.email_smtp_host.arn,
-      aws_secretsmanager_secret.email_smtp_port.arn,
-      aws_secretsmanager_secret.email_smtp_user.arn,
-      aws_secretsmanager_secret.email_smtp_password.arn,
       aws_secretsmanager_secret.email_from.arn,
       aws_secretsmanager_secret.site24x7_client_id.arn,
       aws_secretsmanager_secret.site24x7_client_secret.arn,
@@ -280,6 +256,46 @@ resource "aws_iam_role_policy" "task_role_ecs_exec" {
   policy = data.aws_iam_policy_document.task_role_ecs_exec.json
 }
 
+# ── Tenant & Integration Secrets Manager access ───────────────────────────────
+# Allows airex-api and airex-worker to fetch per-tenant cloud account credentials
+# and per-integration API secrets at runtime (secret_resolver.py).
+# Covers: /airex/<env>/tenant/* and /airex/<env>/integration/*
+data "aws_iam_policy_document" "task_role_tenant_secrets" {
+  statement {
+    sid = "TenantAndIntegrationSecretsRead"
+    actions = [
+      "secretsmanager:GetSecretValue",
+    ]
+    resources = [
+      "arn:aws:secretsmanager:*:*:secret:/airex/${var.environment}/tenant/*",
+      "arn:aws:secretsmanager:*:*:secret:/airex/${var.environment}/integration/*",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "task_role_tenant_secrets" {
+  name   = "${local.name_prefix}-tenant-secrets"
+  role   = aws_iam_role.task_role.id
+  policy = data.aws_iam_policy_document.task_role_tenant_secrets.json
+}
+
+data "aws_iam_policy_document" "task_role_ses_send" {
+  statement {
+    sid = "SendEmailViaSES"
+    actions = [
+      "ses:SendEmail",
+      "ses:SendRawEmail",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_role_ses_send" {
+  name   = "${local.name_prefix}-ses-send"
+  role   = aws_iam_role.task_role.id
+  policy = data.aws_iam_policy_document.task_role_ses_send.json
+}
+
 resource "aws_ecs_cluster" "main" {
   name = "${local.name_prefix}-cluster"
 
@@ -308,6 +324,7 @@ resource "aws_ecs_task_definition" "api" {
       portMappings = [{ containerPort = 8000, protocol = "tcp" }]
       environment = [
         { name = "PYTHONPATH", value = "/app" },
+        { name = "AWS_REGION", value = var.aws_region },
         { name = "LLM_BASE_URL", value = aws_ssm_parameter.litellm_host.value },
         { name = "LLM_PRIMARY_MODEL", value = aws_ssm_parameter.llm_primary_model.value },
         { name = "LLM_FALLBACK_MODEL", value = aws_ssm_parameter.llm_fallback_model.value },
@@ -318,10 +335,6 @@ resource "aws_ecs_task_definition" "api" {
         { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.backend_redis_url.arn },
         { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.backend_secret_key.arn },
         { name = "LLM_API_KEY", valueFrom = aws_secretsmanager_secret.litellm_master_key.arn },
-        { name = "EMAIL_SMTP_HOST", valueFrom = aws_secretsmanager_secret.email_smtp_host.arn },
-        { name = "EMAIL_SMTP_PORT", valueFrom = aws_secretsmanager_secret.email_smtp_port.arn },
-        { name = "EMAIL_SMTP_USER", valueFrom = aws_secretsmanager_secret.email_smtp_user.arn },
-        { name = "EMAIL_SMTP_PASSWORD", valueFrom = aws_secretsmanager_secret.email_smtp_password.arn },
         { name = "EMAIL_FROM", valueFrom = aws_secretsmanager_secret.email_from.arn },
         { name = "SITE24X7_CLIENT_ID", valueFrom = aws_secretsmanager_secret.site24x7_client_id.arn },
         { name = "SITE24X7_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.site24x7_client_secret.arn },
@@ -433,6 +446,7 @@ resource "aws_ecs_task_definition" "worker" {
       essential = true
       environment = [
         { name = "PYTHONPATH", value = "/app" },
+        { name = "AWS_REGION", value = var.aws_region },
         { name = "LLM_BASE_URL", value = aws_ssm_parameter.litellm_host.value },
         { name = "LLM_PRIMARY_MODEL", value = aws_ssm_parameter.llm_primary_model.value },
         { name = "LLM_FALLBACK_MODEL", value = aws_ssm_parameter.llm_fallback_model.value },
@@ -444,10 +458,6 @@ resource "aws_ecs_task_definition" "worker" {
         { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.backend_redis_url.arn },
         { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.backend_secret_key.arn },
         { name = "LLM_API_KEY", valueFrom = aws_secretsmanager_secret.litellm_master_key.arn },
-        { name = "EMAIL_SMTP_HOST", valueFrom = aws_secretsmanager_secret.email_smtp_host.arn },
-        { name = "EMAIL_SMTP_PORT", valueFrom = aws_secretsmanager_secret.email_smtp_port.arn },
-        { name = "EMAIL_SMTP_USER", valueFrom = aws_secretsmanager_secret.email_smtp_user.arn },
-        { name = "EMAIL_SMTP_PASSWORD", valueFrom = aws_secretsmanager_secret.email_smtp_password.arn },
         { name = "EMAIL_FROM", valueFrom = aws_secretsmanager_secret.email_from.arn },
         { name = "SITE24X7_CLIENT_ID", valueFrom = aws_secretsmanager_secret.site24x7_client_id.arn },
         { name = "SITE24X7_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.site24x7_client_secret.arn },

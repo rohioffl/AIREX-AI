@@ -46,8 +46,8 @@ class SettingsResponse(BaseModel):
     
     # Notifications
     slack_webhook_url: str | None
-    email_smtp_host: str | None
-    email_smtp_port: int | None
+    email_provider: str
+    email_region: str | None
     email_from: str | None
 
 
@@ -66,8 +66,6 @@ class SettingsUpdate(BaseModel):
     max_verification_retries: int | None = None
     lock_ttl: int | None = None
     slack_webhook_url: str | None = None
-    email_smtp_host: str | None = None
-    email_smtp_port: int | None = None
     email_from: str | None = None
 
 
@@ -95,8 +93,8 @@ async def get_settings(
         max_verification_retries=settings.MAX_VERIFICATION_RETRIES,
         lock_ttl=settings.LOCK_TTL,
         slack_webhook_url=getattr(settings, "SLACK_WEBHOOK_URL", None),
-        email_smtp_host=getattr(settings, "EMAIL_SMTP_HOST", None),
-        email_smtp_port=getattr(settings, "EMAIL_SMTP_PORT", None),
+        email_provider="aws_ses",
+        email_region=getattr(settings, "AWS_SES_REGION", None) or getattr(settings, "AWS_REGION", None),
         email_from=getattr(settings, "EMAIL_FROM", None),
     )
 
@@ -171,8 +169,6 @@ async def update_settings(
         "max_verification_retries": "MAX_VERIFICATION_RETRIES",
         "lock_ttl": "LOCK_TTL",
         "slack_webhook_url": "SLACK_WEBHOOK_URL",
-        "email_smtp_host": "EMAIL_SMTP_HOST",
-        "email_smtp_port": "EMAIL_SMTP_PORT",
         "email_from": "EMAIL_FROM",
     }
     for field_name, value in applied_updates.items():

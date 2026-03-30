@@ -60,6 +60,11 @@ class RecommendationResponse(BaseModel):
     proposed_action: str
     risk_level: RiskLevel
     confidence: float
+    action_type: str = "execute_fix"
+    action_id: str = ""
+    target: str = ""
+    params: dict[str, Any] = Field(default_factory=dict)
+    reason: str = ""
 
 
 # --- Incident list / detail ---
@@ -72,6 +77,7 @@ class IncidentListItem(BaseModel):
 
     id: uuid.UUID
     tenant_id: uuid.UUID
+    tenant_name: str | None = None
     alert_type: str
     state: IncidentState
     severity: SeverityLevel

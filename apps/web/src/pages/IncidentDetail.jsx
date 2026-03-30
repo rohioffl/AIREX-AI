@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
 import {
@@ -12,6 +12,7 @@ import {
   Ban,
 } from 'lucide-react'
 import useIncidentDetail from '../hooks/useIncidentDetail'
+import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import Terminal from '../components/common/Terminal'
 import IncidentHeader from '../components/incident/IncidentHeader'
@@ -44,8 +45,11 @@ import { extractErrorMessage } from '../utils/errorHandler'
 
 export default function IncidentDetail() {
   const { id } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
-  const { incident, loading, error, connected, reconnecting, executionLogs, probeSteps } = useIncidentDetail(id)
+  const tenantOverride = new URLSearchParams(location.search).get('tenant_id')
+  const { activeTenant, switchTenant } = useAuth()
+  const { incident, loading, error, connected, reconnecting, executionLogs, probeSteps } = useIncidentDetail(id, tenantOverride)
   const { isDark } = useTheme()
   const [ackRejectModalOpen, setAckRejectModalOpen] = useState(false)
   const [modalInitialAction, setModalInitialAction] = useState(null) // 'acknowledge' | 'reject'
@@ -53,6 +57,14 @@ export default function IncidentDetail() {
   const [rejectError, setRejectError] = useState(null)
   const [showShortcutsModal, setShowShortcutsModal] = useState(false)
   const [, setApproveLoading] = useState(false)
+
+  useEffect(() => {
+    if (!tenantOverride) return
+    if (String(activeTenant?.id || '') === String(tenantOverride)) return
+    switchTenant(tenantOverride).catch((err) => {
+      console.warn('Failed to switch tenant for incident detail view:', err)
+    })
+  }, [activeTenant?.id, switchTenant, tenantOverride])
 
   // Keyboard shortcuts
   useKeyboardShortcuts({

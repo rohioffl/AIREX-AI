@@ -13,6 +13,7 @@ from typing import Optional
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel
 
@@ -22,13 +23,22 @@ from app.api.dependencies import (
     RequireOperator,
     TenantId,
     TenantSession,
+    get_auth_session,
+    get_authenticated_user,
+    has_org_membership,
     require_permission,
 )
-from airex_core.core.rbac import Permission
+from airex_core.core.rbac import Permission, normalize_role_name
+from airex_core.core.security import TokenData
 from airex_core.core.rate_limit import approval_rate_limit
 from airex_core.core.config import settings
+from airex_core.core.execution_safety import (
+    estimate_action_impact,
+    evaluate_execution_guard,
+)
+from airex_core.core.context_resolver import resolve_execution_context
 from airex_core.core.state_machine import IllegalStateTransition, transition_state
-from airex_core.models.enums import IncidentState, SeverityLevel
+from airex_core.models.enums import IncidentState, RiskLevel, SeverityLevel
 from airex_core.models.comment import Comment
 from airex_core.models.user import User
 from airex_core.models.feedback_learning import FeedbackLearning
@@ -37,6 +47,8 @@ from airex_core.models.incident_template import IncidentTemplate
 from airex_core.models.related_incident import RelatedIncident
 from airex_core.models.runbook import Runbook
 from airex_core.models.runbook_execution import RunbookExecution, RunbookStepExecution
+from airex_core.models.tenant import Tenant
+from airex_core.schemas.recommendation_contract import resolve_recommendation_contract
 from airex_core.schemas.incident import (
     ApproveRequest,
     CorrelatedIncidentItem,
@@ -58,6 +70,57 @@ from airex_core.schemas.incident import (
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+async def _require_explicit_org_alert_access(
+    session: AsyncSession,
+    current_user: TokenData,
+    organization_id: uuid.UUID,
+) -> None:
+    if normalize_role_name(current_user.role) == "platform_admin":
+        return
+    if await has_org_membership(
+        session,
+        user_id=current_user.user_id,
+        organization_id=organization_id,
+    ):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Organization-level access required",
+    )
+
+
+def _get_recommendation_dict(meta: dict | None) -> dict | None:
+    contract = resolve_recommendation_contract(meta)
+    if contract is not None:
+        return contract.to_legacy_recommendation()
+
+    if meta and isinstance(meta.get("recommendation"), dict):
+        return meta["recommendation"]
+
+    return None
+
+
+def _resolve_risk_level(recommendation_payload: dict) -> RiskLevel:
+    raw_risk = recommendation_payload.get("risk_level") or recommendation_payload.get("risk")
+    try:
+        return RiskLevel(str(raw_risk).upper())
+    except ValueError:
+        return RiskLevel.MED
+
+
+def _approval_confidence_from_payload(meta: dict, recommendation_payload: dict) -> tuple[float | None, dict | None]:
+    confidence_breakdown = meta.get("confidence_breakdown")
+    if not isinstance(confidence_breakdown, dict):
+        legacy_breakdown = recommendation_payload.get("confidence_breakdown")
+        confidence_breakdown = legacy_breakdown if isinstance(legacy_breakdown, dict) else None
+    approval_confidence = (
+        confidence_breakdown.get("composite_confidence")
+        if isinstance(confidence_breakdown, dict)
+        else recommendation_payload.get("confidence")
+    )
+    return approval_confidence, confidence_breakdown
 
 
 # ── Manual Incident Creation Schemas ──────────────────────────────
@@ -373,6 +436,143 @@ async def list_incidents(
     )
 
 
+@router.get("/organizations/{organization_id}", response_model=PaginatedIncidents)
+async def list_organization_incidents(
+    organization_id: uuid.UUID,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+    state: IncidentState | None = None,
+    severity: SeverityLevel | None = None,
+    alert_type: str | None = None,
+    host_key: str | None = Query(
+        default=None,
+        description="Filter by host_key to show incidents from the same server",
+    ),
+    search: str | None = Query(
+        default=None,
+        description="Search in title, alert_type, meta, and evidence fields",
+    ),
+    date_from: datetime | None = Query(
+        default=None,
+        description="Filter incidents created after this date (ISO format)",
+    ),
+    date_to: datetime | None = Query(
+        default=None,
+        description="Filter incidents created before this date (ISO format)",
+    ),
+    limit: int = Query(default=50, le=200),
+    cursor: str | None = Query(
+        default=None, description="ISO timestamp cursor for keyset pagination"
+    ),
+    offset: int = Query(default=0, ge=0, description="Legacy offset-based pagination"),
+) -> PaginatedIncidents:
+    """List incidents across all tenants in an organization for org-level users."""
+    from sqlalchemy import String, cast, or_
+    from airex_core.models.evidence import Evidence
+
+    await _require_explicit_org_alert_access(session, current_user, organization_id)
+
+    logger.info(
+        "organization_incidents_list_requested",
+        organization_id=str(organization_id),
+        user_id=str(current_user.user_id),
+    )
+
+    base_filters = [
+        Tenant.organization_id == organization_id,
+        Incident.tenant_id == Tenant.id,
+        Incident.deleted_at.is_(None),
+    ]
+    if state is not None:
+        base_filters.append(Incident.state == state)
+    if severity is not None:
+        base_filters.append(Incident.severity == severity)
+    if alert_type is not None:
+        base_filters.append(Incident.alert_type == alert_type)
+    if host_key is not None:
+        base_filters.append(Incident.host_key == host_key)
+
+    if search and search.strip():
+        search_term = f"%{search.strip().lower()}%"
+        incident_search = or_(
+            Incident.title.ilike(search_term),
+            Incident.alert_type.ilike(search_term),
+            cast(Incident.meta, String).ilike(search_term),
+        )
+        evidence_subq = (
+            select(Evidence.incident_id)
+            .join(Tenant, Tenant.id == Evidence.tenant_id)
+            .where(
+                Tenant.organization_id == organization_id,
+                Evidence.raw_output.ilike(search_term),
+            )
+            .distinct()
+        )
+        base_filters.append(or_(incident_search, Incident.id.in_(evidence_subq)))
+
+    if date_from:
+        base_filters.append(Incident.created_at >= date_from)
+    if date_to:
+        base_filters.append(Incident.created_at <= date_to)
+
+    total = None
+    if cursor is None and offset == 0:
+        count_q = (
+            select(func.count())
+            .select_from(Incident)
+            .join(Tenant, Tenant.id == Incident.tenant_id)
+            .where(*base_filters)
+        )
+        total_result = await session.execute(count_q)
+        total = total_result.scalar_one()
+
+    query = (
+        select(Incident, Tenant.display_name, Tenant.name)
+        .join(Tenant, Tenant.id == Incident.tenant_id)
+        .where(*base_filters)
+        .order_by(desc(Incident.created_at), desc(Incident.id))
+        .limit(limit + 1)
+    )
+
+    if cursor:
+        try:
+            cursor_dt = datetime.fromisoformat(cursor)
+        except ValueError:
+            cursor_dt = datetime.now(timezone.utc)
+        query = query.where(Incident.created_at < cursor_dt)
+    elif offset > 0:
+        query = query.offset(offset)
+
+    result = await session.execute(query)
+    rows = list(result.all())
+
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+
+    next_cursor = None
+    if has_more and rows:
+        last_incident = rows[-1][0]
+        next_cursor = last_incident.created_at.isoformat() if last_incident.created_at else None
+
+    items = [
+        IncidentListItem.model_validate(
+            {
+                **incident.__dict__,
+                "tenant_name": tenant_display_name or tenant_name,
+            }
+        )
+        for incident, tenant_display_name, tenant_name in rows
+    ]
+
+    return PaginatedIncidents(
+        items=items,
+        next_cursor=next_cursor,
+        has_more=has_more,
+        total=total,
+    )
+
+
 # ── Get Incident ──────────────────────────────────────────────────
 
 
@@ -404,11 +604,10 @@ async def get_incident(
 
     # Recommendation is stored in meta (populated by AI service)
     recommendation = None
-    if incident.meta and "recommendation" in incident.meta:
+    rec_dict = _get_recommendation_dict(incident.meta)
+    if rec_dict:
         try:
-            recommendation = RecommendationResponse.model_validate(
-                incident.meta["recommendation"]
-            )
+            recommendation = RecommendationResponse.model_validate(rec_dict)
         except (TypeError, ValueError) as exc:
             logger.warning(
                 "incident_recommendation_parse_failed",
@@ -417,7 +616,6 @@ async def get_incident(
                 error=str(exc),
             )
             # If validation fails, try to use raw dict (for backwards compatibility)
-            rec_dict = incident.meta["recommendation"]
             if isinstance(rec_dict, dict) and "proposed_action" in rec_dict:
                 from airex_core.models.enums import RiskLevel
 
@@ -646,12 +844,56 @@ async def approve_incident(
             detail=f"Unknown action: {body.action}. Must be one of: {', '.join(ACTION_REGISTRY.keys())}",
         )
 
+    approval_level = normalize_role_name(
+        str((incident.meta or {}).get("_approval_level", "operator"))
+    )
+    requester_role = normalize_role_name(current_user.role if current_user else "operator")
+    if approval_level == "senior" and requester_role not in {"admin", "platform_admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Senior approval required for this incident",
+        )
+
     # Freeze execution params at approval time (Phase 3d: Execution Plan Snapshot)
     meta = incident.meta or {}
-    rec_params = meta.get("recommendation", {}).get("params", {}) or {}
+    recommendation_payload = _get_recommendation_dict(meta) or {}
+    rec_params = recommendation_payload.get("params", {}) or {}
+    approval_confidence, confidence_breakdown = _approval_confidence_from_payload(
+        meta, recommendation_payload
+    )
+    impact_estimate = estimate_action_impact(
+        body.action,
+        rec_params,
+        risk_level=_resolve_risk_level(recommendation_payload),
+        blast_radius=str(recommendation_payload.get("blast_radius") or ""),
+    )
+    execution_guard = await evaluate_execution_guard(
+        session,
+        tenant_id,
+        body.action,
+        rec_params,
+        exec_ctx=resolve_execution_context(rec_params),
+    )
+    if not execution_guard.valid:
+        status_code = (
+            status.HTTP_403_FORBIDDEN
+            if execution_guard.cross_tenant_denied
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=execution_guard.reason)
+
+    meta = {
+        **meta,
+        "impact_estimate": impact_estimate.model_dump(),
+        "execution_guard": execution_guard.model_dump(),
+    }
     snapshot: dict = {
         "action_type": body.action,
         "params": rec_params,
+        "confidence_used": approval_confidence,
+        "confidence_breakdown": confidence_breakdown,
+        "impact_estimate": impact_estimate.model_dump(),
+        "execution_guard": execution_guard.model_dump(),
         "approved_by": actor_email,
         "approved_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -681,8 +923,16 @@ async def approve_incident(
     # Track feedback learning
     try:
         meta = incident.meta or {}
-        rec = meta.get("recommendation", {})
-        confidence_before = rec.get("confidence")
+        rec = _get_recommendation_dict(meta) or {}
+        meta_breakdown = meta.get("confidence_breakdown")
+        if not isinstance(meta_breakdown, dict):
+            legacy_breakdown = rec.get("confidence_breakdown")
+            meta_breakdown = legacy_breakdown if isinstance(legacy_breakdown, dict) else None
+        confidence_before = (
+            meta_breakdown.get("composite_confidence")
+            if isinstance(meta_breakdown, dict)
+            else rec.get("confidence")
+        )
         feedback = FeedbackLearning(
             tenant_id=tenant_id,
             incident_id=incident.id,
@@ -1062,7 +1312,7 @@ async def bulk_approve(
     for incident in incidents:
         try:
             # Get recommendation action
-            rec = incident.meta.get("recommendation") if incident.meta else None
+            rec = _get_recommendation_dict(incident.meta)
             if not rec or not isinstance(rec, dict):
                 errors.append(f"Incident {incident.id}: No recommendation found")
                 continue
@@ -1082,16 +1332,39 @@ async def bulk_approve(
             # Freeze execution params at approval time (Phase 3d: Execution Plan Snapshot)
             meta = incident.meta or {}
             rec_params = rec.get("params", {}) or {}
+            impact_estimate = estimate_action_impact(
+                action,
+                rec_params,
+                risk_level=_resolve_risk_level(rec),
+                blast_radius=str(rec.get("blast_radius") or ""),
+            )
+            execution_guard = await evaluate_execution_guard(
+                session,
+                tenant_id,
+                action,
+                rec_params,
+                exec_ctx=resolve_execution_context(rec_params),
+            )
+            if not execution_guard.valid:
+                errors.append(f"Incident {incident.id}: {execution_guard.reason}")
+                continue
             snapshot: dict = {
                 "action_type": action,
                 "params": rec_params,
+                "impact_estimate": impact_estimate.model_dump(),
+                "execution_guard": execution_guard.model_dump(),
                 "approved_by": actor_email,
                 "approved_at": datetime.now(timezone.utc).isoformat(),
             }
             snapshot["snapshot_hash"] = hashlib.sha256(
                 json.dumps(snapshot, sort_keys=True).encode()
             ).hexdigest()
-            incident.meta = {**meta, "execution_snapshot": snapshot}
+            incident.meta = {
+                **meta,
+                "impact_estimate": impact_estimate.model_dump(),
+                "execution_guard": execution_guard.model_dump(),
+                "execution_snapshot": snapshot,
+            }
 
             # Transition to EXECUTING
             reason = body.reason or f"Bulk approved by {actor_email}"

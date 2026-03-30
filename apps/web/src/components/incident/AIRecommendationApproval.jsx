@@ -40,6 +40,8 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
         verification_criteria: recommendation.verification_criteria || [],
         reasoning_chain: recommendation.reasoning_chain || [],
         evidence_annotations: recommendation.evidence_annotations || {},
+        confidence_breakdown: recommendation.confidence_breakdown || incident.meta?.confidence_breakdown || null,
+        grounding_summary: recommendation.grounding_summary || incident.meta?.grounding_summary || '',
       }
     : null
 
@@ -52,6 +54,9 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
   const approvalReason = incident.meta?._approval_reason || null
   const confidenceMet = incident.meta?._confidence_met !== false
   const seniorRequired = Boolean(incident.meta?._senior_required)
+  const approvalConfidence = incident.meta?._approval_confidence ?? normalizedRecommendation?.confidence_breakdown?.composite_confidence ?? normalizedRecommendation?.confidence
+  const impactEstimate = incident.meta?.impact_estimate || normalizedRecommendation?.impact_estimate || null
+  const executionGuard = incident.meta?.execution_guard || normalizedRecommendation?.execution_guard || null
   
   // Always show if there's pattern analysis, recommendation, manual review required, or awaiting approval
   const shouldShow = ragContext || normalizedRecommendation || manualRequired || awaitingApproval
@@ -81,6 +86,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
   const risk = (normalizedRecommendation?.risk_level || 'MED').toUpperCase()
   const theme = RISK_THEME[risk] || RISK_THEME.MED
   const approvalTheme = approvalLevel ? APPROVAL_LEVEL_THEME[approvalLevel] : null
+  const confidenceBreakdown = normalizedRecommendation?.confidence_breakdown || null
 
   return (
     <div className="space-y-6" style={{ width: '100%', maxWidth: '100%' }}>
@@ -94,7 +100,8 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
             </h3>
             {normalizedRecommendation && (
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                CONFIDENCE: {(normalizedRecommendation.confidence * 100).toFixed(1)}%
+                CONFIDENCE: {((approvalConfidence ?? normalizedRecommendation.confidence) * 100).toFixed(1)}%
+                {confidenceBreakdown ? ' composite' : ''}
               </p>
             )}
           </div>
@@ -149,6 +156,128 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
           </div>
         )}
 
+        {confidenceBreakdown && (
+          <div
+            className="mb-4 p-3 rounded-lg"
+            style={{
+              background: 'rgba(15,23,42,0.55)',
+              border: '1px solid rgba(99,102,241,0.16)',
+            }}
+          >
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Composite Confidence
+              </p>
+              <span
+                className="px-2 py-0.5 rounded"
+                style={{ fontSize: 10, fontWeight: 700, color: 'var(--neon-indigo)', background: 'rgba(99,102,241,0.12)' }}
+              >
+                {(confidenceBreakdown.composite_confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                Model: {(confidenceBreakdown.model_confidence * 100).toFixed(0)}%
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                Evidence: {(confidenceBreakdown.evidence_strength_score * 100).toFixed(0)}%
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                Tool grounding: {(confidenceBreakdown.tool_grounding_score * 100).toFixed(0)}%
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                KG match: {(confidenceBreakdown.kg_match_score * 100).toFixed(0)}%
+              </div>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              {normalizedRecommendation?.grounding_summary || 'Grounding details unavailable.'}
+              {confidenceBreakdown.hallucination_penalty > 0 && (
+                <> Penalty applied: {(confidenceBreakdown.hallucination_penalty * 100).toFixed(0)}%.</>
+              )}
+            </p>
+          </div>
+        )}
+
+        {(impactEstimate || executionGuard) && (
+          <div
+            className="mb-4 grid gap-3 md:grid-cols-2"
+          >
+            {impactEstimate && (
+              <div
+                className="p-3 rounded-lg"
+                style={{
+                  background: 'rgba(15,23,42,0.55)',
+                  border: '1px solid rgba(148,163,184,0.16)',
+                }}
+              >
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                  Impact Estimate
+                </p>
+                <div className="grid grid-cols-1 gap-1.5 mb-2">
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    Cost delta: {String(impactEstimate.cost_delta || 'low').toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    Dependency pressure: {String(impactEstimate.dependency_pressure || 'low').toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    Resource limit risk: {String(impactEstimate.resource_limit_risk || 'low').toUpperCase()}
+                  </div>
+                  {typeof impactEstimate.scale_delta === 'number' && (
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                      Scale delta: {impactEstimate.scale_delta >= 0 ? '+' : ''}{impactEstimate.scale_delta}
+                    </div>
+                  )}
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {impactEstimate.blast_radius_summary || 'Blast radius summary unavailable.'}
+                </p>
+              </div>
+            )}
+
+            {executionGuard && (
+              <div
+                className="p-3 rounded-lg"
+                style={{
+                  background: 'rgba(15,23,42,0.55)',
+                  border: `1px solid ${executionGuard.valid ? 'rgba(16,185,129,0.18)' : 'rgba(244,63,94,0.18)'}`,
+                }}
+              >
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-heading)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Execution Guard
+                  </p>
+                  <span
+                    className="px-2 py-0.5 rounded"
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: executionGuard.valid ? 'var(--color-accent-green)' : 'var(--color-accent-red)',
+                      background: executionGuard.valid ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)',
+                    }}
+                  >
+                    {executionGuard.valid ? 'VALID' : 'BLOCKED'}
+                  </span>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 8 }}>
+                  {executionGuard.reason || 'Execution scope validation unavailable.'}
+                </p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    Credential scope: {executionGuard.credential_scope_valid ? 'OK' : 'FAILED'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    Cluster ownership: {executionGuard.cluster_ownership_valid ? 'OK' : 'FAILED'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    Namespace scope: {executionGuard.namespace_scope_valid ? 'OK' : 'FAILED'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {!normalizedRecommendation ? (
           <div className="space-y-4">
             <div className="p-4 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
@@ -194,7 +323,7 @@ export default function AIRecommendationApproval({ incident, ragContext }) {
                     Primary Recommendation
                   </span>
                   <span className="px-2 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-accent-green)', background: 'var(--glow-emerald)' }}>
-                    {(normalizedRecommendation.confidence * 100).toFixed(0)}% confidence
+                    {((approvalConfidence ?? normalizedRecommendation.confidence) * 100).toFixed(0)}% confidence
                   </span>
                 </div>
                 {(!selectedAction || selectedAction === normalizedRecommendation.proposed_action) && (
