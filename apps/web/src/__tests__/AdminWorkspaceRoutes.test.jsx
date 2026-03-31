@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockAuth = vi.hoisted(() => ({
@@ -80,9 +80,12 @@ describe('admin workspace route pages', () => {
     mockAuth.user = { role: 'platform_admin' }
     mockAuth.activeTenantId = 'tenant-1'
     mockAuth.activeTenant = { id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one' }
-    mockAuth.activeOrganization = { id: 'org-1', name: 'Org One' }
+    mockAuth.activeOrganization = { id: 'org-1', name: 'Org One', slug: 'org-one' }
     mockAuth.projects = []
-    mockAuth.organizations = [{ id: 'org-1', name: 'Org One' }, { id: 'org-2', name: 'Org Two' }]
+    mockAuth.organizations = [
+      { id: 'org-1', name: 'Org One', slug: 'org-one' },
+      { id: 'org-2', name: 'Org Two', slug: 'org-two' },
+    ]
     mockAuth.tenants = [{ id: 'tenant-1', display_name: 'Tenant One', name: 'tenant-one' }]
     mockAuth.organizationMemberships = []
     mockApi.fetchOrganizations.mockResolvedValue([
@@ -98,8 +101,10 @@ describe('admin workspace route pages', () => {
 
   it('renders the organizations admin page wrapper', async () => {
     render(
-      <MemoryRouter>
-        <OrganizationsAdminPage />
+      <MemoryRouter initialEntries={['/admin/organizations/org-one']}>
+        <Routes>
+          <Route path="/admin/organizations/:organizationSlug" element={<OrganizationsAdminPage />} />
+        </Routes>
       </MemoryRouter>
     )
 
@@ -113,8 +118,10 @@ describe('admin workspace route pages', () => {
 
   it('pins org admin to the requested organization instead of falling back to the active org', async () => {
     render(
-      <MemoryRouter initialEntries={['/admin/organizations?org_id=org-2']}>
-        <OrganizationsAdminPage />
+      <MemoryRouter initialEntries={['/admin/organizations/org-two']}>
+        <Routes>
+          <Route path="/admin/organizations/:organizationSlug" element={<OrganizationsAdminPage />} />
+        </Routes>
       </MemoryRouter>
     )
 
@@ -124,28 +131,32 @@ describe('admin workspace route pages', () => {
     })
   })
 
-  it('renders the tenant workspace admin page wrapper', async () => {
+  it('renders the workspace admin page wrapper', async () => {
     render(
-      <MemoryRouter>
-        <TenantWorkspaceAdminPage />
+      <MemoryRouter initialEntries={['/admin/organizations/org-one/workspaces']}>
+        <Routes>
+          <Route path="/admin/organizations/:organizationSlug/workspaces" element={<TenantWorkspaceAdminPage />} />
+        </Routes>
       </MemoryRouter>
     )
 
-    expect(screen.getByText('Tenant Workspaces')).toBeInTheDocument()
+    expect(screen.getByText('Workspaces')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /back to platform admin/i })).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByTestId('tenant-members-panel')).toHaveTextContent('Tenant One')
     })
   })
 
-  it('scopes the tenant workspace page to the requested organization', async () => {
+  it('scopes the workspace page to the requested organization', async () => {
     render(
-      <MemoryRouter initialEntries={['/admin/workspaces?org_id=org-2']}>
-        <TenantWorkspaceAdminPage />
+      <MemoryRouter initialEntries={['/admin/organizations/org-two/workspaces']}>
+        <Routes>
+          <Route path="/admin/organizations/:organizationSlug/workspaces" element={<TenantWorkspaceAdminPage />} />
+        </Routes>
       </MemoryRouter>
     )
 
-    expect(screen.getByText('Tenant Workspaces')).toBeInTheDocument()
+    expect(screen.getByText('Workspaces')).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByText('Workspaces (0)')).toBeInTheDocument()
       expect(screen.getByText('No workspaces found')).toBeInTheDocument()
@@ -171,8 +182,10 @@ describe('admin workspace route pages', () => {
     mockAuth.organizationMemberships = [{ id: 'org-1', role: 'org_admin' }]
 
     const organizationsView = render(
-      <MemoryRouter>
-        <OrganizationsAdminPage />
+      <MemoryRouter initialEntries={['/admin/organizations/org-one']}>
+        <Routes>
+          <Route path="/admin/organizations/:organizationSlug" element={<OrganizationsAdminPage />} />
+        </Routes>
       </MemoryRouter>
     )
 
@@ -180,8 +193,10 @@ describe('admin workspace route pages', () => {
     organizationsView.unmount()
 
     const workspacesView = render(
-      <MemoryRouter>
-        <TenantWorkspaceAdminPage />
+      <MemoryRouter initialEntries={['/admin/organizations/org-one/workspaces']}>
+        <Routes>
+          <Route path="/admin/organizations/:organizationSlug/workspaces" element={<TenantWorkspaceAdminPage />} />
+        </Routes>
       </MemoryRouter>
     )
     expect(screen.getByRole('link', { name: /back to organizations/i })).toBeInTheDocument()

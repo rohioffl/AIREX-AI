@@ -45,7 +45,7 @@ const NAV_ITEMS = [
   { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'operator'] },
   { label: 'Platform Admin', path: '/admin', icon: ShieldCheck, access: 'platform_admin' },
   { label: 'Org Admin', path: '/admin/organizations', icon: Building2, access: 'organizations_admin' },
-  { label: 'Tenant Workspaces', path: '/admin/workspaces', icon: Layers, access: 'tenant_admin' },
+  { label: 'Workspaces', path: '/admin/workspaces', icon: Layers, access: 'tenant_admin' },
 ]
 
 const ROUTE_TITLES = {
@@ -62,7 +62,7 @@ const ROUTE_TITLES = {
   '/org-admin':              { label: 'Org Admin',        parent: null },
   '/admin':                  { label: 'Platform Admin',   parent: null },
   '/admin/organizations':    { label: 'Org Admin',        parent: null },
-  '/admin/workspaces':       { label: 'Tenant Workspaces', parent: null },
+  '/admin/workspaces':       { label: 'Workspaces', parent: null },
   '/admin/integrations':     { label: 'Integrations',     parent: null },
   '/admin/cloud-accounts':   { label: 'Cloud Accounts',   parent: null },
   '/profile':               { label: 'Profile',           parent: 'Account' },
@@ -244,6 +244,7 @@ export default function Layout({ children }) {
     organizationMemberships,
     tenantMemberships,
   }
+  const hasTenantAdminSurfaceAccess = canAccessRoute(accessContext, 'tenant_admin')
 
   return (
     <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--bg-body)', color: 'var(--text-primary)' }}>
@@ -285,7 +286,14 @@ export default function Layout({ children }) {
             // Filter by role if roles are specified
             if (item.roles && user) {
               const userRole = normalizeRole(user.role || 'operator')
-              return item.roles.map(r => r.toLowerCase()).includes(userRole)
+              const allowedRoles = item.roles.map(r => r.toLowerCase())
+              if (allowedRoles.includes(userRole)) {
+                return true
+              }
+              if (hasTenantAdminSurfaceAccess && (allowedRoles.includes('admin') || allowedRoles.includes('operator'))) {
+                return true
+              }
+              return false
             }
             // Show all items if no role filter or no user (dev mode)
             return true
@@ -375,8 +383,16 @@ export default function Layout({ children }) {
             {/* Breadcrumb */}
             {(() => {
               const exact = ROUTE_TITLES[location.pathname]
-              const dynamic = !exact && location.pathname.startsWith('/incidents/')
-                ? { label: 'Incident Detail', parent: 'Alerts' }
+              const dynamic = !exact
+                ? (
+                    location.pathname.startsWith('/incidents/')
+                      ? { label: 'Incident Detail', parent: 'Alerts' }
+                      : location.pathname.match(/^\/admin\/organizations\/[^/]+\/workspaces$/)
+                        ? { label: 'Workspaces', parent: null }
+                        : location.pathname.match(/^\/admin\/organizations\/[^/]+$/)
+                          ? { label: 'Org Admin', parent: null }
+                          : null
+                  )
                 : null
               const route = exact || dynamic
               return route ? (
@@ -600,18 +616,26 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
   const [accessibleTenants, setAccessibleTenants] = useState([])
   const [workspaceScope, setWorkspaceScopeState] = useState(() => getWorkspaceScope())
   const [organizationOverrideId, setOrganizationOverrideId] = useState(() => getActiveOrganizationIdOverride())
+  const currentPathname = useMemo(() => currentPath?.split('?')[0] || '', [currentPath])
   const ref = useRef(null)
-  const routeOrganizationId = useMemo(() => {
-    if (!currentPath || !currentPath.includes('?')) {
+  const routeOrganizationKey = useMemo(() => {
+    if (!currentPathname) {
       return null
     }
     try {
-      const search = currentPath.slice(currentPath.indexOf('?'))
-      return new URLSearchParams(search).get('org_id')
+      const match = currentPathname.match(/^\/admin\/organizations\/([^/]+)/)
+      return match ? decodeURIComponent(match[1]) : null
     } catch {
       return null
     }
-  }, [currentPath])
+  }, [currentPathname])
+  const routeOrganization = useMemo(() => {
+    if (!routeOrganizationKey) return null
+    return (organizations || []).find((organization) => (
+      String(organization.slug) === String(routeOrganizationKey)
+      || String(organization.id) === String(routeOrganizationKey)
+    )) || null
+  }, [organizations, routeOrganizationKey])
 
   useEffect(() => {
     function handleClick(e) {
@@ -651,6 +675,10 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
 
   const tenantDetailsMap = new Map((tenants || []).map((tenant) => [String(tenant.id), tenant]))
   const organizationMap = new Map((organizations || []).map((org) => [String(org.id), org]))
+  const validOrganizationOverrideId = useMemo(() => {
+    if (!organizationOverrideId) return null
+    return organizationMap.has(String(organizationOverrideId)) ? String(organizationOverrideId) : null
+  }, [organizationMap, organizationOverrideId])
   const visibleTenants = accessibleTenants.map((tenant) => {
     const detail = tenantDetailsMap.get(String(tenant.id))
     const organization = organizationMap.get(String(tenant.organization_id))
@@ -666,13 +694,13 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
   })
 
   const displayOrganization = (
-    organizations.find((organization) => String(organization.id) === String(organizationOverrideId))
+    organizations.find((organization) => String(organization.id) === String(validOrganizationOverrideId))
     || activeOrganization
     || organizations[0]
     || null
   )
   const currentOrganizationId = String(
-    organizationOverrideId
+    validOrganizationOverrideId
     || displayOrganization?.id
     || activeTenant?.organization_id
     || ''
@@ -693,17 +721,39 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
     if (!path) return false
     return (
       path.startsWith('/alerts')
-      || path.startsWith('/admin/workspaces')
       || path.startsWith('/admin/organizations')
+      || path.startsWith('/admin/workspaces')
     )
   }, [])
 
-  const getTenantTargetPath = useCallback(() => {
+  const getTenantTargetPath = useCallback((organizationId = null) => {
     if (!currentPath || currentPath === '/') {
       return '/dashboard'
     }
-    return currentPath
-  }, [currentPath])
+    const [pathname, search = ''] = currentPath.split('?')
+    try {
+      const organizationRecord = organizationId
+        ? (organizations || []).find((organization) => String(organization.id) === String(organizationId))
+        : null
+      const routeKey = organizationRecord?.slug || organizationRecord?.id || organizationId || null
+      const encodedOrganizationId = routeKey ? encodeURIComponent(String(routeKey)) : null
+      if (pathname === '/admin/organizations') {
+        return encodedOrganizationId ? `/admin/organizations/${encodedOrganizationId}` : pathname
+      }
+      if (pathname === '/admin/workspaces') {
+        return encodedOrganizationId ? `/admin/organizations/${encodedOrganizationId}/workspaces` : pathname
+      }
+      if (pathname.startsWith('/admin/organizations/')) {
+        const nextPathname = encodedOrganizationId
+          ? pathname.replace(/^\/admin\/organizations\/[^/]+/, `/admin/organizations/${encodedOrganizationId}`)
+          : pathname
+        return search ? `${nextPathname}?${search}` : nextPathname
+      }
+      return currentPath
+    } catch {
+      return currentPath
+    }
+  }, [currentPath, organizations])
 
   const getAllTenantsTargetPath = useCallback(() => {
     if (supportsAllTenantsPath(currentPath)) {
@@ -723,51 +773,77 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
   }, [activeTenant?.id, isAllTenantsSelected, workspaceScope])
 
   useEffect(() => {
-    if (!routeOrganizationId) {
+    if (!routeOrganization?.id) {
       return
     }
-    if (organizationOverrideId === String(routeOrganizationId)) {
+    if (organizationOverrideId === String(routeOrganization.id)) {
       return
     }
-    setOrganizationOverrideId(String(routeOrganizationId))
-    setActiveOrganizationIdOverride(String(routeOrganizationId))
-  }, [organizationOverrideId, routeOrganizationId])
+    setOrganizationOverrideId(String(routeOrganization.id))
+    setActiveOrganizationIdOverride(String(routeOrganization.id))
+  }, [organizationOverrideId, routeOrganization?.id])
 
   useEffect(() => {
     if (!activeOrganization?.id) return
     const currentActiveOrgId = String(activeOrganization.id)
-    if (routeOrganizationId) {
+    if (routeOrganizationKey) {
       return
     }
-    if (organizationOverrideId && organizationOverrideId !== currentActiveOrgId) {
+    if (validOrganizationOverrideId && validOrganizationOverrideId !== currentActiveOrgId) {
       return
     }
     if (organizationOverrideId) {
       setOrganizationOverrideId(null)
       setActiveOrganizationIdOverride(null)
     }
-  }, [activeOrganization?.id, organizationOverrideId, routeOrganizationId])
+  }, [activeOrganization?.id, organizationOverrideId, routeOrganizationKey, validOrganizationOverrideId])
 
-  const handleSwitch = async (tenant) => {
+  useEffect(() => {
+    if (!organizationOverrideId || validOrganizationOverrideId) {
+      return
+    }
+    setOrganizationOverrideId(null)
+    setActiveOrganizationIdOverride(null)
+  }, [organizationOverrideId, validOrganizationOverrideId])
+
+  const handleSwitch = async (tenant, options = {}) => {
+    const {
+      organizationId = null,
+      preserveOrganizationOverride = false,
+    } = options
+    const nextOrganizationId = organizationId ? String(organizationId) : null
+
     if (String(tenant.id) === String(activeTenant?.id)) {
       const nextScope = getTenantScopeValue(tenant.id)
       setWorkspaceScopeState(nextScope)
       setWorkspaceScope(nextScope)
-      setOrganizationOverrideId(null)
-      setActiveOrganizationIdOverride(null)
+      if (preserveOrganizationOverride && nextOrganizationId) {
+        setOrganizationOverrideId(nextOrganizationId)
+        setActiveOrganizationIdOverride(nextOrganizationId)
+      } else {
+        setOrganizationOverrideId(null)
+        setActiveOrganizationIdOverride(null)
+      }
+      navigate(getTenantTargetPath(preserveOrganizationOverride ? nextOrganizationId : null), { replace: false })
       setOrgOpen(false)
       setTenantOpen(false)
       return
     }
     setSwitching(tenant.id)
     try {
+      if (preserveOrganizationOverride && nextOrganizationId) {
+        setOrganizationOverrideId(nextOrganizationId)
+        setActiveOrganizationIdOverride(nextOrganizationId)
+      }
       await switchTenant(tenant.id)
       const nextScope = getTenantScopeValue(tenant.id)
       setWorkspaceScopeState(nextScope)
       setWorkspaceScope(nextScope)
-      setOrganizationOverrideId(null)
-      setActiveOrganizationIdOverride(null)
-      navigate(getTenantTargetPath(), { replace: false })
+      if (!preserveOrganizationOverride) {
+        setOrganizationOverrideId(null)
+        setActiveOrganizationIdOverride(null)
+      }
+      navigate(getTenantTargetPath(preserveOrganizationOverride ? nextOrganizationId : null), { replace: false })
     } finally {
       setSwitching(null)
       setOrgOpen(false)
@@ -783,17 +859,20 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
       setActiveOrganizationIdOverride(String(organization.id))
       setTenantOpen(false)
       setOrgOpen(false)
-      navigate(`/admin/organizations?org_id=${encodeURIComponent(organization.id)}`, { replace: false })
+      navigate(`/admin/organizations/${encodeURIComponent(organization.slug || organization.id)}`, { replace: false })
       return
     }
-    await handleSwitch(targetTenant)
+    await handleSwitch(targetTenant, {
+      organizationId: organization.id,
+      preserveOrganizationOverride: true,
+    })
   }
 
   const isTenantInCurrentOrganization = currentOrgTenants.some(
     (tenant) => String(tenant.id) === String(activeTenant?.id)
   )
   const tenantScopeLabel = isAllTenantsSelected
-    ? 'All Tenants'
+    ? 'All Workspaces'
     : currentOrgTenants.length === 0
       ? 'No Workspace'
       : isTenantInCurrentOrganization
@@ -883,7 +962,7 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
                             setActiveOrganizationIdOverride(String(organization.id))
                             setOrgOpen(false)
                             setTenantOpen(false)
-                            navigate(`/admin/organizations?org_id=${encodeURIComponent(organization.id)}`, { replace: false })
+                            navigate(`/admin/organizations/${encodeURIComponent(organization.slug || organization.id)}`, { replace: false })
                             return
                           }
                           handleOrganizationSwitch(organization)
@@ -1007,7 +1086,7 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
                         </div>
                         <div className="flex-1 min-w-0">
                           <div style={{ fontSize: 13, fontWeight: 600, color: isAllTenantsSelected ? 'var(--neon-cyan)' : 'var(--text-heading)' }}>
-                            All Tenants
+                            All Workspaces
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                             View all workspaces in this organization

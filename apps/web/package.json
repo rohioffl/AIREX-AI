@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "axios": "^1.13.5",
     "framer-motion": "^12.36.0",
     "lucide-react": "^0.564.0",

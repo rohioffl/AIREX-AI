@@ -150,8 +150,8 @@ export default function DashboardPage() {
               {isOrgAdmin && activeOrganization && (
                 <div className="flex rounded-md overflow-hidden ml-2" style={{ border: '1px solid var(--border)' }}>
                   {[
-                    { key: 'tenant', label: 'This Tenant' },
-                    { key: 'org', label: 'All Org Tenants' },
+                    { key: 'tenant', label: 'This Workspace' },
+                    { key: 'org', label: 'All Org Workspaces' },
                   ].map(({ key, label }) => (
                     <button
                       key={key}
@@ -250,8 +250,8 @@ export default function DashboardPage() {
                   <div className="h-12 rounded skeleton" />
                 ) : orgAnalytics ? (
                   [
-                    { label: 'Total Tenants', value: String(orgAnalytics.tenant_count ?? '—'), color: 'var(--neon-indigo)' },
-                    { label: 'Active Tenants', value: String(orgAnalytics.active_tenant_count ?? '—'), color: 'var(--color-accent-green)' },
+                    { label: 'Total Workspaces', value: String(orgAnalytics.tenant_count ?? '—'), color: 'var(--neon-indigo)' },
+                    { label: 'Active Workspaces', value: String(orgAnalytics.active_tenant_count ?? '—'), color: 'var(--color-accent-green)' },
                     { label: 'Org Members', value: String(orgAnalytics.member_count ?? '—'), color: 'var(--neon-cyan)' },
                   ].map((s) => (
                     <div key={s.label} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>

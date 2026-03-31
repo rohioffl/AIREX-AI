@@ -26,13 +26,14 @@ AIREX is designed to reduce mean time to resolution for operational incidents wi
 ```text
 services/
   airex-core/            Shared Python package (models, services, core, schemas, actions, cloud, investigations, llm, rag, monitoring)
-  airex-api/             FastAPI service package + Dockerfile (23 API routers)
+  airex-api/             FastAPI service package + Dockerfile (29 API routers)
   airex-worker/          ARQ worker service package + Dockerfile (6 background tasks)
   litellm/               LiteLLM container config
   langfuse/              Langfuse deployment notes
-apps/web/                React 19 + Vite 7 frontend + Dockerfile (19 pages, 165 tests)
-database/                Alembic migrations (21 applied) and standalone migration image
-tests/                   Backend pytest suite (525 tests passing)
+  openclaw/              Optional OpenClaw investigation bridge (Phase 2)
+apps/web/                React 19 + Vite 7 frontend + Dockerfile (22 pages, 25 tests)
+database/                Alembic migrations (36 applied) and standalone migration image
+tests/                   Backend pytest suite (765 tests passing)
 e2e/                     Playwright end-to-end tests
 scripts/                 Utility scripts (admin user creation, etc.)
 config/                  Legacy/static configuration and credential file layout (tenant registry lives in PostgreSQL)
@@ -142,7 +143,7 @@ cd services/airex-core
 ruff check airex_core/
 mypy airex_core/ --ignore-missing-imports
 
-# Tests (525 passing)
+# Tests (765 passing)
 cd tests
 pytest
 python -m pytest tests/test_state_machine.py
@@ -153,7 +154,7 @@ python -m pytest tests/test_state_machine.py
 ```bash
 cd apps/web
 npm run lint
-npm run test -- --run  # 165 tests
+npm run test -- --run  # 25 tests
 npm run build
 ```
 

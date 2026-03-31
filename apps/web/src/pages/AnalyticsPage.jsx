@@ -83,7 +83,7 @@ export default function AnalyticsPage() {
                   cursor: 'pointer',
                 }}
               >
-                This Tenant
+                This Workspace
               </button>
               <button
                 onClick={() => setScope('org')}
@@ -96,7 +96,7 @@ export default function AnalyticsPage() {
                   cursor: 'pointer',
                 }}
               >
-                All Org Tenants
+                All Org Workspaces
               </button>
             </div>
           )}
@@ -120,8 +120,8 @@ export default function AnalyticsPage() {
       {scope === 'org' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {[
-            { icon: Building2, label: 'Total Tenants', value: orgStats?.tenant_count ?? '—', color: 'var(--neon-cyan)' },
-            { icon: Server,    label: 'Active Tenants', value: orgStats?.active_tenant_count ?? '—', color: 'var(--neon-green)' },
+            { icon: Building2, label: 'Total Workspaces', value: orgStats?.tenant_count ?? '—', color: 'var(--neon-cyan)' },
+            { icon: Server,    label: 'Active Workspaces', value: orgStats?.active_tenant_count ?? '—', color: 'var(--neon-green)' },
             { icon: Users,     label: 'Org Members', value: orgStats?.member_count ?? '—', color: 'var(--neon-indigo)' },
           ].map(({ icon: Icon, label, value, color }) => (
             <div key={label} className="glass rounded-xl p-5 flex items-center gap-4">

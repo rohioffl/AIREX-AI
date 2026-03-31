@@ -133,7 +133,7 @@ const SECTION_COPY = {
   overview: {
     title: 'Fleet overview',
     description:
-      'Cross-tenant signals, capacity, and subsystem health. Use quick links to drill into organizations, workspaces, and global configuration.',
+      'Cross-workspace signals, capacity, and subsystem health. Use quick links to drill into organizations, workspaces, and global configuration.',
   },
   organizations: {
     title: 'Organizations',
@@ -143,12 +143,12 @@ const SECTION_COPY = {
   workspaces: {
     title: 'Workspaces',
     description:
-      'Tenant inventory, cloud bindings, and org mappings — without opening tenant-owned project data.',
+      'Workspace inventory, cloud bindings, and org mappings — without opening workspace-owned project data.',
   },
   users: {
     title: 'Platform admins',
     description:
-      'Super-operator identities for this installation. Separate from tenant-scoped users in customer workspaces.',
+      'Super-operator identities for this installation. Separate from workspace-scoped users in customer workspaces.',
   },
   integrations: {
     title: 'Integration catalog',
@@ -510,7 +510,7 @@ function OverviewSection({ onNavigate }) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Tenant Users" value={loading ? '…' : (summary?.total_users ?? '—')} color="var(--neon-indigo)" icon={Users} sub={`${summary?.active_users ?? 0} active`} />
+        <StatCard label="Workspace Users" value={loading ? '…' : (summary?.total_users ?? '—')} color="var(--neon-indigo)" icon={Users} sub={`${summary?.active_users ?? 0} active`} />
         <StatCard label="Organizations" value={loading ? '…' : (summary?.total_organizations ?? orgs.length)} color="#22d3ee" icon={Globe} sub={`${summary?.active_organizations ?? 0} active`} />
         <StatCard label="Workspaces" value={loading ? '…' : (summary?.total_tenants ?? '—')} color="var(--brand-orange)" icon={Layers} sub={`${summary?.active_tenants ?? 0} active`} />
         <StatCard label="Active Incidents" value={loading ? '…' : (summary?.active_incidents ?? '—')} color="var(--brand-orange)" icon={AlertTriangle} sub={`${summary?.critical_incidents ?? 0} critical`} />
@@ -556,7 +556,7 @@ function OverviewSection({ onNavigate }) {
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{section.label}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                   {section.id === 'organizations' && `${loading ? '…' : orgs.length} orgs`}
-                  {section.id === 'workspaces' && 'Tenant workspace management'}
+                  {section.id === 'workspaces' && 'Workspace management'}
                   {section.id === 'users' && 'Platform admin accounts'}
                   {section.id === 'integrations' && 'Global catalog definitions'}
                   {section.id === 'settings' && 'Runtime controls'}
@@ -709,7 +709,7 @@ function OrganizationsSection() {
 
       <div className="grid grid-cols-2 gap-4">
         <StatCard label="Organizations" value={loading ? '…' : organizations.length} color="#22d3ee" icon={Globe} />
-        <StatCard label="Tenant Spaces" value={loading ? '…' : totalTenantSpaces} color="var(--brand-orange)" icon={Layers} />
+        <StatCard label="Workspaces" value={loading ? '…' : totalTenantSpaces} color="var(--brand-orange)" icon={Layers} />
       </div>
 
       <div>
@@ -759,11 +759,11 @@ function OrganizationsSection() {
                     <div className="hidden sm:flex items-center gap-1.5" style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                       <Layers size={12} />
                       <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{totalTenants}</span>
-                      <span>tenant{totalTenants !== 1 ? 's' : ''}</span>
+                      <span>workspace{totalTenants !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', fontSize: 12, color: isSelected ? '#22d3ee' : 'var(--text-muted)' }}>
                       <Settings size={12} />
-                      {isSelected ? 'Viewing tenants' : 'View tenants'}
+                      {isSelected ? 'Viewing workspaces' : 'View workspaces'}
                     </div>
                   </div>
                 </button>
@@ -772,13 +772,13 @@ function OrganizationsSection() {
             </div>
 
             <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
-              <SectionTitle>{selectedOrganization ? `${selectedOrganization.name} Tenants` : 'Organization Tenants'}</SectionTitle>
+              <SectionTitle>{selectedOrganization ? `${selectedOrganization.name} Workspaces` : 'Organization Workspaces'}</SectionTitle>
               {!selectedOrganization ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select an organization to view its tenant spaces.</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select an organization to view its workspaces.</div>
               ) : tenantListLoading && !selectedOrganizationTenantList ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading tenant spaces…</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading workspaces…</div>
               ) : selectedOrganizationTenants.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No tenant spaces are assigned to this organization yet.</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No workspaces are assigned to this organization yet.</div>
               ) : (
                 <div className="space-y-3">
                   {selectedOrganizationTenants.map((tenant) => (

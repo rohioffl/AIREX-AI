@@ -114,7 +114,7 @@ export default function AlertsPage() {
 
   const handleExport = async () => {
     if (organizationId) {
-      setExportError('Export is only available inside a single tenant workspace.')
+      setExportError('Export is only available inside a single workspace.')
       return
     }
     setExportError(null)
@@ -372,7 +372,7 @@ export default function AlertsPage() {
               ? `Showing ${visibleAlerts.length} of ${totalFiltered} alerts`
               : (
                   organizationId
-                    ? 'Alerts across all tenant workspaces in this organization.'
+                    ? 'Alerts across all workspaces in this organization.'
                     : 'Incidents requiring attention, sorted by severity.'
                 )}
           </p>
@@ -405,7 +405,7 @@ export default function AlertsPage() {
               fontSize: 13,
               fontWeight: 600,
             }}
-            title={organizationId ? 'Switch into a tenant workspace to export alerts' : 'Export to CSV'}
+            title={organizationId ? 'Switch into a workspace to export alerts' : 'Export to CSV'}
           >
             <Download size={14} />
             Export
@@ -635,7 +635,7 @@ export default function AlertsPage() {
             >
               {organizationId ? (
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  Cross-tenant view enabled. Open an alert to switch into its tenant workspace before taking action.
+                  Cross-workspace view enabled. Open an alert to switch into its workspace before taking action.
                 </span>
               ) : (
                 <>

@@ -19,6 +19,7 @@ from google.oauth2 import id_token as google_id_token
 from app.api.dependencies import (
     TenantSession,
     get_auth_session,
+    get_authenticated_user,
     get_current_user,
     resolve_active_tenant_id,
 )
@@ -29,6 +30,7 @@ from airex_core.core.security import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
+    TokenData,
     TokenResponse,
     UserResponse,
     create_access_token,
@@ -61,6 +63,47 @@ async def _get_org_id(session: AsyncSession, tenant_id: uuid.UUID) -> uuid.UUID 
     return result.scalar_one_or_none()
 
 
+async def _assign_home_tenant_for_pending_invite(
+    session: AsyncSession,
+    user: User,
+) -> uuid.UUID:
+    """Assign a real workspace to a pending org invite before activation."""
+    if user.tenant_id != _PLATFORM_SENTINEL_TENANT_ID:
+        return user.tenant_id
+
+    tenant_result = await session.execute(
+        select(Tenant.id)
+        .join(OrganizationMembership, OrganizationMembership.organization_id == Tenant.organization_id)
+        .where(OrganizationMembership.user_id == user.id)
+        .order_by(Tenant.is_active.desc(), Tenant.display_name.asc())
+    )
+    tenant_id = tenant_result.scalar_one_or_none()
+    if tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Create a workspace in this organization before accepting this invitation",
+        )
+
+    user.tenant_id = tenant_id
+    session.add(user)
+    await session.flush()
+    return tenant_id
+
+
+async def _require_resolved_home_tenant(
+    session: AsyncSession,
+    user: User,
+) -> uuid.UUID:
+    """Ensure active users always authenticate with a real workspace."""
+    tenant_id = await _assign_home_tenant_for_pending_invite(session, user)
+    if tenant_id == _PLATFORM_SENTINEL_TENANT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Create a workspace in this organization before signing in",
+        )
+    return tenant_id
+
+
 def _row_value(row: object, attr: str) -> object:
     value = getattr(row, attr, None)
     if attr == "name" and not isinstance(value, str):
@@ -78,6 +121,22 @@ def _row_str(row: object, attr: str) -> str:
 def _row_optional_str(row: object, attr: str) -> str | None:
     value = _row_value(row, attr)
     return value if value is None or isinstance(value, str) else str(value)
+
+
+def _strip_pending_role(role: str) -> str:
+    return role[len("pending_") :] if role.startswith("pending_") else role
+
+
+async def _activate_pending_org_memberships(session: AsyncSession, user_id: uuid.UUID) -> None:
+    result = await session.execute(
+        select(OrganizationMembership).where(
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.role.like("pending\\_%", escape="\\"),
+        )
+    )
+    for membership in result.scalars().all():
+        membership.role = _strip_pending_role(membership.role)
+        session.add(membership)
 
 
 class OrganizationSummary(BaseModel):
@@ -111,6 +170,17 @@ class AuthMeResponse(BaseModel):
     tenant_memberships: list[TenantSummary] = []
     tenants: list[TenantSummary] = []
     projects: list[ProjectSummary] = []
+
+
+class AcceptInvitationRequest(BaseModel):
+    invitation_token: str
+
+
+class InvitationInfoResponse(BaseModel):
+    email: str
+    display_name: str
+    mode: str
+    expires_at: datetime | None = None
 
 
 @router.post(
@@ -160,6 +230,34 @@ async def register(
     )
 
 
+@router.get("/invitation-info", response_model=InvitationInfoResponse, dependencies=[Depends(auth_rate_limit)])
+async def invitation_info(
+    token: str,
+    session: AsyncSession = Depends(get_auth_session),
+) -> InvitationInfoResponse:
+    result = await session.execute(select(User).where(User.invitation_token == token))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid invitation token",
+        )
+
+    if user.invitation_expires_at and user.invitation_expires_at < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation token has expired",
+        )
+
+    return InvitationInfoResponse(
+        email=user.email,
+        display_name=user.display_name,
+        mode="accept_invitation" if user.is_active else "set_password",
+        expires_at=user.invitation_expires_at,
+    )
+
+
 @router.post("/login", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
 async def login(
     body: LoginRequest,
@@ -184,16 +282,17 @@ async def login(
             detail="Account is disabled",
         )
 
-    org_id = await _get_org_id(session, user.tenant_id)
+    tenant_id = await _require_resolved_home_tenant(session, user)
+    org_id = await _get_org_id(session, tenant_id)
     access_token = create_access_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
         org_id=org_id,
     )
     refresh_token = create_refresh_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
     )
 
@@ -282,7 +381,10 @@ async def auth_me(
             Organization.slug.label("organization_slug"),
         )
         .join(Organization, Organization.id == OrganizationMembership.organization_id)
-        .where(OrganizationMembership.user_id == current_user.user_id)
+        .where(
+            OrganizationMembership.user_id == current_user.user_id,
+            ~OrganizationMembership.role.like("pending\\_%", escape="\\"),
+        )
     )
     organization_memberships = [
         OrganizationSummary(
@@ -463,9 +565,10 @@ async def refresh(
             detail="User not found or disabled",
         )
 
-    org_id = await _get_org_id(session, user.tenant_id)
+    tenant_id = await _require_resolved_home_tenant(session, user)
+    org_id = await _get_org_id(session, tenant_id)
     access_token = create_access_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
@@ -550,16 +653,17 @@ async def google_login(
             detail="Account is disabled",
         )
 
-    org_id = await _get_org_id(session, user.tenant_id)
+    tenant_id = await _require_resolved_home_tenant(session, user)
+    org_id = await _get_org_id(session, tenant_id)
     access_token = create_access_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
         org_id=org_id,
     )
     refresh_token = create_refresh_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
     )
 
@@ -635,6 +739,10 @@ async def accept_invitation_with_google(
             detail="Account already activated. Please use regular login.",
         )
 
+    tenant_id = await _assign_home_tenant_for_pending_invite(session, user)
+
+    await _activate_pending_org_memberships(session, user.id)
+
     # Clear invitation token and activate account
     # Note: We don't set a password - user will use Google auth going forward
     user.invitation_token = None
@@ -649,18 +757,83 @@ async def accept_invitation_with_google(
     )
 
     # Return tokens so user is logged in
-    org_id = await _get_org_id(session, user.tenant_id)
+    org_id = await _get_org_id(session, tenant_id)
     access_token = create_access_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
         org_id=org_id,
     )
     refresh_token = create_refresh_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
     )
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+@router.post("/accept-invitation", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
+async def accept_invitation(
+    body: AcceptInvitationRequest,
+    current_user: TokenData = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_auth_session),
+) -> TokenResponse:
+    """Accept an invitation using an already authenticated existing account."""
+    result = await session.execute(
+        select(User).where(User.invitation_token == body.invitation_token)
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid invitation token",
+        )
+
+    if user.invitation_expires_at and user.invitation_expires_at < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation token has expired",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation requires setting a password first.",
+        )
+
+    if user.id != current_user.user_id or user.email.lower() != current_user.sub.lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Sign in as '{user.email}' to accept this invitation.",
+        )
+
+    await _activate_pending_org_memberships(session, user.id)
+
+    user.invitation_token = None
+    user.invitation_expires_at = None
+    session.add(user)
+    await session.flush()
+
+    tenant_id = await _require_resolved_home_tenant(session, user)
+    org_id = await _get_org_id(session, tenant_id)
+    access_token = create_access_token(
+        tenant_id=tenant_id,
+        subject=user.email,
+        user_id=user.id,
+        role=user.role,
+        org_id=org_id,
+    )
+    refresh_token = create_refresh_token(
+        tenant_id=tenant_id,
+        subject=user.email,
+    )
+
+    logger.info("invitation_accepted_via_session", email=user.email, user_id=str(user.id))
 
     return TokenResponse(
         access_token=access_token,
@@ -709,14 +882,18 @@ async def set_password(
             detail="Invitation token has expired",
         )
 
-    # Check if password already set
-    if user.hashed_password:
+    # Existing accounts must accept org invitations through an authenticated session
+    # so we never let an invite link mutate or bypass their current login setup.
+    if user.hashed_password or user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password already set. Use reset-password if you forgot it.",
+            detail="This invitation must be accepted by signing in to your existing account.",
         )
 
-    # Set password and clear invitation
+    await _activate_pending_org_memberships(session, user.id)
+
+    tenant_id = await _assign_home_tenant_for_pending_invite(session, user)
+
     user.hashed_password = hash_password(body.password)
     user.invitation_token = None
     user.invitation_expires_at = None
@@ -726,16 +903,16 @@ async def set_password(
     logger.info("password_set_via_invitation", email=user.email, user_id=str(user.id))
 
     # Return tokens so user is logged in
-    org_id = await _get_org_id(session, user.tenant_id)
+    org_id = await _get_org_id(session, tenant_id)
     access_token = create_access_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
         user_id=user.id,
         role=user.role,
         org_id=org_id,
     )
     refresh_token = create_refresh_token(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         subject=user.email,
     )
 
@@ -783,11 +960,16 @@ async def reset_password(
 
     # Send reset email
     reset_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/set-password?token={reset_token}"
-    await send_password_reset_email(
+    sent = await send_password_reset_email(
         email=user.email,
         display_name=user.display_name,
         reset_url=reset_url,
     )
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset email could not be sent. Check EMAIL_FROM and AWS SES configuration.",
+        )
 
     logger.info("password_reset_email_sent", email=user.email, user_id=str(user.id))
 

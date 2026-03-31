@@ -3,7 +3,11 @@
 import pytest
 
 from airex_core.schemas.webhook import Site24x7Payload
-from app.api.routes.webhooks import _map_site24x7_alert_type, MONITOR_TYPE_MAP
+from app.api.routes.webhooks import (
+    MONITOR_TYPE_MAP,
+    _map_site24x7_alert_type,
+    _normalize_site24x7_monitor_identity,
+)
 
 
 class TestSite24x7Payload:
@@ -42,6 +46,14 @@ class TestSite24x7Payload:
         )
         assert payload.get_monitor_name() == "Upper"
         assert payload.get_status() == "DOWN"
+
+    def test_monitor_id_falls_back_to_monitor_id_field_when_monitorid_is_placeholder(self):
+        payload = Site24x7Payload(
+            MONITORNAME="airex-aws-test",
+            MONITORID="$MONITORID",
+            MONITOR_ID=7547000018752358,
+        )
+        assert payload.get_monitor_id() == "7547000018752358"
 
     def test_empty_payload_defaults(self):
         payload = Site24x7Payload()
@@ -106,3 +118,17 @@ class TestMonitorTypeMapping:
 
     def test_registry_has_expected_entries(self):
         assert len(MONITOR_TYPE_MAP) >= 15
+
+
+class TestSite24x7MonitorIdentityNormalization:
+    def test_placeholder_monitorid_is_replaced_with_resolved_monitor_id(self):
+        normalized = _normalize_site24x7_monitor_identity(
+            {
+                "MONITORNAME": "airex-aws-test",
+                "MONITORID": "$MONITORID",
+                "MONITOR_ID": 7547000018752358,
+            },
+            monitor_id="7547000018752358",
+        )
+        assert normalized["MONITORID"] == "7547000018752358"
+        assert normalized["MONITOR_ID"] == 7547000018752358

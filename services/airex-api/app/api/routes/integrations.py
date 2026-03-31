@@ -1,6 +1,7 @@
 """Platform and tenant-owned monitoring integration APIs."""
 
 import json
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -48,9 +49,11 @@ class IntegrationTypeRequest(BaseModel):
 class MonitoringIntegrationRequest(BaseModel):
     integration_type_id: uuid.UUID | None = None
     integration_type_key: str | None = None
+    cloud_account_binding_id: uuid.UUID | None = None
     name: str = Field(..., min_length=2, max_length=255)
     slug: str = Field(..., min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")
     enabled: bool = True
+    status: str | None = None
     config_json: dict = {}
     secret_ref: str | None = None
     webhook_token_ref: str | None = None
@@ -60,6 +63,9 @@ class MonitoringIntegrationResponse(BaseModel):
     id: str
     tenant_id: str
     integration_type_id: str
+    cloud_account_binding_id: str | None = None
+    cloud_account_display_name: str | None = None
+    cloud_account_external_id: str | None = None
     integration_type_key: str | None = None
     webhook_path: str | None = None
     name: str
@@ -214,6 +220,63 @@ async def _get_binding_tenant_id(
     return uuid.UUID(str(row.tenant_id))
 
 
+async def _validate_cloud_account_binding(
+    conn,
+    *,
+    tenant_id: uuid.UUID,
+    cloud_account_binding_id: uuid.UUID | None,
+):
+    if cloud_account_binding_id is None:
+        return None
+    binding = (
+        await conn.execute(
+            sa_text(
+                """
+                SELECT id, display_name, external_account_id
+                FROM cloud_account_bindings
+                WHERE id = :binding_id AND tenant_id = :tenant_id
+                """
+            ),
+            {
+                "binding_id": str(cloud_account_binding_id),
+                "tenant_id": str(tenant_id),
+            },
+        )
+    ).first()
+    if binding is None:
+        raise HTTPException(status_code=404, detail="Cloud account binding not found for tenant")
+    return binding
+
+
+async def _purge_disabled_slug_conflicts(
+    conn,
+    *,
+    tenant_id: uuid.UUID,
+    slug: str,
+    cloud_account_binding_id: uuid.UUID | None,
+    exclude_integration_id: uuid.UUID | None = None,
+) -> None:
+    params = {
+        "tenant_id": str(tenant_id),
+        "slug": slug.lower(),
+    }
+    query = """
+        DELETE FROM monitoring_integrations
+        WHERE tenant_id = :tenant_id
+          AND lower(slug) = :slug
+          AND enabled = false
+    """
+    if cloud_account_binding_id is None:
+        query += " AND cloud_account_binding_id IS NULL"
+    else:
+        query += " AND cloud_account_binding_id = :cloud_account_binding_id"
+        params["cloud_account_binding_id"] = str(cloud_account_binding_id)
+    if exclude_integration_id is not None:
+        query += " AND id <> :exclude_integration_id"
+        params["exclude_integration_id"] = str(exclude_integration_id)
+    await conn.execute(sa_text(query), params)
+
+
 class ProjectMonitorBindingResponse(BaseModel):
     id: str
     project_id: str
@@ -224,18 +287,38 @@ class ProjectMonitorBindingResponse(BaseModel):
     routing_tags_json: dict = {}
 
 
+def _build_account_path_segment(
+    cloud_account_binding_id: str | None,
+    cloud_account_external_id: str | None,
+) -> str:
+    external_id = (cloud_account_external_id or "").strip().lower()
+    if external_id:
+        normalized = re.sub(r"[^a-z0-9-]+", "-", external_id).strip("-")
+        if normalized:
+            return normalized
+    if cloud_account_binding_id:
+        return cloud_account_binding_id
+    return "default"
+
+
 def _build_webhook_path(
     integration_type_key: str | None,
-    integration_id: str,
+    integration_slug: str,
     *,
     org_slug: str | None,
     tenant_slug: str | None,
+    cloud_account_binding_id: str | None = None,
+    cloud_account_external_id: str | None = None,
 ) -> str | None:
-    if not integration_type_key or not org_slug or not tenant_slug:
+    if not integration_type_key or not org_slug or not tenant_slug or not integration_slug:
         return None
 
     if integration_type_key == "site24x7":
-        return f"/api/v1/webhooks/{org_slug}/{tenant_slug}/site24x7/{integration_id}"
+        account_segment = _build_account_path_segment(
+            cloud_account_binding_id,
+            cloud_account_external_id,
+        )
+        return f"/api/v1/webhooks/{org_slug}/{tenant_slug}/{account_segment}/{integration_slug}"
 
     return f"/api/v1/webhooks/{org_slug}/{tenant_slug}/{integration_type_key}"
 
@@ -529,6 +612,9 @@ async def list_monitoring_integrations(
             sa_text(
                 """
                 SELECT mi.id, mi.tenant_id, mi.integration_type_id, it.key AS integration_type_key,
+                       mi.cloud_account_binding_id,
+                       cab.display_name AS cloud_account_display_name,
+                       cab.external_account_id AS cloud_account_external_id,
                        o.slug AS organization_slug, t.name AS tenant_slug,
                        mi.name, mi.slug, mi.enabled, mi.config_json, mi.secret_ref,
                        mi.webhook_token_ref, mi.status, mi.last_tested_at, mi.last_sync_at,
@@ -538,6 +624,7 @@ async def list_monitoring_integrations(
                 JOIN integration_types it ON it.id = mi.integration_type_id
                 JOIN tenants t ON t.id = mi.tenant_id
                 JOIN organizations o ON o.id = t.organization_id
+                LEFT JOIN cloud_account_bindings cab ON cab.id = mi.cloud_account_binding_id
                 LEFT JOIN (
                     SELECT integration_id,
                            COUNT(*) FILTER (WHERE received_at >= NOW() - INTERVAL '7 days'
@@ -548,6 +635,8 @@ async def list_monitoring_integrations(
                     GROUP BY integration_id
                 ) we ON we.integration_id = mi.id
                 WHERE mi.tenant_id = :tenant_id
+                  AND mi.enabled = true
+                  AND COALESCE(mi.status, 'configured') <> 'draft'
                 ORDER BY mi.name
                 """
             ),
@@ -558,12 +647,21 @@ async def list_monitoring_integrations(
                 id=str(row.id),
                 tenant_id=str(row.tenant_id),
                 integration_type_id=str(row.integration_type_id),
+                cloud_account_binding_id=(
+                    str(row.cloud_account_binding_id) if row.cloud_account_binding_id else None
+                ),
+                cloud_account_display_name=row.cloud_account_display_name,
+                cloud_account_external_id=row.cloud_account_external_id,
                 integration_type_key=row.integration_type_key,
                 webhook_path=_build_webhook_path(
                     row.integration_type_key,
-                    str(row.id),
+                    row.slug,
                     org_slug=row.organization_slug,
                     tenant_slug=row.tenant_slug,
+                    cloud_account_binding_id=(
+                        str(row.cloud_account_binding_id) if row.cloud_account_binding_id else None
+                    ),
+                    cloud_account_external_id=row.cloud_account_external_id,
                 ),
                 name=row.name,
                 slug=row.slug,
@@ -611,28 +709,50 @@ async def create_monitoring_integration(
             integration_type_id=body.integration_type_id,
             integration_type_key=body.integration_type_key,
         )
+        binding = await _validate_cloud_account_binding(
+            conn,
+            tenant_id=tenant_id,
+            cloud_account_binding_id=body.cloud_account_binding_id,
+        )
         if not integration_type:
             raise HTTPException(status_code=404, detail="Integration type not found")
+        await _purge_disabled_slug_conflicts(
+            conn,
+            tenant_id=tenant_id,
+            slug=body.slug,
+            cloud_account_binding_id=body.cloud_account_binding_id,
+        )
+        conflict_query = """
+            SELECT id
+            FROM monitoring_integrations
+            WHERE tenant_id = :tenant_id
+              AND lower(slug) = :slug
+              AND enabled = true
+        """
+        conflict_params = {"tenant_id": str(tenant_id), "slug": body.slug.lower()}
+        if body.cloud_account_binding_id is None:
+            conflict_query += " AND cloud_account_binding_id IS NULL"
+        else:
+            conflict_query += " AND cloud_account_binding_id = :cloud_account_binding_id"
+            conflict_params["cloud_account_binding_id"] = str(body.cloud_account_binding_id)
         conflict = (
             await conn.execute(
-                sa_text(
-                    "SELECT id FROM monitoring_integrations WHERE tenant_id = :tenant_id AND lower(slug) = :slug"
-                ),
-                {"tenant_id": str(tenant_id), "slug": body.slug.lower()},
+                sa_text(conflict_query),
+                conflict_params,
             )
         ).first()
         if conflict:
-            raise HTTPException(status_code=409, detail="Integration slug already exists in tenant")
+            raise HTTPException(status_code=409, detail="Integration slug already exists for this account in tenant")
         await conn.execute(
             sa_text(
                 """
                 INSERT INTO monitoring_integrations (
-                    id, tenant_id, integration_type_id, name, slug, enabled,
+                    id, tenant_id, integration_type_id, cloud_account_binding_id, name, slug, enabled,
                     config_json, secret_ref, webhook_token_ref, status
                 )
                 VALUES (
-                    :id, :tenant_id, :integration_type_id, :name, :slug, :enabled,
-                    CAST(:config_json AS jsonb), :secret_ref, :webhook_token_ref, 'configured'
+                    :id, :tenant_id, :integration_type_id, :cloud_account_binding_id, :name, :slug, :enabled,
+                    CAST(:config_json AS jsonb), :secret_ref, :webhook_token_ref, :status
                 )
                 """
             ),
@@ -640,9 +760,13 @@ async def create_monitoring_integration(
                 "id": str(integration_id),
                 "tenant_id": str(tenant_id),
                 "integration_type_id": str(integration_type.id),
+                "cloud_account_binding_id": (
+                    str(body.cloud_account_binding_id) if body.cloud_account_binding_id else None
+                ),
                 "name": body.name,
                 "slug": body.slug.lower(),
                 "enabled": body.enabled,
+                "status": body.status or "configured",
                 "config_json": json.dumps(body.config_json),
                 "secret_ref": body.secret_ref,
                 "webhook_token_ref": body.webhook_token_ref,
@@ -652,12 +776,21 @@ async def create_monitoring_integration(
         id=str(integration_id),
         tenant_id=str(tenant_id),
         integration_type_id=str(integration_type.id),
+        cloud_account_binding_id=(
+            str(body.cloud_account_binding_id) if body.cloud_account_binding_id else None
+        ),
+        cloud_account_display_name=binding.display_name if binding else None,
+        cloud_account_external_id=binding.external_account_id if binding else None,
         integration_type_key=integration_type.key,
         webhook_path=_build_webhook_path(
             integration_type.key,
-            str(integration_id),
+            body.slug.lower(),
             org_slug=tenant.organization_slug,
             tenant_slug=tenant.tenant_slug,
+            cloud_account_binding_id=(
+                str(body.cloud_account_binding_id) if body.cloud_account_binding_id else None
+            ),
+            cloud_account_external_id=binding.external_account_id if binding else None,
         ),
         name=body.name,
         slug=body.slug.lower(),
@@ -683,6 +816,9 @@ async def get_monitoring_integration(
                 sa_text(
                     """
                     SELECT mi.id, mi.tenant_id, mi.integration_type_id, it.key AS integration_type_key,
+                           mi.cloud_account_binding_id,
+                           cab.display_name AS cloud_account_display_name,
+                           cab.external_account_id AS cloud_account_external_id,
                            o.slug AS organization_slug, t.name AS tenant_slug,
                            mi.name, mi.slug, mi.enabled, mi.config_json, mi.secret_ref,
                            mi.webhook_token_ref, mi.status, mi.last_tested_at, mi.last_sync_at
@@ -690,6 +826,7 @@ async def get_monitoring_integration(
                     JOIN integration_types it ON it.id = mi.integration_type_id
                     JOIN tenants t ON t.id = mi.tenant_id
                     JOIN organizations o ON o.id = t.organization_id
+                    LEFT JOIN cloud_account_bindings cab ON cab.id = mi.cloud_account_binding_id
                     WHERE mi.id = :integration_id
                     """
                 ),
@@ -702,12 +839,21 @@ async def get_monitoring_integration(
         id=str(row.id),
         tenant_id=str(row.tenant_id),
         integration_type_id=str(row.integration_type_id),
+        cloud_account_binding_id=(
+            str(row.cloud_account_binding_id) if row.cloud_account_binding_id else None
+        ),
+        cloud_account_display_name=row.cloud_account_display_name,
+        cloud_account_external_id=row.cloud_account_external_id,
         integration_type_key=row.integration_type_key,
         webhook_path=_build_webhook_path(
             row.integration_type_key,
-            str(row.id),
+            row.slug,
             org_slug=row.organization_slug,
             tenant_slug=row.tenant_slug,
+            cloud_account_binding_id=(
+                str(row.cloud_account_binding_id) if row.cloud_account_binding_id else None
+            ),
+            cloud_account_external_id=row.cloud_account_external_id,
         ),
         name=row.name,
         slug=row.slug,
@@ -739,20 +885,48 @@ async def update_monitoring_integration(
         ).first()
         if not current:
             raise HTTPException(status_code=404, detail="Integration not found")
+        await _purge_disabled_slug_conflicts(
+            conn,
+            tenant_id=uuid.UUID(str(current.tenant_id)),
+            slug=body.slug,
+            cloud_account_binding_id=body.cloud_account_binding_id,
+            exclude_integration_id=integration_id,
+        )
+        conflict_query = """
+            SELECT id
+            FROM monitoring_integrations
+            WHERE tenant_id = :tenant_id
+              AND lower(slug) = :slug
+              AND id <> :integration_id
+              AND enabled = true
+        """
+        conflict_params = {
+            "tenant_id": str(current.tenant_id),
+            "slug": body.slug.lower(),
+            "integration_id": str(integration_id),
+        }
+        if body.cloud_account_binding_id is None:
+            conflict_query += " AND cloud_account_binding_id IS NULL"
+        else:
+            conflict_query += " AND cloud_account_binding_id = :cloud_account_binding_id"
+            conflict_params["cloud_account_binding_id"] = str(body.cloud_account_binding_id)
         conflict = (
             await conn.execute(
-                sa_text(
-                    "SELECT id FROM monitoring_integrations WHERE tenant_id = :tenant_id AND lower(slug) = :slug AND id <> :integration_id"
-                ),
-                {"tenant_id": str(current.tenant_id), "slug": body.slug.lower(), "integration_id": str(integration_id)},
+                sa_text(conflict_query),
+                conflict_params,
             )
         ).first()
         if conflict:
-            raise HTTPException(status_code=409, detail="Integration slug already exists in tenant")
+            raise HTTPException(status_code=409, detail="Integration slug already exists for this account in tenant")
         integration_type = await _resolve_integration_type(
             conn,
             integration_type_id=body.integration_type_id,
             integration_type_key=body.integration_type_key,
+        )
+        await _validate_cloud_account_binding(
+            conn,
+            tenant_id=tenant_id,
+            cloud_account_binding_id=body.cloud_account_binding_id,
         )
         if not integration_type:
             raise HTTPException(status_code=404, detail="Integration type not found")
@@ -761,9 +935,11 @@ async def update_monitoring_integration(
                 """
                 UPDATE monitoring_integrations
                 SET integration_type_id = :integration_type_id,
+                    cloud_account_binding_id = :cloud_account_binding_id,
                     name = :name,
                     slug = :slug,
                     enabled = :enabled,
+                    status = :status,
                     config_json = CAST(:config_json AS jsonb),
                     secret_ref = :secret_ref,
                     webhook_token_ref = :webhook_token_ref,
@@ -774,9 +950,13 @@ async def update_monitoring_integration(
             {
                 "integration_id": str(integration_id),
                 "integration_type_id": str(integration_type.id),
+                "cloud_account_binding_id": (
+                    str(body.cloud_account_binding_id) if body.cloud_account_binding_id else None
+                ),
                 "name": body.name,
                 "slug": body.slug.lower(),
                 "enabled": body.enabled,
+                "status": body.status or "configured",
                 "config_json": json.dumps(body.config_json),
                 "secret_ref": body.secret_ref,
                 "webhook_token_ref": body.webhook_token_ref,
@@ -802,7 +982,7 @@ async def delete_monitoring_integration(
     async with async_engine.begin() as conn:
         result = await conn.execute(
             sa_text(
-                "UPDATE monitoring_integrations SET enabled = false, status = 'disabled', updated_at = CURRENT_TIMESTAMP WHERE id = :integration_id"
+                "DELETE FROM monitoring_integrations WHERE id = :integration_id"
             ),
             {"integration_id": str(integration_id)},
         )
@@ -1097,7 +1277,7 @@ async def list_webhook_events(
     await _require_tenant_access(session, current_user, tenant_id)
     async with async_engine.connect() as conn:
         await conn.execute(
-            sa_text("SET LOCAL app.tenant_id = :tenant_id"),
+            sa_text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
             {"tenant_id": str(tenant_id)},
         )
         rows = await conn.execute(
@@ -1148,7 +1328,7 @@ async def replay_webhook_event(
     new_event_id = uuid.uuid4()
     async with async_engine.begin() as conn:
         await conn.execute(
-            sa_text("SET LOCAL app.tenant_id = :tenant_id"),
+            sa_text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
             {"tenant_id": str(tenant_id)},
         )
         original = (

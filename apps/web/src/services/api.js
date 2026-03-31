@@ -236,11 +236,6 @@ export async function fetchOrgMembers(organizationId) {
   return res.data
 }
 
-export async function addOrgMember(organizationId, data) {
-  const res = await api.post(`/organizations/${organizationId}/members`, data)
-  return res.data
-}
-
 export async function inviteOrgMember(organizationId, data) {
   const res = await api.post(`/organizations/${organizationId}/invite-user`, data)
   return res.data
@@ -248,6 +243,11 @@ export async function inviteOrgMember(organizationId, data) {
 
 export async function updateOrgMember(organizationId, userId, data) {
   const res = await api.patch(`/organizations/${organizationId}/members/${userId}`, data)
+  return res.data
+}
+
+export async function resendOrgInvitation(organizationId, userId) {
+  const res = await api.post(`/organizations/${organizationId}/members/${userId}/resend-invitation`)
   return res.data
 }
 
@@ -261,13 +261,13 @@ export async function fetchTenantMembers(tenantId) {
   return res.data
 }
 
-export async function addTenantMember(tenantId, data) {
-  const res = await api.post(`/tenants/${tenantId}/members`, data)
+export async function updateTenantMember(tenantId, userId, data) {
+  const res = await api.patch(`/tenants/${tenantId}/members/${userId}`, data)
   return res.data
 }
 
-export async function updateTenantMember(tenantId, userId, data) {
-  const res = await api.patch(`/tenants/${tenantId}/members/${userId}`, data)
+export async function resendTenantInvitation(tenantId, userId) {
+  const res = await api.post(`/tenants/${tenantId}/members/${userId}/resend-invitation`)
   return res.data
 }
 
@@ -300,6 +300,11 @@ export async function fetchProjects(tenantId) {
 
 export async function createProject(tenantId, data) {
   const res = await api.post(`/tenants/${tenantId}/projects`, data)
+  return res.data
+}
+
+export async function deleteProject(projectId) {
+  const res = await api.delete(`/projects/${projectId}`)
   return res.data
 }
 
@@ -379,7 +384,7 @@ export async function fetchTenantDetail(name) {
 }
 
 export async function createTenant(data) {
-  const res = await api.post('/tenants/', data)
+  const res = await api.post('/tenants', data)
   return res.data
 }
 
@@ -543,9 +548,50 @@ export async function fetchKnowledgeBase(params = {}) {
   return res.data
 }
 
+export async function createKnowledgeBaseEntry(data) {
+  const res = await api.post('/knowledge-base', data)
+  return res.data
+}
+
+export async function updateKnowledgeBaseEntry(id, data) {
+  const res = await api.put(`/knowledge-base/${id}`, data)
+  return res.data
+}
+
+export async function deleteKnowledgeBaseEntry(id) {
+  const res = await api.delete(`/knowledge-base/${id}`)
+  return res.data
+}
+
 // Report templates
 export async function fetchReports(activeOnly = false) {
-  const res = await api.get('/reports', { params: { active_only: activeOnly } })
+  const res = await api.get('/reports/', { params: { active_only: activeOnly } })
+  return res.data
+}
+
+export async function createReport(data) {
+  const res = await api.post('/reports/', data)
+  return res.data
+}
+
+export async function updateReport(id, data) {
+  const res = await api.put(`/reports/${id}`, data)
+  return res.data
+}
+
+export async function deleteReport(id) {
+  const res = await api.delete(`/reports/${id}`)
+  return res.data
+}
+
+export async function generateReport(id) {
+  const res = await api.post(`/reports/${id}/generate`)
+  return res.data
+}
+
+// Patterns
+export async function fetchPatterns(params = {}) {
+  const res = await api.get('/patterns', { params })
   return res.data
 }
 
@@ -574,11 +620,34 @@ export async function fetchRunbooks(activeOnly = false, alertType = null) {
   const params = {}
   if (activeOnly) params.active_only = true
   if (alertType) params.alert_type = alertType
-  const res = await api.get('/runbooks', { params })
+  const res = await api.get('/runbooks/', { params })
   return res.data
 }
 
-// Note: Runbook management functions removed (unused)
+export async function createRunbook(data) {
+  const res = await api.post('/runbooks/', data)
+  return res.data
+}
+
+export async function updateRunbook(id, data) {
+  const res = await api.put(`/runbooks/${id}`, data)
+  return res.data
+}
+
+export async function deleteRunbook(id) {
+  const res = await api.delete(`/runbooks/${id}`)
+  return res.data
+}
+
+export async function duplicateRunbook(id) {
+  const res = await api.post(`/runbooks/${id}/duplicate`)
+  return res.data
+}
+
+export async function fetchRunbookVersions(id) {
+  const res = await api.get(`/runbooks/${id}/versions`)
+  return res.data
+}
 
 
 // Notification preferences

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, Zap, RefreshCw, Trash2, AlertCircle, CheckCircle, Clock, Plug, List, RotateCcw, Copy, X, KeyRound } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { isPlatformAdmin } from '../../utils/accessControl'
@@ -7,6 +7,7 @@ import {
   fetchIntegrationTypes,
   fetchIntegrations,
   fetchProjects,
+  fetchCloudAccounts,
   deleteIntegration,
   testIntegration,
   syncIntegrationMonitors,
@@ -55,6 +56,8 @@ const EVENT_STATUS_COLOR = {
   duplicate: 'var(--text-muted)',
   queued: 'var(--neon-cyan)',
 }
+
+const ACTIVE_INTEGRATION_TYPE_KEYS = new Set(['site24x7'])
 
 function WebhookEventsPanel({ integration, onClose }) {
   const [events, setEvents] = useState([])
@@ -307,7 +310,16 @@ function WebhookEventsPanel({ integration, onClose }) {
   )
 }
 
-function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefresh, onShowEvents }) {
+function IntegrationCard({
+  integrationType,
+  integration,
+  onAdd,
+  onEdit,
+  onRefresh,
+  onShowEvents,
+  comingSoon = false,
+  highlighted = false,
+}) {
   const [actionLoading, setActionLoading] = useState(null)
   const statusMeta = integration ? (STATUS_META[integration.status] || STATUS_META.unknown) : null
   const StatusIcon = statusMeta?.icon
@@ -354,10 +366,17 @@ function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefres
 
   return (
     <div
+      id={`integration-card-${integrationType.key}`}
       className="glass rounded-xl p-5 flex flex-col gap-4"
       style={{
-        border: integration ? '1px solid rgba(34,211,238,0.2)' : '1px solid var(--border)',
+        border: highlighted
+          ? '1px solid rgba(34,211,238,0.55)'
+          : integration
+            ? '1px solid rgba(34,211,238,0.2)'
+            : '1px solid var(--border)',
         position: 'relative',
+        boxShadow: highlighted ? '0 0 0 1px rgba(34,211,238,0.18), 0 0 32px rgba(34,211,238,0.12)' : 'none',
+        scrollMarginTop: 96,
       }}
     >
       {/* Status dot for configured integrations */}
@@ -397,7 +416,7 @@ function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefres
         >
           <Plug size={18} style={{ color: categoryColor }} />
         </div>
-        <div>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', lineHeight: 1.2 }}>
             {integrationType.display_name}
           </div>
@@ -406,7 +425,15 @@ function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefres
               {integration.name}
             </div>
           )}
-          <div className="flex items-center gap-2 mt-2">
+          {integration?.cloud_account_display_name && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              {integration.cloud_account_display_name}
+              {integration.cloud_account_external_id
+                ? ` · ${integration.cloud_account_external_id}`
+                : ''}
+            </div>
+          )}
+          <div className="flex items-center gap-2 mt-2" style={{ flexWrap: 'wrap' }}>
             <span
               style={{
                 fontSize: 10,
@@ -501,14 +528,24 @@ function IntegrationCard({ integrationType, integration, onAdd, onEdit, onRefres
             </button>
           </>
         ) : (
-          <button
-            onClick={() => onAdd(integrationType)}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold"
-            style={{ background: `${categoryColor}22`, border: `1px solid ${categoryColor}44`, color: categoryColor, cursor: 'pointer' }}
-          >
-            <Plus size={13} />
-            Add
-          </button>
+          comingSoon ? (
+            <div
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold"
+              style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.28)', color: '#f59e0b' }}
+            >
+              <AlertCircle size={13} />
+              Coming Soon
+            </div>
+          ) : (
+            <button
+              onClick={() => onAdd(integrationType)}
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold"
+              style={{ background: `${categoryColor}22`, border: `1px solid ${categoryColor}44`, color: categoryColor, cursor: 'pointer' }}
+            >
+              <Plus size={13} />
+              Add
+            </button>
+          )
         )}
       </div>
     </div>
@@ -523,17 +560,22 @@ export default function IntegrationsAdminPage({
   onDataChange = null,
 }) {
   const auth = useAuth()
+  const [searchParams] = useSearchParams()
   const { activeTenantId: authTenantId, projects: ctxProjects } = auth
   const activeTenantId = propTenantId || authTenantId
+  const launchIntegrationQueryKey = searchParams.get('integration')
+  const launchBindingId = searchParams.get('binding')
   const backTarget = isPlatformAdmin(auth) ? '/admin' : '/admin/workspaces'
   const backLabel = isPlatformAdmin(auth) ? 'Back to Platform Admin' : 'Back to Workspaces'
   const [integrationTypes, setIntegrationTypes] = useState([])
   const [integrations, setIntegrations] = useState([])
   const [projects, setProjects] = useState(ctxProjects || [])
+  const [cloudAccounts, setCloudAccounts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [wizardType, setWizardType] = useState(null)
   const [wizardIntegration, setWizardIntegration] = useState(null)
   const [eventsIntegration, setEventsIntegration] = useState(null)
+  const [highlightedIntegrationKey, setHighlightedIntegrationKey] = useState(null)
 
   const publishData = useCallback((types, configured) => {
     onDataChange?.({
@@ -547,15 +589,25 @@ export default function IntegrationsAdminPage({
   const loadData = useCallback(async () => {
     if (!activeTenantId) return
     try {
-      const [types, configured, projs] = await Promise.all([
+      const [types, configured, projs, accounts] = await Promise.all([
         fetchIntegrationTypes(),
         fetchIntegrations(activeTenantId),
         fetchProjects(activeTenantId),
+        fetchCloudAccounts(null, activeTenantId),
       ])
-      setIntegrationTypes(types || [])
+      const sortedTypes = (types || [])
+        .slice()
+        .sort((left, right) => {
+          const leftActive = ACTIVE_INTEGRATION_TYPE_KEYS.has(left.key)
+          const rightActive = ACTIVE_INTEGRATION_TYPE_KEYS.has(right.key)
+          if (leftActive !== rightActive) return leftActive ? -1 : 1
+          return left.display_name.localeCompare(right.display_name)
+        })
+      setIntegrationTypes(sortedTypes)
       setIntegrations(configured || [])
       setProjects(projs || [])
-      publishData(types || [], configured || [])
+      setCloudAccounts(accounts || [])
+      publishData(sortedTypes, configured || [])
     } catch (err) {
       console.error('Failed to load integrations:', err)
     } finally {
@@ -568,12 +620,24 @@ export default function IntegrationsAdminPage({
   }, [loadData])
 
   useEffect(() => {
-    if (!launchIntegrationKey || integrationTypes.length === 0) return
-    const integrationType = integrationTypes.find((item) => item.key === launchIntegrationKey)
+    const requestedIntegrationKey = launchIntegrationKey || launchIntegrationQueryKey
+    if (!requestedIntegrationKey || integrationTypes.length === 0) return
+    const integrationType = integrationTypes.find((item) => item.key === requestedIntegrationKey)
     if (!integrationType) return
-    setWizardType(integrationType)
-    setWizardIntegration(null)
-  }, [integrationTypes, launchIntegrationKey, launchSignal])
+    if (ACTIVE_INTEGRATION_TYPE_KEYS.has(integrationType.key)) {
+      setWizardType(integrationType)
+      setWizardIntegration(null)
+      return
+    }
+
+    setHighlightedIntegrationKey(integrationType.key)
+    requestAnimationFrame(() => {
+      document.getElementById(`integration-card-${integrationType.key}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    })
+  }, [integrationTypes, launchIntegrationKey, launchIntegrationQueryKey, launchSignal])
 
   function handleAdd(integrationType) {
     setWizardType(integrationType)
@@ -597,7 +661,12 @@ export default function IntegrationsAdminPage({
   }
 
   const configured = integrationTypes.filter((t) => integrationByTypeId[t.id])
-  const available = integrationTypes.filter((t) => !integrationByTypeId[t.id])
+  const available = integrationTypes.filter(
+    (t) => !integrationByTypeId[t.id] && ACTIVE_INTEGRATION_TYPE_KEYS.has(t.key)
+  )
+  const comingSoon = integrationTypes.filter(
+    (t) => !integrationByTypeId[t.id] && !ACTIVE_INTEGRATION_TYPE_KEYS.has(t.key)
+  )
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -625,7 +694,7 @@ export default function IntegrationsAdminPage({
         <div className="glass rounded-xl p-6 text-center" style={{ border: '1px dashed var(--border)' }}>
           <AlertCircle size={20} style={{ color: 'var(--text-muted)', margin: '0 auto 8px' }} />
           <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            No active tenant. Select a tenant to manage integrations.
+            No active workspace. Select a workspace to manage integrations.
           </p>
         </div>
       )}
@@ -654,6 +723,7 @@ export default function IntegrationsAdminPage({
                     onEdit={handleEdit}
                     onRefresh={loadData}
                     onShowEvents={setEventsIntegration}
+                    highlighted={highlightedIntegrationKey === t.key}
                   />
                 ))}
               </div>
@@ -676,6 +746,30 @@ export default function IntegrationsAdminPage({
                     onEdit={handleEdit}
                     onRefresh={loadData}
                     onShowEvents={setEventsIntegration}
+                    highlighted={highlightedIntegrationKey === t.key}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {comingSoon.length > 0 && (
+            <section>
+              <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Coming Soon ({comingSoon.length})
+              </h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+                {comingSoon.map((t) => (
+                  <IntegrationCard
+                    key={t.id}
+                    integrationType={t}
+                    integration={null}
+                    comingSoon
+                    onAdd={handleAdd}
+                    onEdit={handleEdit}
+                    onRefresh={loadData}
+                    onShowEvents={setEventsIntegration}
+                    highlighted={highlightedIntegrationKey === t.key}
                   />
                 ))}
               </div>
@@ -700,6 +794,8 @@ export default function IntegrationsAdminPage({
           integration={wizardIntegration}
           tenantId={activeTenantId}
           projects={projects}
+          cloudAccounts={cloudAccounts}
+          defaultCloudAccountBindingId={launchBindingId}
           onClose={closeWizard}
           onSaved={loadData}
         />

@@ -50,6 +50,7 @@ class Site24x7IntegrationContext:
     integration_slug: str
     integration_type_key: str
     enabled: bool
+    status: str | None
 
 
 @dataclass(slots=True)
@@ -90,35 +91,57 @@ async def _resolve_tenant_by_slugs(
 
 async def _resolve_site24x7_integration_context(
     session,
-    integration_id: uuid.UUID,
     expected_tenant_id: uuid.UUID,
+    account_slug: str,
+    integration_slug: str,
 ) -> Site24x7IntegrationContext:
     result = await session.execute(
         sa_text(
             """
-            SELECT mi.id, mi.tenant_id, mi.name, mi.slug, mi.enabled, it.key AS integration_type_key
+            SELECT mi.id, mi.tenant_id, mi.name, mi.slug, mi.enabled, mi.status, it.key AS integration_type_key,
+                   mi.cloud_account_binding_id, cab.external_account_id
             FROM monitoring_integrations mi
             JOIN integration_types it ON it.id = mi.integration_type_id
-            WHERE mi.id = :integration_id
+            LEFT JOIN cloud_account_bindings cab ON cab.id = mi.cloud_account_binding_id
+            WHERE mi.tenant_id = :tenant_id
+              AND lower(mi.slug) = :integration_slug
               AND mi.tenant_id = :tenant_id
             """
         ),
-        {"integration_id": str(integration_id), "tenant_id": str(expected_tenant_id)},
+        {
+            "tenant_id": str(expected_tenant_id),
+            "integration_slug": integration_slug.lower(),
+        },
     )
-    row = result.first()
-    if row is None:
+    rows = result.fetchall()
+    matched_row = None
+    for row in rows:
+        external_id = (row.external_account_id or "").strip().lower()
+        if external_id:
+            normalized = re.sub(r"[^a-z0-9-]+", "-", external_id).strip("-")
+            if normalized == account_slug.lower():
+                matched_row = row
+                break
+        elif row.cloud_account_binding_id and str(row.cloud_account_binding_id).lower() == account_slug.lower():
+            matched_row = row
+            break
+        elif not row.cloud_account_binding_id and account_slug.lower() == "default":
+            matched_row = row
+            break
+    if matched_row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
-    if row.integration_type_key != "site24x7":
+    if matched_row.integration_type_key != "site24x7":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integration is not a Site24x7 webhook target")
-    if not row.enabled:
+    if not matched_row.enabled and matched_row.status != "draft":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Integration is disabled")
     return Site24x7IntegrationContext(
-        integration_id=uuid.UUID(str(row.id)),
-        tenant_id=uuid.UUID(str(row.tenant_id)),
-        integration_name=row.name,
-        integration_slug=row.slug,
-        integration_type_key=row.integration_type_key,
-        enabled=bool(row.enabled),
+        integration_id=uuid.UUID(str(matched_row.id)),
+        tenant_id=uuid.UUID(str(matched_row.tenant_id)),
+        integration_name=matched_row.name,
+        integration_slug=matched_row.slug,
+        integration_type_key=matched_row.integration_type_key,
+        enabled=bool(matched_row.enabled),
+        status=matched_row.status,
     )
 
 
@@ -275,6 +298,20 @@ def _generate_idempotency_key(
     """Deterministic key: SHA256(alert_type + resource_id + time_window)."""
     raw = f"{alert_type}:{resource_id}:{time_window}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _normalize_site24x7_monitor_identity(
+    payload_dict: dict[str, Any] | None,
+    *,
+    monitor_id: str,
+) -> dict[str, Any] | None:
+    if payload_dict is None:
+        return None
+    normalized = dict(payload_dict)
+    raw_monitor_id = normalized.get("MONITORID")
+    if raw_monitor_id is None or str(raw_monitor_id).strip().startswith("$"):
+        normalized["MONITORID"] = monitor_id
+    return normalized
 
 
 def _time_window() -> str:
@@ -506,7 +543,7 @@ async def _parse_site24x7_payload(request: Request) -> Site24x7Payload:
 
 
 @router.post(
-    "/{org_slug}/{tenant_slug}/site24x7/{integration_id}",
+    "/{org_slug}/{tenant_slug}/{account_slug}/{integration_slug}",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IncidentCreatedResponse,
     dependencies=[Depends(webhook_rate_limit), Depends(verify_webhook_signature)],
@@ -514,13 +551,19 @@ async def _parse_site24x7_payload(request: Request) -> Site24x7Payload:
 async def ingest_site24x7(
     org_slug: str,
     tenant_slug: str,
-    integration_id: uuid.UUID,
+    account_slug: str,
+    integration_slug: str,
     request: Request,
     redis: Redis,
     session: AsyncSession = Depends(get_auth_session),
 ) -> IncidentCreatedResponse:
     tenant_id = await _resolve_tenant_by_slugs(session, org_slug, tenant_slug)
-    integration_context = await _resolve_site24x7_integration_context(session, integration_id, tenant_id)
+    integration_context = await _resolve_site24x7_integration_context(
+        session,
+        tenant_id,
+        account_slug,
+        integration_slug,
+    )
     return await _ingest_site24x7_request(
         request,
         tenant_id=tenant_id,
@@ -547,7 +590,7 @@ async def _ingest_site24x7_request(
 
     Configure in Site24x7:
       Admin → IT Automation → Webhooks
-      URL: https://<your-domain>/api/v1/webhooks/{org_slug}/{tenant_slug}/site24x7/{integration_id}
+      URL: https://<your-domain>/api/v1/webhooks/{org_slug}/{tenant_slug}/{account_slug}/{integration_slug}
       Method: POST
     """
     parse_tags = cast(Callable[[str], Any], _tag_parser_module().parse_tags)
@@ -561,7 +604,7 @@ async def _ingest_site24x7_request(
     )
 
     payload = await _parse_site24x7_payload(request)
-    raw_payload: dict | None = (
+    raw_payload: dict[str, Any] | None = (
         payload.model_dump(mode='json', exclude_none=True)
         if integration_context is not None
         else None
@@ -570,6 +613,7 @@ async def _ingest_site24x7_request(
     status_str = payload.get_status()
     monitor_type = payload.get_monitor_type()
     monitor_id = payload.get_monitor_id()
+    raw_payload = _normalize_site24x7_monitor_identity(raw_payload, monitor_id=monitor_id)
     incident_reason = payload.get_incident_reason()
     project_binding = None
     if integration_context is not None:
@@ -717,8 +761,12 @@ async def _ingest_site24x7_request(
             )
             dup_incident = result.scalar_one_or_none()
             if dup_incident:
+                normalized_meta = _normalize_site24x7_monitor_identity(
+                    dict(dup_incident.meta) if dup_incident.meta else {},
+                    monitor_id=monitor_id,
+                )
                 dup_incident.meta = _enrich_meta_for_repeat(
-                    dup_incident.meta,
+                    normalized_meta or {},
                     status_str=status_str,
                     flap=flap,
                     alert_type=alert_type,
@@ -790,8 +838,12 @@ async def _ingest_site24x7_request(
         # Cooldown window: if the incident has been silent long enough,
         # treat this as a new occurrence instead of keeping one incident open forever.
         if not _is_stale_for_cooldown(active):
+            normalized_meta = _normalize_site24x7_monitor_identity(
+                dict(active.meta) if active.meta else {},
+                monitor_id=monitor_id,
+            )
             active.meta = _enrich_meta_for_repeat(
-                active.meta,
+                normalized_meta or {},
                 status_str=status_str,
                 flap=flap,
                 alert_type=alert_type,
@@ -835,7 +887,10 @@ async def _ingest_site24x7_request(
             )
 
     # Build rich meta from Site24x7 payload
-    meta = payload.model_dump(exclude_none=True)
+    meta = _normalize_site24x7_monitor_identity(
+        payload.model_dump(exclude_none=True),
+        monitor_id=monitor_id,
+    ) or {}
     meta["_source"] = "site24x7"
     meta["monitor_name"] = monitor_name
     meta["host"] = monitor_name

@@ -20,6 +20,7 @@ class Site24x7Payload(BaseModel):
     MONITOR_DASHBOARD_LINK: str | None = None
     MONITORTYPE: str | None = None
     MONITORID: Any | None = None
+    MONITOR_ID: Any | None = None
     MONITORURL: str | None = None
     DISPLAYNAME: str | None = None
     STATUS: str | None = None
@@ -72,7 +73,14 @@ class Site24x7Payload(BaseModel):
 
     def get_monitor_id(self) -> str:
         """Return a usable monitor ID, skipping unresolved Site24x7 template vars."""
-        for candidate in [self.MONITORID, self.monitor_id]:
+        extra = self.model_extra or {}
+        for candidate in [
+            self.MONITORID,
+            self.MONITOR_ID,
+            self.monitor_id,
+            extra.get("MONITOR_ID"),
+            extra.get("monitor_id"),
+        ]:
             if candidate is not None:
                 val = str(candidate).strip()
                 # Reject unresolved template variables like $MONITORID

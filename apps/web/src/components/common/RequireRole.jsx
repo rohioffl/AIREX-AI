@@ -13,9 +13,10 @@ import { canAccessRoute, normalizeRole } from '../../utils/accessControl'
  */
 export default function RequireRole({ children, roles, access = null, fallback = null }) {
   const auth = useAuth()
-  const { user, loading } = auth
+  const { user, loading, token, sessionContext } = auth
+  const needsScopedSession = access === 'organizations_admin' || access === 'tenant_admin'
 
-  if (loading) {
+  if (loading || (needsScopedSession && token && !sessionContext)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>

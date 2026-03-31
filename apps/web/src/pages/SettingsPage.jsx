@@ -128,7 +128,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Tenant Info */}
+          {/* Workspace Info */}
           <div className="glass rounded-xl p-5">
             <div className="flex items-center gap-2 mb-4">
               <Database size={16} style={{ color: 'var(--neon-indigo)' }} />

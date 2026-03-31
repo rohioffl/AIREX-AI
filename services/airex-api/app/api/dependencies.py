@@ -137,6 +137,7 @@ async def resolve_active_tenant_id(
             select(OrganizationMembership.role).where(
                 OrganizationMembership.organization_id == organization_id,
                 OrganizationMembership.user_id == current_user.user_id,
+                ~OrganizationMembership.role.like("pending\\_%", escape="\\"),
             )
         )
         if org_membership_result.scalar_one_or_none() is not None:
@@ -216,6 +217,7 @@ async def has_org_membership(
         select(OrganizationMembership.role).where(
             OrganizationMembership.organization_id == organization_id,
             OrganizationMembership.user_id == user_id,
+            ~OrganizationMembership.role.like("pending\\_%", escape="\\"),
         )
     )
     return result.scalar_one_or_none() is not None
@@ -232,6 +234,7 @@ async def has_org_admin_membership(
         select(OrganizationMembership.role).where(
             OrganizationMembership.organization_id == organization_id,
             OrganizationMembership.user_id == user_id,
+            ~OrganizationMembership.role.like("pending\\_%", escape="\\"),
         )
     )
     role = result.scalar_one_or_none()
@@ -318,6 +321,16 @@ async def authorize_tenant_admin(
     normalized = normalize_role_name(current_user.role)
     if normalized == "platform_admin":
         return True
+
+    tenant_org_result = await session.execute(
+        select(Tenant.organization_id).where(Tenant.id == tenant_id)
+    )
+    tenant_organization_id = tenant_org_result.scalar_one_or_none()
+    if tenant_organization_id is not None and await authorize_org_admin(
+        session, current_user, tenant_organization_id
+    ):
+        return True
+
     if normalized != "admin":
         result = await session.execute(
             select(TenantMembership.role).where(
@@ -340,21 +353,37 @@ def require_role(*allowed_roles: str):
     """
 
     async def _check(
-        authorization: str | None = Header(None),
+        current_user: TokenData | None = Depends(get_current_user),
+        session: AsyncSession = Depends(get_auth_session),
+        x_active_tenant_id: str | None = Header(None, alias="X-Active-Tenant-Id"),
+        x_tenant_id: str | None = Header(None, alias="X-Tenant-Id"),
     ) -> None:
-        if not authorization or not authorization.startswith("Bearer "):
+        if current_user is None:
             # Allow dev mode without auth
             return
-        token = authorization[len("Bearer ") :]
-        data = _decode_bearer_token_or_401(token)
 
-        user_role = normalize_role_name(data.role)
+        user_role = normalize_role_name(current_user.role)
         allowed_normalized = [normalize_role_name(r) for r in allowed_roles]
 
         if user_role not in allowed_normalized:
+            requested_tenant_id = x_active_tenant_id or x_tenant_id
+            if requested_tenant_id:
+                try:
+                    tenant_uuid = uuid.UUID(requested_tenant_id)
+                except ValueError:
+                    tenant_uuid = None
+                if tenant_uuid is not None:
+                    if "viewer" in allowed_normalized and await authorize_tenant_access(
+                        session, current_user, tenant_uuid
+                    ):
+                        return
+                    if any(role in allowed_normalized for role in ("operator", "admin")) and await authorize_tenant_admin(
+                        session, current_user, tenant_uuid
+                    ):
+                        return
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Role '{data.role}' is not authorized. Required: {', '.join(allowed_roles)}",
+                detail=f"Role '{current_user.role}' is not authorized. Required: {', '.join(allowed_roles)}",
             )
 
     return _check
@@ -369,19 +398,37 @@ def require_permission(*permissions: Permission):
     """
 
     async def _check(
-        authorization: str | None = Header(None),
+        current_user: TokenData | None = Depends(get_current_user),
+        session: AsyncSession = Depends(get_auth_session),
+        x_active_tenant_id: str | None = Header(None, alias="X-Active-Tenant-Id"),
+        x_tenant_id: str | None = Header(None, alias="X-Tenant-Id"),
     ) -> None:
-        if not authorization or not authorization.startswith("Bearer "):
+        if current_user is None:
             # Allow dev mode without auth
             return
-        token = authorization[len("Bearer ") :]
-        data = _decode_bearer_token_or_401(token)
 
-        if not has_any_permission(data.role, *permissions):
+        if has_any_permission(current_user.role, *permissions):
+            return
+
+        requested_tenant_id = x_active_tenant_id or x_tenant_id
+        if requested_tenant_id:
+            try:
+                tenant_uuid = uuid.UUID(requested_tenant_id)
+            except ValueError:
+                tenant_uuid = None
+            if tenant_uuid is not None:
+                if await authorize_tenant_admin(session, current_user, tenant_uuid):
+                    return
+                if all(permission == Permission.INCIDENT_VIEW for permission in permissions) and await authorize_tenant_access(
+                    session, current_user, tenant_uuid
+                ):
+                    return
+
+        if not has_any_permission(current_user.role, *permissions):
             perm_names = ", ".join(p.value for p in permissions)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Role '{data.role}' lacks required permission(s): {perm_names}",
+                detail=f"Role '{current_user.role}' lacks required permission(s): {perm_names}",
             )
 
     return _check

@@ -34,6 +34,12 @@ class MonitoringIntegration(Base):
         nullable=False,
         index=True,
     )
+    cloud_account_binding_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("cloud_account_bindings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

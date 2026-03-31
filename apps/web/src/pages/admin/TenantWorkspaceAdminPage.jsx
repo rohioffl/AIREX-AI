@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { Users, Cloud, Building2, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { fetchOrganizationTenants } from '../../services/api'
@@ -46,53 +46,66 @@ function CloudSetupStages({ tenantId }) {
 }
 
 export default function TenantWorkspaceAdminPage() {
-  const location = useLocation()
+  const { organizationSlug: routeOrganizationSlug = '' } = useParams()
   const auth = useAuth()
-  const { tenants = [], activeTenant = null, activeOrganization = null } = auth
-  const backTarget = isPlatformAdmin(auth) ? '/admin' : '/admin/organizations'
+  const { tenants = [], activeTenant = null, activeOrganization = null, organizations = [] } = auth
+  const scopedOrganization = useMemo(() => {
+    if (!routeOrganizationSlug) {
+      return organizations.find((organization) => String(organization.id) === String(getActiveOrganizationIdOverride()))
+        || activeOrganization
+        || null
+    }
+    return organizations.find((organization) => (
+      String(organization.slug) === String(routeOrganizationSlug)
+      || String(organization.id) === String(routeOrganizationSlug)
+    )) || null
+  }, [activeOrganization, organizations, routeOrganizationSlug])
+  const organizationId = scopedOrganization?.id || getActiveOrganizationIdOverride() || activeOrganization?.id || ''
+  const organizationRouteKey = scopedOrganization?.slug || scopedOrganization?.id || routeOrganizationSlug || organizationId || ''
+  const backTarget = isPlatformAdmin(auth)
+    ? '/admin'
+    : organizationRouteKey
+      ? `/admin/organizations/${encodeURIComponent(organizationRouteKey)}`
+      : '/admin/organizations'
   const backLabel = isPlatformAdmin(auth) ? 'Back to Platform Admin' : 'Back to Organizations'
-  const requestedOrganizationId = new URLSearchParams(location.search).get('org_id')
-    || getActiveOrganizationIdOverride()
-    || activeOrganization?.id
-    || ''
   const [scopedTenants, setScopedTenants] = useState([])
-  const [loading, setLoading] = useState(Boolean(requestedOrganizationId))
+  const [loading, setLoading] = useState(Boolean(organizationId))
 
   const loadScopedTenants = useCallback(async () => {
-    if (!requestedOrganizationId) {
+    if (!organizationId) {
       setScopedTenants([])
       setLoading(false)
       return
     }
     setLoading(true)
     try {
-      const data = await fetchOrganizationTenants(requestedOrganizationId)
+      const data = await fetchOrganizationTenants(organizationId)
       setScopedTenants(Array.isArray(data) ? data : [])
     } catch {
       setScopedTenants([])
     } finally {
       setLoading(false)
     }
-  }, [requestedOrganizationId])
+  }, [organizationId])
 
   useEffect(() => {
-    if (requestedOrganizationId) {
-      setActiveOrganizationIdOverride(String(requestedOrganizationId))
+    if (organizationId) {
+      setActiveOrganizationIdOverride(String(organizationId))
     }
-  }, [requestedOrganizationId])
+  }, [organizationId])
 
   useEffect(() => {
     loadScopedTenants()
   }, [loadScopedTenants])
 
   const allTenants = useMemo(() => {
-    if (requestedOrganizationId) {
+    if (organizationId) {
       return scopedTenants
     }
     if (tenants.length) return tenants
     if (activeTenant) return [activeTenant]
     return []
-  }, [requestedOrganizationId, scopedTenants, tenants, activeTenant])
+  }, [organizationId, scopedTenants, tenants, activeTenant])
 
   const [selectedId, setSelectedId] = useState(() => activeTenant?.id || allTenants[0]?.id || '')
   const [activeTab, setActiveTab] = useState('members')
@@ -122,7 +135,7 @@ export default function TenantWorkspaceAdminPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em', margin: 0 }}>
-            Tenant Workspaces
+            Workspaces
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
             Select a workspace to manage its members, cloud accounts, and monitoring integrations.

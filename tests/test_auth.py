@@ -167,6 +167,20 @@ class TestRateLimiter:
         assert callable(approval_rate_limit)
         assert callable(auth_rate_limit)
 
+    def test_auth_routes_use_full_path_bucket(self):
+        from airex_core.core.rate_limit import _rate_limit_bucket
+
+        assert _rate_limit_bucket("/api/v1/auth/login", "/api/v1/auth") == "/api/v1/auth/login"
+        assert _rate_limit_bucket("/api/v1/auth/refresh", "/api/v1/auth") == "/api/v1/auth/refresh"
+
+    def test_non_auth_routes_keep_prefix_bucket(self):
+        from airex_core.core.rate_limit import _rate_limit_bucket
+
+        assert (
+            _rate_limit_bucket("/api/v1/webhooks/org/workspace/prometheus", "/api/v1/webhooks")
+            == "/api/v1/webhooks"
+        )
+
 
 class TestRetryScheduler:
     def test_retry_scheduler_imports(self):

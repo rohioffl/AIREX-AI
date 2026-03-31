@@ -312,7 +312,7 @@ export default function ProfilePage() {
           <InfoRow icon={Mail}     label="Email"        value={user?.email}     copyable />
           <InfoRow icon={Shield}   label="Role"         value={user?.role || 'viewer'} />
           <InfoRow icon={Hash}     label="User ID"      value={user?.userId}    mono copyable />
-          <InfoRow icon={Calendar} label="Tenant ID"    value={user?.tenantId}  mono copyable />
+          <InfoRow icon={Calendar} label="Workspace ID" value={user?.tenantId} mono copyable />
         </Motion.div>
 
         {/* Actions */}

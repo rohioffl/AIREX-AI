@@ -43,7 +43,15 @@ export default function InviteTenantUserModal({ tenant, onClose, onInvited }) {
       })
       setResult(data)
       if (onInvited) onInvited(data)
-      addToast({ title: 'Invitation sent', message: `Invite email sent to ${data.email}`, severity: 'LOW' })
+      if (data.status === 'already_has_access') {
+        addToast({
+          title: 'Access already available',
+          message: `${data.email} already has workspace access through the organization`,
+          severity: 'LOW',
+        })
+      } else {
+        addToast({ title: 'Invitation sent', message: `Invite email sent to ${data.email}`, severity: 'LOW' })
+      }
     } catch (err) {
       addToast({ title: 'Error', message: extractErrorMessage(err) || 'Failed to invite user', severity: 'CRITICAL' })
     } finally {
@@ -72,12 +80,12 @@ export default function InviteTenantUserModal({ tenant, onClose, onInvited }) {
         <div className="flex items-center gap-2">
           <Mail size={18} style={{ color: 'var(--brand-orange)' }} />
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', margin: 0 }}>
-            Invite User to {tenant?.display_name || tenant?.name || 'Tenant'}
+            Invite User to {tenant?.display_name || tenant?.name || 'Workspace'}
           </h3>
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-          The invited user will only have access to this tenant. No organisation membership will be created.
+          The invited user will only have access to this workspace. No organization membership will be created.
         </p>
 
         {!result ? (
@@ -142,9 +150,21 @@ export default function InviteTenantUserModal({ tenant, onClose, onInvited }) {
         ) : (
           <div className="space-y-4">
             <div className="rounded-xl p-4 space-y-2" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.24)' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#22c55e' }}>Invitation sent</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#22c55e' }}>
+                {result.status === 'already_has_access' ? 'Access already available' : 'Invitation sent'}
+              </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                An invitation email has been sent to <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong>. It expires in 7 days.
+                {result.status === 'already_has_access'
+                  ? (
+                    <>
+                      <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong> already has access to this workspace through the organization.
+                    </>
+                  )
+                  : (
+                    <>
+                      An invitation email has been sent to <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong>. It expires in 7 days.
+                    </>
+                  )}
               </div>
             </div>
 

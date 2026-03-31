@@ -66,11 +66,14 @@ function LocationProbe() {
 describe('Layout workspace switcher', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
+    mockAuth.user = { role: 'operator', email: 'ava@example.com', displayName: 'Ava Admin', userId: 'user-1' }
     mockAuth.activeOrganization = { id: 'org-1', name: 'Acme Cloud', slug: 'acme-cloud' }
     mockAuth.organizations = [
       { id: 'org-1', name: 'Acme Cloud', slug: 'acme-cloud' },
       { id: 'org-2', name: 'Dormant Org', slug: 'dormant-org' },
     ]
+    mockAuth.tenantMemberships = [{ id: 'tenant-1', role: 'admin' }]
     mockApi.fetchIncidents.mockResolvedValue({ items: [] })
     mockApi.fetchUserAccessibleTenants.mockResolvedValue([
       {
@@ -120,7 +123,7 @@ describe('Layout workspace switcher', () => {
     })
   })
 
-  it('keeps all tenants selected when navigating from tenant workspaces to alerts', async () => {
+  it('keeps all workspaces selected when navigating from workspaces to alerts', async () => {
     const user = userEvent.setup()
 
     render(
@@ -137,15 +140,15 @@ describe('Layout workspace switcher', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /alpha/i }))
-    await user.click(await screen.findByRole('button', { name: /all tenants/i }))
+    await user.click(await screen.findByRole('button', { name: /all workspaces/i }))
     expect(screen.getByTestId('location')).toHaveTextContent('/admin/workspaces')
     await user.click(screen.getByRole('link', { name: /alerts/i }))
-    expect(screen.getByRole('button', { name: /all tenants/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /all workspaces/i })).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/alerts')
     expect(mockSwitchTenant).not.toHaveBeenCalled()
   })
 
-  it('keeps users on alerts when switching to all tenants', async () => {
+  it('keeps users on alerts when switching to all workspaces', async () => {
     const user = userEvent.setup()
 
     render(
@@ -162,10 +165,10 @@ describe('Layout workspace switcher', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /alpha/i }))
-    await user.click(await screen.findByRole('button', { name: /all tenants/i }))
+    await user.click(await screen.findByRole('button', { name: /all workspaces/i }))
 
     expect(screen.getByTestId('location')).toHaveTextContent('/alerts')
-    expect(screen.getAllByRole('button', { name: /all tenants/i }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /all workspaces/i }).length).toBeGreaterThan(0)
   })
 
   it('keeps users on alerts when switching tenants', async () => {
@@ -268,9 +271,54 @@ describe('Layout workspace switcher', () => {
     ).toBeInTheDocument()
   })
 
-  it('syncs the organization switcher from the route org_id query', async () => {
+  it('keeps the selected organization visible while switching to a workspace in another org', async () => {
+    const user = userEvent.setup()
+    mockApi.fetchUserAccessibleTenants.mockResolvedValue([
+      {
+        id: 'tenant-1',
+        name: 'alpha',
+        display_name: 'Alpha',
+        cloud: 'aws',
+        organization_id: 'org-1',
+        role: 'admin',
+      },
+      {
+        id: 'tenant-3',
+        name: 'gamma',
+        display_name: 'Gamma',
+        cloud: 'aws',
+        organization_id: 'org-2',
+        role: 'admin',
+      },
+    ])
+
     render(
-      <MemoryRouter initialEntries={['/admin/organizations?org_id=org-2']}>
+      <MemoryRouter initialEntries={['/alerts']}>
+        <Layout>
+          <div>content</div>
+          <LocationProbe />
+        </Layout>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockApi.fetchUserAccessibleTenants).toHaveBeenCalledWith('user-1')
+    })
+
+    await user.click(screen.getByRole('button', { name: /acme cloud/i }))
+    await user.click(await screen.findByRole('button', { name: /dormant org/i }))
+
+    await waitFor(() => {
+      expect(mockSwitchTenant).toHaveBeenCalledWith('tenant-3')
+    })
+
+    expect(screen.getAllByRole('button', { name: /dormant org/i }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /select workspaceworkspace scope/i })).toBeInTheDocument()
+  })
+
+  it('syncs the organization switcher from the org slug route', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/organizations/dormant-org']}>
         <Layout>
           <div>content</div>
           <LocationProbe />
@@ -283,5 +331,56 @@ describe('Layout workspace switcher', () => {
     })
 
     expect(screen.getByRole('button', { name: /dormant org/i })).toBeInTheDocument()
+  })
+
+  it('clears a stale org override that does not belong to the current user session', async () => {
+    window.localStorage.setItem('airex-active-organization-id', 'org-2')
+    mockAuth.organizations = [{ id: 'org-1', name: 'Acme Cloud', slug: 'acme-cloud' }]
+    mockAuth.activeOrganization = { id: 'org-1', name: 'Acme Cloud', slug: 'acme-cloud' }
+
+    render(
+      <MemoryRouter initialEntries={['/alerts']}>
+        <Layout>
+          <div>content</div>
+          <LocationProbe />
+        </Layout>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockApi.fetchUserAccessibleTenants).toHaveBeenCalledWith('user-1')
+    })
+
+    expect(screen.getByRole('button', { name: /alpha.*workspace scope/i })).toBeInTheDocument()
+    expect(window.localStorage.getItem('airex-active-organization-id')).toBeNull()
+  })
+
+  it('shows tenant admin surfaces when admin access comes from organization membership', async () => {
+    mockAuth.user = {
+      role: 'viewer',
+      email: 'rohit@example.com',
+      displayName: 'Rohit',
+      userId: 'user-1',
+    }
+    mockAuth.activeOrganization = { id: 'org-1', name: 'Acme Cloud', slug: 'acme-cloud', role: 'admin' }
+    mockAuth.organizationMemberships = [{ id: 'org-1', role: 'admin' }]
+    mockAuth.tenantMemberships = []
+
+    render(
+      <MemoryRouter initialEntries={['/alerts']}>
+        <Layout>
+          <div>content</div>
+          <LocationProbe />
+        </Layout>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockApi.fetchUserAccessibleTenants).toHaveBeenCalledWith('user-1')
+    })
+
+    expect(screen.getByRole('link', { name: /runbooks/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /reports/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^settings$/i })).toBeInTheDocument()
   })
 })

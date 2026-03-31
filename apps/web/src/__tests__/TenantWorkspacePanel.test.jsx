@@ -70,6 +70,7 @@ const mockApi = vi.hoisted(() => ({
   createOrganizationTenant: vi.fn(),
   createProject: vi.fn(),
   createIntegration: vi.fn(),
+  fetchCloudAccounts: vi.fn(),
   fetchIntegrationTypes: vi.fn(),
 }))
 
@@ -92,6 +93,7 @@ vi.mock('../services/api', async () => {
     createOrganizationTenant: mockApi.createOrganizationTenant,
     createProject: mockApi.createProject,
     createIntegration: mockApi.createIntegration,
+    fetchCloudAccounts: mockApi.fetchCloudAccounts,
     fetchIntegrationTypes: mockApi.fetchIntegrationTypes,
   }
 })
@@ -103,6 +105,14 @@ describe('TenantWorkspaceManager', () => {
     vi.clearAllMocks()
     mockAddToast.mockReset()
     mockAuth.user = { role: 'platform_admin' }
+    mockApi.fetchIntegrationTypes.mockResolvedValue([
+      { id: 'type-1', key: 'site24x7', display_name: 'Site24x7' },
+      { id: 'type-2', key: 'datadog', display_name: 'Datadog' },
+      { id: 'type-3', key: 'grafana', display_name: 'Grafana' },
+    ])
+    mockApi.fetchCloudAccounts.mockResolvedValue([
+      { id: 'binding-1', display_name: 'AWS Test Client', external_account_id: '123456789012' },
+    ])
     mockApi.testIntegration.mockResolvedValue({ status: 'verified' })
     mockApi.syncIntegrationMonitors.mockResolvedValue({ status: 'synced', monitor_count: 0 })
     mockApi.fetchProjectMonitorBindings.mockResolvedValue([])
@@ -166,13 +176,28 @@ describe('TenantWorkspaceManager', () => {
     })
   })
 
+  it('shows only Site24x7 as available and marks other integration types as coming soon', async () => {
+    const user = userEvent.setup()
+    render(<TenantWorkspaceManager />)
+
+    await user.click(screen.getByRole('button', { name: /add integration/i }))
+
+    const select = await screen.findByRole('combobox', { name: /integration type/i })
+    expect(select).toHaveValue('site24x7')
+    expect(screen.getByRole('option', { name: 'Site24x7' })).not.toBeDisabled()
+    expect(screen.getByRole('option', { name: 'Datadog (Coming Soon)' })).toBeDisabled()
+    expect(screen.getByRole('option', { name: 'Grafana (Coming Soon)' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: /cloud account/i })).toHaveValue('')
+    expect(screen.getByText(/only site24x7 is available for tenant setup right now/i)).toBeInTheDocument()
+  })
+
   it('hides the add organization control for org admins', async () => {
     mockAuth.user = { role: 'org_admin' }
 
     render(<TenantWorkspaceManager mode="organizations" />)
 
     expect(screen.queryByRole('button', { name: /add organization/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /onboard tenant/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /onboard workspace/i })).toBeInTheDocument()
     await waitFor(() => {
       expect(mockApi.fetchProjectMonitorBindings).toHaveBeenCalledWith('project-1')
     })
@@ -182,7 +207,7 @@ describe('TenantWorkspaceManager', () => {
     render(<TenantWorkspaceManager mode="platform" />)
 
     await waitFor(() => {
-      expect(screen.getByText('Tenant Profile · UnoSecur')).toBeInTheDocument()
+      expect(screen.getByText('Workspace Profile · UnoSecur')).toBeInTheDocument()
     })
     expect(screen.queryByText('Projects · UnoSecur')).not.toBeInTheDocument()
     expect(screen.queryByText('Primary Site24x7')).not.toBeInTheDocument()

@@ -12,6 +12,8 @@ import structlog
 from fastapi import HTTPException, Request, status
 from redis.exceptions import RedisError
 
+from airex_core.core.config import settings
+
 logger = structlog.get_logger()
 
 DEFAULT_LIMIT = 60
@@ -39,7 +41,7 @@ async def rate_limit(
 
     client_ip = request.client.host if request.client else "unknown"
     path_prefix = "/".join(request.url.path.split("/")[:4])
-    key = f"rl:{client_ip}:{path_prefix}"
+    key = f"rl:{client_ip}:{_rate_limit_bucket(request.url.path, path_prefix)}"
     correlation_id = _get_correlation_id(request)
 
     now = time.time()
@@ -90,6 +92,13 @@ async def rate_limit(
         )
 
 
+def _rate_limit_bucket(path: str, default_prefix: str) -> str:
+    """Route noisy auth endpoints independently while keeping other prefixes grouped."""
+    if path.startswith("/api/v1/auth/"):
+        return path
+    return default_prefix
+
+
 def create_rate_limiter(
     limit: int = DEFAULT_LIMIT,
     window: int = DEFAULT_WINDOW,
@@ -102,6 +111,15 @@ def create_rate_limiter(
     return _limiter
 
 
-webhook_rate_limit = create_rate_limiter(limit=30, window=60)
-approval_rate_limit = create_rate_limiter(limit=10, window=60)
-auth_rate_limit = create_rate_limiter(limit=5, window=60)
+webhook_rate_limit = create_rate_limiter(
+    limit=settings.WEBHOOK_RATE_LIMIT_REQUESTS,
+    window=settings.WEBHOOK_RATE_LIMIT_WINDOW_SECONDS,
+)
+approval_rate_limit = create_rate_limiter(
+    limit=settings.APPROVAL_RATE_LIMIT_REQUESTS,
+    window=settings.APPROVAL_RATE_LIMIT_WINDOW_SECONDS,
+)
+auth_rate_limit = create_rate_limiter(
+    limit=settings.AUTH_RATE_LIMIT_REQUESTS,
+    window=settings.AUTH_RATE_LIMIT_WINDOW_SECONDS,
+)

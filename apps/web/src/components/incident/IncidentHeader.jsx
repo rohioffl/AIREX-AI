@@ -89,7 +89,7 @@ export default function IncidentHeader({ incident }) {
               )}
               {tenant && (
                 <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  tenant · {tenant}
+                  workspace · {tenant}
                 </span>
               )}
               {region && (
@@ -159,7 +159,7 @@ export default function IncidentHeader({ incident }) {
             { label: 'Alert Repeats', value: `${alertCount}×`, hint: lastSeen ? `last ${lastSeen}` : 'single alert', icon: Repeat },
             { label: 'Active Duration', value: durationSec ? formatDuration(durationSec) : '—', hint: firstSeen ? `since ${firstSeen}` : 'waiting data', icon: Clock },
             { label: 'Cloud Target', value: cloud ? cloud.toUpperCase() : 'Unknown', hint: region || 'no region received', icon: Cloud },
-            { label: 'Tenant Scope', value: tenant || 'default', hint: `state ${incident.state}`, icon: GaugeCircle },
+            { label: 'Workspace Scope', value: tenant || 'default', hint: `state ${incident.state}`, icon: GaugeCircle },
           ].map((card) => (
             <div key={card.label} className="rounded-2xl px-4 py-3 hover-lift" style={{ background: isDark ? 'rgba(6,8,15,0.6)' : 'rgba(255,255,255,0.6)', border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.08)' }}>
               <div className="flex items-center justify-between" style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>

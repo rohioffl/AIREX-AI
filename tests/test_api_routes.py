@@ -18,6 +18,7 @@ from airex_core.models.evidence import Evidence
 from airex_core.models.incident import Incident
 from airex_core.models.enums import IncidentState
 from airex_core.models.enums import SeverityLevel
+from airex_core.models.user import User
 
 
 TENANT_ID = "00000000-0000-0000-0000-000000000000"
@@ -604,9 +605,10 @@ async def test_site24x7_webhook_rejects_non_json(client, monkeypatch):
         assert tenant_slug == TENANT_SLUG
         return tenant_id
 
-    async def fake_resolve_integration(session, integration_id_arg, expected_tenant_id):
-        assert integration_id_arg == integration_id
+    async def fake_resolve_integration(session, expected_tenant_id, account_slug, integration_slug):
         assert expected_tenant_id == tenant_id
+        assert account_slug == "547361935557"
+        assert integration_slug == "tenant-site24x7"
         return webhook_routes.Site24x7IntegrationContext(
             integration_id=integration_id,
             tenant_id=tenant_id,
@@ -614,6 +616,7 @@ async def test_site24x7_webhook_rejects_non_json(client, monkeypatch):
             integration_slug="tenant-site24x7",
             integration_type_key="site24x7",
             enabled=True,
+            status="configured",
         )
 
     monkeypatch.setattr(webhook_routes, "_resolve_tenant_by_slugs", fake_resolve_tenant)
@@ -624,7 +627,7 @@ async def test_site24x7_webhook_rejects_non_json(client, monkeypatch):
     )
 
     response = await client.post(
-        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{integration_id}",
+        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/547361935557/tenant-site24x7",
         content=b"not json",
         headers={**HEADERS, "Content-Type": "application/json"},
     )
@@ -1385,14 +1388,18 @@ async def test_get_org_analytics_org_admin_sees_full_org_scope(client, mock_sess
 
 
 class _FakeExecuteResult:
-    def __init__(self, first_row=None, rowcount=1, scalar_rows=None, scalar_one_or_none=None):
+    def __init__(self, first_row=None, rowcount=1, rows=None, scalar_rows=None, scalar_one_or_none=None):
         self._first_row = first_row
         self.rowcount = rowcount
+        self._rows = list(rows or [])
         self._scalar_rows = list(scalar_rows or [])
         self._scalar_one_or_none = scalar_one_or_none
 
     def first(self):
         return self._first_row
+
+    def __iter__(self):
+        return iter(self._rows)
 
     def scalar_one_or_none(self):
         if self._scalar_one_or_none is not None:
@@ -1627,6 +1634,7 @@ async def test_invite_org_member_creates_pending_user_and_membership(client, moc
         lambda: "org-invite-token",
     )
     monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
 
     org_result = MagicMock()
     org_result.scalar_one_or_none = MagicMock(return_value=organization_id)
@@ -1682,7 +1690,144 @@ async def test_invite_org_member_creates_pending_user_and_membership(client, moc
 
 
 @pytest.mark.asyncio
-async def test_invite_org_member_grants_access_for_existing_active_user(
+async def test_invite_org_member_allows_empty_organization_without_workspace(
+    client, mock_session, monkeypatch
+):
+    from app.api.routes import organizations as organizations_routes
+
+    organization_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        organizations_routes,
+        "authorize_org_admin",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        organizations_routes,
+        "send_user_invitation_email",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        organizations_routes,
+        "record_event",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        organizations_routes,
+        "generate_invitation_token",
+        lambda: "org-empty-token",
+    )
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
+
+    org_result = MagicMock()
+    org_result.scalar_one_or_none = MagicMock(return_value=organization_id)
+
+    empty_tenant_result = MagicMock()
+    empty_tenant_result.first = MagicMock(return_value=None)
+
+    existing_user_result = MagicMock()
+    existing_user_result.scalar_one_or_none = MagicMock(return_value=None)
+
+    membership_result = MagicMock()
+    membership_result.scalar_one_or_none = MagicMock(return_value=None)
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            org_result,
+            empty_tenant_result,
+            existing_user_result,
+            membership_result,
+        ]
+    )
+
+    response = await client.post(
+        f"/api/v1/organizations/{organization_id}/invite-user",
+        json={
+            "email": "first.org.member@example.com",
+            "display_name": "First Org Member",
+            "role": "operator",
+        },
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["home_tenant_id"] is None
+    assert body["invitation_url"] == "http://localhost:5173/set-password?token=org-empty-token"
+
+    created_user = mock_session.add.call_args_list[0].args[0]
+    assert created_user.email == "first.org.member@example.com"
+    assert created_user.tenant_id == uuid.UUID("00000000-0000-0000-0000-000000000000")
+    assert created_user.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_invite_org_member_returns_503_when_email_cannot_be_sent(
+    client, mock_session, monkeypatch
+):
+    from app.api.routes import organizations as organizations_routes
+
+    organization_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        organizations_routes,
+        "authorize_org_admin",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        organizations_routes,
+        "send_user_invitation_email",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        organizations_routes,
+        "record_event",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        organizations_routes,
+        "generate_invitation_token",
+        lambda: "org-email-fail-token",
+    )
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
+
+    org_result = MagicMock()
+    org_result.scalar_one_or_none = MagicMock(return_value=organization_id)
+
+    tenant_result = MagicMock()
+    tenant_result.first = MagicMock(return_value=SimpleNamespace(id=tenant_id))
+
+    existing_user_result = MagicMock()
+    existing_user_result.scalar_one_or_none = MagicMock(return_value=None)
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            org_result,
+            tenant_result,
+            existing_user_result,
+        ]
+    )
+
+    response = await client.post(
+        f"/api/v1/organizations/{organization_id}/invite-user",
+        json={
+            "email": "org-mail-failure@example.com",
+            "display_name": "Org Mail Failure",
+            "role": "operator",
+        },
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 503
+    assert (
+        response.json()["detail"]
+        == "Invitation email could not be sent. Check EMAIL_FROM and AWS SES configuration."
+    )
+
+
+@pytest.mark.asyncio
+async def test_invite_org_member_keeps_existing_active_user_pending_until_acceptance(
     client, mock_session, monkeypatch
 ):
     from app.api.routes import organizations as organizations_routes
@@ -1706,7 +1851,7 @@ async def test_invite_org_member_grants_access_for_existing_active_user(
     )
     monkeypatch.setattr(
         organizations_routes,
-        "send_user_invitation_email",
+        "send_existing_user_access_invitation_email",
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
@@ -1757,17 +1902,351 @@ async def test_invite_org_member_grants_access_for_existing_active_user(
     assert body["role"] == "admin"
     assert body["organization_id"] == str(organization_id)
     assert body["home_tenant_id"] == str(tenant_id)
-    assert body["status"] == "access_granted"
-    assert body["invitation_url"] is None
-    assert body["expires_at"] is None
+    assert body["status"] == "invited"
+    assert body["delivery_mode"] == "accept_invitation"
+    assert body["invitation_url"] == "http://localhost:5173/accept-invitation?token=org-invite-token"
+    assert body["expires_at"] is not None
 
     created_membership = mock_session.add.call_args_list[-1].args[0]
     assert created_membership.organization_id == organization_id
     assert created_membership.user_id == existing_user_id
-    assert created_membership.role == "admin"
+    assert created_membership.role == "pending_admin"
+    assert existing_user.invitation_token == "org-invite-token"
 
-    organizations_routes.send_user_invitation_email.assert_not_awaited()
+    organizations_routes.send_existing_user_access_invitation_email.assert_awaited_once()
     organizations_routes.record_event.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_set_password_requires_workspace_for_unassigned_org_invite(
+    client, mock_session
+):
+    invited_user = User(
+        tenant_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        email="pending.org.member@example.com",
+        hashed_password=None,
+        display_name="Pending Org Member",
+        role="operator",
+        is_active=False,
+        invitation_token="pending-org-token",
+        invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+
+    user_result = MagicMock()
+    user_result.scalar_one_or_none = MagicMock(return_value=invited_user)
+    tenant_result = MagicMock()
+    tenant_result.scalar_one_or_none = MagicMock(return_value=None)
+    mock_session.execute = AsyncMock(side_effect=[user_result, tenant_result])
+
+    response = await client.post(
+        "/api/v1/auth/set-password",
+        json={"invitation_token": "pending-org-token", "password": "Airex@2026!Temp"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Create a workspace in this organization before accepting this invitation"
+    assert invited_user.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_set_password_assigns_first_workspace_for_unassigned_org_invite(
+    client, mock_session, monkeypatch
+):
+    from app.api.routes import auth as auth_routes
+
+    tenant_id = uuid.uuid4()
+    invited_user = User(
+        tenant_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        email="pending.org.member@example.com",
+        hashed_password=None,
+        display_name="Pending Org Member",
+        role="operator",
+        is_active=False,
+        invitation_token="pending-org-token",
+        invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+
+    user_result = MagicMock()
+    user_result.scalar_one_or_none = MagicMock(return_value=invited_user)
+    tenant_result = MagicMock()
+    tenant_result.scalar_one_or_none = MagicMock(return_value=tenant_id)
+    mock_session.execute = AsyncMock(side_effect=[user_result, tenant_result])
+
+    monkeypatch.setattr(auth_routes, "_get_org_id", AsyncMock(return_value=uuid.uuid4()))
+
+    response = await client.post(
+        "/api/v1/auth/set-password",
+        json={"invitation_token": "pending-org-token", "password": "Airex@2026!Temp"},
+    )
+
+    assert response.status_code == 200
+    assert invited_user.tenant_id == tenant_id
+    assert invited_user.is_active is True
+    assert invited_user.invitation_token is None
+
+
+@pytest.mark.asyncio
+async def test_set_password_rejects_existing_active_user_invite(
+    client, mock_session, monkeypatch
+):
+    tenant_id = uuid.uuid4()
+    invited_user = User(
+        tenant_id=tenant_id,
+        email="existing.member@example.com",
+        hashed_password="existing-hash",
+        display_name="Existing Member",
+        role="operator",
+        is_active=True,
+        invitation_token="existing-org-token",
+        invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+
+    user_result = MagicMock()
+    user_result.scalar_one_or_none = MagicMock(return_value=invited_user)
+    mock_session.execute = AsyncMock(side_effect=[user_result])
+
+    response = await client.post(
+        "/api/v1/auth/set-password",
+        json={"invitation_token": "existing-org-token", "password": "Ignored@123"},
+    )
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "This invitation must be accepted by signing in to your existing account."
+    )
+    assert invited_user.hashed_password == "existing-hash"
+    assert invited_user.invitation_token == "existing-org-token"
+
+
+@pytest.mark.asyncio
+async def test_accept_invitation_activates_pending_org_membership_for_existing_user(
+    client, mock_session, monkeypatch
+):
+    from app.api.routes import auth as auth_routes
+
+    tenant_id = uuid.uuid4()
+    organization_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    invited_user = User(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="existing.member@example.com",
+        hashed_password="existing-hash",
+        display_name="Existing Member",
+        role="operator",
+        is_active=True,
+        invitation_token="existing-org-token",
+        invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+    organization_membership = SimpleNamespace(role="pending_operator")
+
+    user_result = MagicMock()
+    user_result.scalar_one_or_none = MagicMock(return_value=invited_user)
+    pending_membership_result = MagicMock()
+    pending_membership_result.scalars = MagicMock(return_value=SimpleNamespace(all=lambda: [organization_membership]))
+    mock_session.execute = AsyncMock(side_effect=[user_result, pending_membership_result])
+
+    monkeypatch.setattr(auth_routes, "_get_org_id", AsyncMock(return_value=organization_id))
+
+    access_token = create_access_token(
+        tenant_id,
+        "existing.member@example.com",
+        user_id=user_id,
+        role="operator",
+        org_id=organization_id,
+    )
+
+    response = await client.post(
+        "/api/v1/auth/accept-invitation",
+        json={"invitation_token": "existing-org-token"},
+        headers={**HEADERS, "Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+    assert invited_user.invitation_token is None
+    assert organization_membership.role == "operator"
+
+
+@pytest.mark.asyncio
+async def test_accept_invitation_requires_matching_signed_in_user(
+    client, mock_session
+):
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    invited_user = User(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="existing.member@example.com",
+        hashed_password="existing-hash",
+        display_name="Existing Member",
+        role="operator",
+        is_active=True,
+        invitation_token="existing-org-token",
+        invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+
+    user_result = MagicMock()
+    user_result.scalar_one_or_none = MagicMock(return_value=invited_user)
+    mock_session.execute = AsyncMock(side_effect=[user_result])
+
+    access_token = create_access_token(
+        tenant_id,
+        "someone.else@example.com",
+        user_id=uuid.uuid4(),
+        role="operator",
+    )
+
+    response = await client.post(
+        "/api/v1/auth/accept-invitation",
+        json={"invitation_token": "existing-org-token"},
+        headers={**HEADERS, "Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Sign in as 'existing.member@example.com' to accept this invitation."
+
+
+@pytest.mark.asyncio
+async def test_resend_org_invitation_uses_accept_invitation_for_existing_active_user(
+    client, mock_session, monkeypatch
+):
+    from app.api.routes import organizations as organizations_routes
+
+    organization_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    membership = SimpleNamespace(role="pending_admin")
+    user = User(
+        id=user_id,
+        tenant_id=uuid.uuid4(),
+        email="existing.member@example.com",
+        hashed_password="existing-hash",
+        display_name="Existing Member",
+        role="operator",
+        is_active=True,
+        invitation_token="old-token",
+        invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+    )
+    row_result = MagicMock()
+    row_result.one_or_none = MagicMock(return_value=(membership, user))
+    mock_session.execute = AsyncMock(side_effect=[row_result])
+
+    monkeypatch.setattr(organizations_routes, "authorize_org_admin", AsyncMock(return_value=True))
+    monkeypatch.setattr(organizations_routes, "generate_invitation_token", lambda: "resent-org-token")
+    monkeypatch.setattr(
+        organizations_routes,
+        "send_existing_user_access_invitation_email",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(organizations_routes, "record_event", AsyncMock(return_value=None))
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
+
+    response = await client.post(
+        f"/api/v1/organizations/{organization_id}/members/{user_id}/resend-invitation",
+        headers=_auth_headers(role="org_admin"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == "existing.member@example.com"
+    assert body["delivery_mode"] == "accept_invitation"
+    assert user.invitation_token == "resent-org-token"
+    organizations_routes.send_existing_user_access_invitation_email.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resend_tenant_invitation_refreshes_pending_workspace_invite(
+    client, mock_session, monkeypatch
+):
+    from app.api.routes import tenant_members as tenant_member_routes
+
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    membership = SimpleNamespace(tenant_id=tenant_id, user_id=user_id, role="viewer")
+    user = User(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="pending.workspace@example.com",
+        hashed_password=None,
+        display_name="Pending Workspace",
+        role="viewer",
+        is_active=False,
+        invitation_token="old-workspace-token",
+        invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+    )
+    row_result = MagicMock()
+    row_result.one_or_none = MagicMock(return_value=(membership, user))
+    mock_session.execute = AsyncMock(side_effect=[row_result])
+
+    monkeypatch.setattr(tenant_member_routes, "authorize_tenant_admin", AsyncMock(return_value=True))
+    monkeypatch.setattr(tenant_member_routes, "generate_invitation_token", lambda: "resent-tenant-token")
+    monkeypatch.setattr(tenant_member_routes, "send_user_invitation_email", AsyncMock(return_value=True))
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant_id}/members/{user_id}/resend-invitation",
+        headers={
+            **_auth_headers(role="admin", tenant_id=str(tenant_id)),
+            "X-Tenant-Id": str(tenant_id),
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == "pending.workspace@example.com"
+    assert user.invitation_token == "resent-tenant-token"
+    tenant_member_routes.send_user_invitation_email.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_invite_tenant_user_returns_503_when_email_cannot_be_sent(
+    client, mock_session, monkeypatch
+):
+    from app.api.routes import tenant_members as tenant_member_routes
+
+    tenant_id = uuid.uuid4()
+    tenant = SimpleNamespace(id=tenant_id, organization_id=uuid.uuid4())
+
+    monkeypatch.setattr(
+        tenant_member_routes,
+        "authorize_tenant_admin",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        tenant_member_routes,
+        "send_user_invitation_email",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        tenant_member_routes,
+        "generate_invitation_token",
+        lambda: "tenant-email-fail-token",
+    )
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
+
+    tenant_result = MagicMock()
+    tenant_result.scalar_one_or_none = MagicMock(return_value=tenant)
+
+    existing_user_result = MagicMock()
+    existing_user_result.scalar_one_or_none = MagicMock(return_value=None)
+
+    mock_session.execute = AsyncMock(side_effect=[tenant_result, existing_user_result])
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant_id}/invite-user",
+        json={
+            "email": "tenant-mail-failure@example.com",
+            "display_name": "Tenant Mail Failure",
+            "role": "viewer",
+        },
+        headers=_auth_headers(role="admin", tenant_id=str(tenant_id)),
+    )
+
+    assert response.status_code == 503
+    assert (
+        response.json()["detail"]
+        == "Invitation email could not be sent. Check EMAIL_FROM and AWS SES configuration."
+    )
 
 
 @pytest.mark.asyncio
@@ -1822,6 +2301,32 @@ async def test_list_org_members_includes_user_status_fields(client, mock_session
     assert body[0]["is_active"] is False
     assert body[0]["invitation_status"] == "pending"
     assert body[0]["created_at"].startswith(created_at.strftime("%Y-%m-%dT%H:%M:%S"))
+
+
+@pytest.mark.asyncio
+async def test_add_org_member_endpoint_is_removed(client):
+    response = await client.post(
+        f"/api/v1/organizations/{uuid.uuid4()}/members",
+        json={"user_id": str(uuid.uuid4()), "role": "viewer"},
+        headers=_auth_headers(role="admin"),
+    )
+
+    assert response.status_code == 405
+
+
+@pytest.mark.asyncio
+async def test_add_tenant_member_endpoint_is_removed(client):
+    tenant_id = uuid.uuid4()
+    response = await client.post(
+        f"/api/v1/tenants/{tenant_id}/members",
+        json={"user_id": str(uuid.uuid4()), "role": "viewer"},
+        headers={
+            **_auth_headers(role="admin", tenant_id=str(tenant_id)),
+            "X-Tenant-Id": str(tenant_id),
+        },
+    )
+
+    assert response.status_code == 405
 
 
 @pytest.mark.asyncio
@@ -1884,7 +2389,244 @@ async def test_list_integrations_allows_org_admin_for_sibling_tenant(
     body = response.json()
     assert body[0]["tenant_id"] == str(sibling_tenant_id)
     assert body[0]["integration_type_key"] == "site24x7"
-    assert body[0]["webhook_path"] == f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{body[0]['id']}"
+    assert body[0]["webhook_path"] == f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/default/primary-site24x7"
+
+
+@pytest.mark.asyncio
+async def test_list_tenant_members_allows_org_admin_for_managed_tenant(client, mock_session):
+    tenant_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    membership_id = uuid.uuid4()
+    created_at = datetime.now(timezone.utc)
+
+    tenant_org_lookup = MagicMock()
+    tenant_org_lookup.scalar_one_or_none = MagicMock(return_value=org_id)
+    org_membership_lookup = MagicMock()
+    org_membership_lookup.scalar_one_or_none = MagicMock(return_value="org_admin")
+    member_rows = MagicMock()
+    member_rows.all = MagicMock(
+        return_value=[
+            (
+                SimpleNamespace(
+                    id=membership_id,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    role="viewer",
+                    created_at=created_at,
+                ),
+                "workspace.user@example.com",
+                "Workspace User",
+                True,
+            )
+        ]
+    )
+    mock_session.execute = AsyncMock(
+        side_effect=[tenant_org_lookup, org_membership_lookup, member_rows]
+    )
+
+    response = await client.get(
+        f"/api/v1/tenants/{tenant_id}/members",
+        headers={
+            **_auth_headers(role="viewer", tenant_id=str(tenant_id)),
+            "X-Tenant-Id": str(tenant_id),
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["tenant_id"] == str(tenant_id)
+    assert body[0]["user_id"] == str(user_id)
+    assert body[0]["role"] == "viewer"
+    assert body[0]["email"] == "workspace.user@example.com"
+    assert body[0]["display_name"] == "Workspace User"
+
+
+@pytest.mark.asyncio
+async def test_create_runbook_allows_org_admin_for_active_tenant(client, mock_session):
+    tenant_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+
+    tenant_org_lookup = MagicMock()
+    tenant_org_lookup.scalar_one_or_none = MagicMock(return_value=org_id)
+    org_membership_lookup = MagicMock()
+    org_membership_lookup.scalar_one_or_none = MagicMock(return_value="org_admin")
+    mock_session.execute = AsyncMock(side_effect=[tenant_org_lookup, org_membership_lookup])
+
+    response = await client.post(
+        "/api/v1/runbooks/",
+        json={
+            "name": "CPU Recovery",
+            "alert_type": "cpu_high",
+            "description": "Restart the service and verify recovery.",
+            "steps": [],
+        },
+        headers={
+            **_auth_headers(role="viewer", tenant_id=str(tenant_id)),
+            "X-Tenant-Id": str(tenant_id),
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["tenant_id"] == str(tenant_id)
+    assert body["name"] == "CPU Recovery"
+    assert body["alert_type"] == "cpu_high"
+
+
+@pytest.mark.asyncio
+async def test_update_org_member_rejects_self_role_change(client, monkeypatch):
+    from app.api.routes import organizations as organization_routes
+
+    user_id = uuid.uuid4()
+    monkeypatch.setattr(
+        organization_routes,
+        "authorize_org_admin",
+        AsyncMock(return_value=True),
+    )
+
+    response = await client.patch(
+        f"/api/v1/organizations/{uuid.uuid4()}/members/{user_id}",
+        json={"role": "viewer"},
+        headers=_auth_headers(role="admin", user_id=user_id),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Use another organization admin to change your own role"
+
+
+@pytest.mark.asyncio
+async def test_remove_tenant_member_rejects_self_removal(client, monkeypatch):
+    from app.api.routes import tenant_members as tenant_member_routes
+
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    monkeypatch.setattr(
+        tenant_member_routes,
+        "authorize_tenant_admin",
+        AsyncMock(return_value=True),
+    )
+
+    response = await client.delete(
+        f"/api/v1/tenants/{tenant_id}/members/{user_id}",
+        headers={
+            **_auth_headers(role="admin", tenant_id=str(tenant_id), user_id=user_id),
+            "X-Tenant-Id": str(tenant_id),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Use another workspace admin to remove your own access"
+
+
+@pytest.mark.asyncio
+async def test_remove_org_member_rejects_self_removal(client, monkeypatch):
+    from app.api.routes import organizations as organization_routes
+
+    organization_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    monkeypatch.setattr(
+        organization_routes,
+        "authorize_org_admin",
+        AsyncMock(return_value=True),
+    )
+
+    response = await client.delete(
+        f"/api/v1/organizations/{organization_id}/members/{user_id}",
+        headers=_auth_headers(role="admin", user_id=user_id),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Use another organization admin to remove your own access"
+
+
+@pytest.mark.asyncio
+async def test_invite_tenant_user_returns_already_has_access_for_org_member(
+    client, mock_session, monkeypatch
+):
+    from app.api.routes import tenant_members as tenant_member_routes
+
+    tenant_id = uuid.uuid4()
+    organization_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    existing_user = SimpleNamespace(
+        id=user_id,
+        email="existing.member@example.com",
+        display_name="Existing Member",
+        role="viewer",
+        is_active=True,
+    )
+
+    monkeypatch.setattr(
+        tenant_member_routes,
+        "authorize_tenant_admin",
+        AsyncMock(return_value=True),
+    )
+
+    tenant_result = MagicMock()
+    tenant_result.scalar_one_or_none = MagicMock(
+        return_value=SimpleNamespace(id=tenant_id, organization_id=organization_id)
+    )
+    existing_user_result = MagicMock()
+    existing_user_result.scalar_one_or_none = MagicMock(return_value=existing_user)
+    tenant_membership_result = MagicMock()
+    tenant_membership_result.scalar_one_or_none = MagicMock(return_value=None)
+    org_membership_result = MagicMock()
+    org_membership_result.scalar_one_or_none = MagicMock(return_value=uuid.uuid4())
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            tenant_result,
+            existing_user_result,
+            tenant_membership_result,
+            org_membership_result,
+        ]
+    )
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant_id}/invite-user",
+        json={
+            "email": "existing.member@example.com",
+            "display_name": "Existing Member",
+            "role": "operator",
+        },
+        headers={
+            **_auth_headers(role="admin", tenant_id=str(tenant_id)),
+            "X-Tenant-Id": str(tenant_id),
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["email"] == "existing.member@example.com"
+    assert body["status"] == "already_has_access"
+    assert body["invitation_url"] is None
+    assert body["expires_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_tenant_member_rejects_self_role_change(client, monkeypatch):
+    from app.api.routes import tenant_members as tenant_member_routes
+
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    monkeypatch.setattr(
+        tenant_member_routes,
+        "authorize_tenant_admin",
+        AsyncMock(return_value=True),
+    )
+
+    response = await client.patch(
+        f"/api/v1/tenants/{tenant_id}/members/{user_id}",
+        json={"role": "viewer"},
+        headers={
+            **_auth_headers(role="admin", tenant_id=str(tenant_id), user_id=user_id),
+            "X-Tenant-Id": str(tenant_id),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Use another workspace admin to change your own role"
 
 
 @pytest.mark.asyncio
@@ -2261,7 +3003,7 @@ async def test_create_integration_for_tenant_uses_jsonb_cast(client, mock_sessio
 
     assert response.status_code == 201
     assert response.json()["webhook_path"] == (
-        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{response.json()['id']}"
+        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/default/site24x7-primary"
     )
     insert_sql, insert_params = fake_conn.statements[3]
     assert "CAST(:config_json AS jsonb)" in insert_sql
@@ -2448,9 +3190,10 @@ async def test_site24x7_integration_webhook_uses_integration_tenant(
         assert tenant_slug == TENANT_SLUG
         return integration_tenant_id
 
-    async def fake_resolve(session, integration_id_arg, expected_tenant_id):
-        assert integration_id_arg == integration_id
+    async def fake_resolve(session, expected_tenant_id, account_slug, integration_slug):
         assert expected_tenant_id == integration_tenant_id
+        assert account_slug == "547361935557"
+        assert integration_slug == "tenant-site24x7"
         return webhook_routes.Site24x7IntegrationContext(
             integration_id=integration_id,
             tenant_id=integration_tenant_id,
@@ -2458,6 +3201,7 @@ async def test_site24x7_integration_webhook_uses_integration_tenant(
             integration_slug="tenant-site24x7",
             integration_type_key="site24x7",
             enabled=True,
+            status="configured",
         )
 
     async def fake_ingest(request, *, tenant_id, session, redis, integration_context, tenant_slug):
@@ -2471,7 +3215,7 @@ async def test_site24x7_integration_webhook_uses_integration_tenant(
     monkeypatch.setattr(webhook_routes, "_ingest_site24x7_request", fake_ingest)
 
     response = await client.post(
-        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/site24x7/{integration_id}",
+        f"/api/v1/webhooks/{ORG_SLUG}/{TENANT_SLUG}/547361935557/tenant-site24x7",
         json={"monitor_id": "monitor-1", "monitor_name": "Web-01", "status": "down"},
     )
 
@@ -2870,6 +3614,252 @@ async def test_test_integration_reports_missing_required_fields(client, mock_ses
     assert body["success"] is False
     assert "Missing required integration fields" in body["detail"]
     assert any(check["code"] == "required:api_key" and check["status"] == "failed" for check in body["checks"])
+
+
+@pytest.mark.asyncio
+async def test_delete_integration_hard_deletes_row(client, monkeypatch):
+    from app.api.routes import integrations as integration_routes
+
+    integration_id = uuid.uuid4()
+    tenant_id = uuid.UUID(TENANT_ID)
+
+    monkeypatch.setattr(
+        integration_routes,
+        "_get_integration_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(
+        integration_routes,
+        "_require_tenant_admin",
+        AsyncMock(return_value=None),
+    )
+
+    fake_conn = _FakeConnection(responses=[_FakeExecuteResult(rowcount=1)])
+    monkeypatch.setattr(
+        integration_routes,
+        "async_engine",
+        _FakeEngine(begin_conn=fake_conn),
+    )
+
+    response = await client.delete(
+        f"/api/v1/integrations/{integration_id}",
+        headers=_auth_headers(role="tenant_admin", tenant_id=str(tenant_id)),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "deleted"}
+    delete_sql, delete_params = fake_conn.statements[0]
+    assert "DELETE FROM monitoring_integrations" in delete_sql
+    assert "UPDATE monitoring_integrations" not in delete_sql
+    assert delete_params == {"integration_id": str(integration_id)}
+
+
+@pytest.mark.asyncio
+async def test_create_integration_purges_legacy_disabled_slug_before_insert(client, monkeypatch):
+    from app.api.routes import integrations as integration_routes
+
+    tenant_id = uuid.UUID(TENANT_ID)
+    integration_type_id = uuid.uuid4()
+    binding_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        integration_routes,
+        "_require_tenant_admin",
+        AsyncMock(return_value=None),
+    )
+
+    fake_conn = _FakeConnection(
+        responses=[
+            _FakeExecuteResult(
+                first_row=SimpleNamespace(
+                    id=tenant_id,
+                    tenant_slug="workspace-alpha",
+                    organization_slug="ankercloud",
+                )
+            ),
+            _FakeExecuteResult(
+                first_row=SimpleNamespace(
+                    id=integration_type_id,
+                    key="site24x7",
+                )
+            ),
+            _FakeExecuteResult(
+                first_row=SimpleNamespace(
+                    id=binding_id,
+                    display_name="AWS Test Client",
+                    external_account_id="547361935557",
+                )
+            ),
+            _FakeExecuteResult(rowcount=1),
+            _FakeExecuteResult(first_row=None),
+            _FakeExecuteResult(),
+        ]
+    )
+    monkeypatch.setattr(
+        integration_routes,
+        "async_engine",
+        _FakeEngine(begin_conn=fake_conn),
+    )
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant_id}/integrations",
+        json={
+            "integration_type_key": "site24x7",
+            "name": "Site24x7",
+            "slug": "site24x7",
+            "cloud_account_binding_id": str(binding_id),
+            "enabled": True,
+            "config_json": {"api_key": "test"},
+        },
+        headers=_auth_headers(role="tenant_admin", tenant_id=str(tenant_id)),
+    )
+
+    assert response.status_code == 201
+    purge_sql, purge_params = fake_conn.statements[3]
+    assert "DELETE FROM monitoring_integrations" in purge_sql
+    assert "enabled = false" in purge_sql
+    assert purge_params == {
+        "tenant_id": str(tenant_id),
+        "slug": "site24x7",
+        "cloud_account_binding_id": str(binding_id),
+    }
+
+    conflict_sql, conflict_params = fake_conn.statements[4]
+    assert "AND enabled = true" in conflict_sql
+    assert "cloud_account_binding_id = :cloud_account_binding_id" in conflict_sql
+    assert conflict_params == {
+        "tenant_id": str(tenant_id),
+        "slug": "site24x7",
+        "cloud_account_binding_id": str(binding_id),
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_integration_allows_same_slug_for_different_account(client, monkeypatch):
+    from app.api.routes import integrations as integration_routes
+
+    tenant_id = uuid.UUID(TENANT_ID)
+    integration_type_id = uuid.uuid4()
+    binding_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        integration_routes,
+        "_require_tenant_admin",
+        AsyncMock(return_value=None),
+    )
+
+    fake_conn = _FakeConnection(
+        responses=[
+            _FakeExecuteResult(
+                first_row=SimpleNamespace(
+                    id=tenant_id,
+                    tenant_slug="workspace-alpha",
+                    organization_slug="ankercloud",
+                )
+            ),
+            _FakeExecuteResult(
+                first_row=SimpleNamespace(
+                    id=integration_type_id,
+                    key="site24x7",
+                )
+            ),
+            _FakeExecuteResult(
+                first_row=SimpleNamespace(
+                    id=binding_id,
+                    display_name="AWS Test Client",
+                    external_account_id="547361935557",
+                )
+            ),
+            _FakeExecuteResult(rowcount=0),
+            _FakeExecuteResult(first_row=None),
+            _FakeExecuteResult(),
+        ]
+    )
+    monkeypatch.setattr(
+        integration_routes,
+        "async_engine",
+        _FakeEngine(begin_conn=fake_conn),
+    )
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant_id}/integrations",
+        json={
+            "integration_type_key": "site24x7",
+            "name": "Site24x7",
+            "slug": "shared-slug",
+            "cloud_account_binding_id": str(binding_id),
+            "enabled": True,
+            "config_json": {"api_key": "test"},
+        },
+        headers=_auth_headers(role="tenant_admin", tenant_id=str(tenant_id)),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["webhook_path"] == (
+        f"/api/v1/webhooks/ankercloud/workspace-alpha/547361935557/shared-slug"
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_webhook_events_sets_tenant_context_with_set_config(client, monkeypatch):
+    from app.api.routes import integrations as integration_routes
+
+    integration_id = uuid.uuid4()
+    tenant_id = uuid.UUID(TENANT_ID)
+    received_at = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(
+        integration_routes,
+        "_get_integration_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(
+        integration_routes,
+        "_require_tenant_access",
+        AsyncMock(return_value=None),
+    )
+
+    fake_conn = _FakeConnection(
+        responses=[
+            _FakeExecuteResult(),
+            _FakeExecuteResult(
+                rows=[
+                    SimpleNamespace(
+                        id=uuid.uuid4(),
+                        integration_id=integration_id,
+                        source="site24x7",
+                        event_type="alert",
+                        payload={"STATUS": "DOWN"},
+                        status="processed",
+                        incident_id=None,
+                        dedup_key=None,
+                        is_replay=False,
+                        original_event_id=None,
+                        received_at=received_at,
+                        processed_at=None,
+                    )
+                ]
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        integration_routes,
+        "async_engine",
+        _FakeEngine(connect_conn=fake_conn),
+    )
+
+    response = await client.get(
+        f"/api/v1/integrations/{integration_id}/webhook-events",
+        headers=_auth_headers(role="tenant_admin", tenant_id=str(tenant_id)),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["source"] == "site24x7"
+    set_sql, set_params = fake_conn.statements[0]
+    assert "set_config('app.tenant_id', :tenant_id, true)" in set_sql
+    assert set_params == {"tenant_id": str(tenant_id)}
 
 
 @pytest.mark.asyncio

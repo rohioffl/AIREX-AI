@@ -477,6 +477,76 @@ AIREX Team
     )
 
 
+async def send_existing_user_access_invitation_email(
+    email: str,
+    display_name: str,
+    invitation_url: str,
+) -> bool:
+    """
+    Send an org access invitation email for an existing active account.
+
+    Returns True if sent successfully, False otherwise.
+    """
+    if not _email_configured():
+        logger.warning("email_not_configured", email=email)
+        return False
+
+    text_content = f"""
+Hello {display_name},
+
+You've been invited to join another organization in AIREX.
+
+To activate this new access, please sign in and accept the invitation using the link below:
+{invitation_url}
+
+This invitation link will expire in 7 days.
+
+If you didn't expect this invitation, please contact your administrator.
+
+Best regards,
+AIREX Team
+"""
+
+    html_content = f"""
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h2 style="color: #6366f1;">Hello {escape(display_name)}!</h2>
+    <p>You've been invited to join another organization in AIREX.</p>
+    <p>Sign in and accept the invitation using the button below:</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{escape(invitation_url, quote=True)}" style="background: linear-gradient(135deg, #0f766e, #14b8a6); color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
+        Accept Invitation
+      </a>
+    </div>
+    <p style="font-size: 12px; color: #666;">
+      This invitation link will expire in 7 days.<br>
+      If you didn't expect this invitation, please contact your administrator.
+    </p>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+    <p style="font-size: 12px; color: #999; text-align: center;">
+      Best regards,<br>
+      AIREX Team
+    </p>
+  </div>
+</body>
+</html>
+"""
+
+    return await _send_email_via_ses(
+        subject="AIREX - Accept Your Organization Invitation",
+        recipient=email,
+        text_content=text_content,
+        html_content=html_content,
+        success_event="existing_user_invitation_email_sent",
+        error_event="existing_user_invitation_email_error",
+        log_context={
+            "email": email,
+            "display_name": display_name,
+        },
+    )
+
+
 async def send_password_reset_email(
     email: str,
     display_name: str,

@@ -51,7 +51,7 @@ const FEATURES = [
   {
     icon: Cloud,
     title: 'Multi-cloud ready',
-    description: 'AWS, GCP, and more. Tenant-scoped config, RLS, and correlation IDs across the stack.',
+    description: 'AWS, GCP, and more. Workspace-scoped config, RLS, and correlation IDs across the stack.',
   },
   {
     icon: Activity,
@@ -205,7 +205,7 @@ export default function LandingPage() {
             <div className="airex-why-card airex-reveal airex-reveal-stagger-3">
               <Cloud className="airex-why-icon" size={28} />
               <h3>Multi-cloud native</h3>
-              <p>AWS, GCP, and more. Tenant-scoped, RLS, and correlation IDs end to end.</p>
+              <p>AWS, GCP, and more. Workspace-scoped, RLS, and correlation IDs end to end.</p>
             </div>
           </div>
         </div>
@@ -274,7 +274,7 @@ export default function LandingPage() {
           <h2 className="airex-section-title">Secure by design</h2>
           <ul className="airex-security-list">
             <li><CheckCircle2 size={18} /> No raw shell; only registered actions</li>
-            <li><CheckCircle2 size={18} /> Tenant isolation and RLS</li>
+            <li><CheckCircle2 size={18} /> Workspace isolation and RLS</li>
             <li><CheckCircle2 size={18} /> Immutable state transitions with hash chaining</li>
             <li><CheckCircle2 size={18} /> Secrets in env; no business logic on the client</li>
           </ul>

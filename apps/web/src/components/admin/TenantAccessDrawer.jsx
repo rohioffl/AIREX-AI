@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Building2, ShieldCheck, UserRound, X } from 'lucide-react'
 
+import { useAuth } from '../../context/AuthContext'
 import { useToasts } from '../../context/ToastContext'
 import {
-  addTenantMember,
   fetchUserAccessibleTenants,
   removeTenantMember,
   updateTenantMember,
@@ -46,11 +46,14 @@ function AccessPill({ active, label }) {
 }
 
 export default function TenantAccessDrawer({ user, tenants = [], open, onClose }) {
+  const auth = useAuth()
   const { addToast } = useToasts()
   const [accessibleTenants, setAccessibleTenants] = useState([])
   const [loading, setLoading] = useState(false)
   const [draftRoles, setDraftRoles] = useState({})
   const [busyTenantId, setBusyTenantId] = useState(null)
+  const currentUserId = auth?.user?.userId || auth?.user?.user_id || auth?.user?.id || null
+  const isCurrentUser = String(user?.id) === String(currentUserId)
 
   const toast = useCallback((message, severity = 'LOW', title = 'Success') => {
     addToast({ title, message, severity })
@@ -64,7 +67,7 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
       setAccessibleTenants(Array.isArray(data) ? data : [])
     } catch (err) {
       setAccessibleTenants([])
-      toast(extractErrorMessage(err) || 'Failed to load tenant access', 'CRITICAL', 'Error')
+      toast(extractErrorMessage(err) || 'Failed to load workspace access', 'CRITICAL', 'Error')
     } finally {
       setLoading(false)
     }
@@ -78,7 +81,7 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
         await loadAccessibleTenants()
       } catch (err) {
         if (active) {
-          toast(extractErrorMessage(err) || 'Failed to load tenant access', 'CRITICAL', 'Error')
+          toast(extractErrorMessage(err) || 'Failed to load workspace access', 'CRITICAL', 'Error')
         }
       }
     }
@@ -106,29 +109,15 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
     [accessibleTenants, tenants]
   )
 
-  async function handleAssign(tenantId) {
-    const role = draftRoles[String(tenantId)] || 'viewer'
-    setBusyTenantId(String(tenantId))
-    try {
-      await addTenantMember(tenantId, { user_id: user.id, role })
-      await loadAccessibleTenants()
-      toast('Explicit tenant access granted')
-    } catch (err) {
-      toast(extractErrorMessage(err) || 'Failed to grant tenant access', 'CRITICAL', 'Error')
-    } finally {
-      setBusyTenantId(null)
-    }
-  }
-
   async function handleRoleChange(tenantId) {
     const role = draftRoles[String(tenantId)] || 'viewer'
     setBusyTenantId(String(tenantId))
     try {
       await updateTenantMember(tenantId, user.id, { role })
       await loadAccessibleTenants()
-      toast('Explicit tenant role updated')
+      toast('Explicit workspace role updated')
     } catch (err) {
-      toast(extractErrorMessage(err) || 'Failed to update tenant access', 'CRITICAL', 'Error')
+      toast(extractErrorMessage(err) || 'Failed to update workspace access', 'CRITICAL', 'Error')
     } finally {
       setBusyTenantId(null)
     }
@@ -139,9 +128,9 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
     try {
       await removeTenantMember(tenantId, user.id)
       await loadAccessibleTenants()
-      toast('Explicit tenant access removed')
+      toast('Explicit workspace access removed')
     } catch (err) {
-      toast(extractErrorMessage(err) || 'Failed to remove tenant access', 'CRITICAL', 'Error')
+      toast(extractErrorMessage(err) || 'Failed to remove workspace access', 'CRITICAL', 'Error')
     } finally {
       setBusyTenantId(null)
     }
@@ -157,7 +146,7 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
           <div>
             <div className="flex items-center gap-2">
               <UserRound size={16} style={{ color: 'var(--neon-cyan)' }} />
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)' }}>Tenant Access</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)' }}>Workspace Access</div>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
               {user?.display_name || user?.email || String(user?.id || '').slice(0, 8)}
@@ -175,15 +164,15 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
               Access Summary
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8 }}>
-              {scopedAccessibleTenants.length} tenant workspace{scopedAccessibleTenants.length === 1 ? '' : 's'} currently visible to this user in this organization.
+              {scopedAccessibleTenants.length} workspace{scopedAccessibleTenants.length === 1 ? '' : 's'} currently visible to this user in this organization.
             </div>
           </div>
 
           {loading ? (
-            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px 0' }}>Loading tenant access…</div>
+            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px 0' }}>Loading workspace access…</div>
           ) : tenants.length === 0 ? (
             <div className="rounded-xl p-4" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)', color: 'var(--text-muted)' }}>
-              No tenant workspaces are attached to this organization yet.
+              No workspaces are attached to this organization yet.
             </div>
           ) : (
             tenants.map((tenant) => {
@@ -203,47 +192,47 @@ export default function TenantAccessDrawer({ user, tenants = [], open, onClose }
                     <Building2 size={13} />
                     <span>{tenant.cloud?.toUpperCase?.() || 'Unknown cloud'}</span>
                     {access?.membership_role && <AccessPill active label={`Explicit ${access.membership_role}`} />}
-                    {!access?.membership_role && access && <AccessPill active label="Inherited or home tenant" />}
+                    {!access?.membership_role && access && <AccessPill active label="Inherited or home workspace" />}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 items-center">
-                    <select
-                      aria-label={`Tenant access role for ${tenant.display_name || tenant.name}`}
-                      value={draftRoles[String(tenant.id)] || 'viewer'}
-                      onChange={(e) => setDraftRoles((current) => ({ ...current, [String(tenant.id)]: e.target.value }))}
-                      style={inputCls}
-                    >
-                      {TENANT_ROLE_OPTIONS.map((role) => (
-                        <option key={role.value} value={role.value}>{role.label}</option>
-                      ))}
-                    </select>
-                    {access?.membership_role ? (
+
+                  {access?.membership_role ? (
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 items-center">
+                      <select
+                        aria-label={`Workspace access role for ${tenant.display_name || tenant.name}`}
+                        value={draftRoles[String(tenant.id)] || 'viewer'}
+                        onChange={(e) => setDraftRoles((current) => ({ ...current, [String(tenant.id)]: e.target.value }))}
+                        disabled={isCurrentUser}
+                        style={inputCls}
+                      >
+                        {TENANT_ROLE_OPTIONS.map((role) => (
+                          <option key={role.value} value={role.value}>{role.label}</option>
+                        ))}
+                      </select>
                       <button
                         onClick={() => handleRoleChange(tenant.id)}
-                        disabled={busyTenantId === String(tenant.id)}
+                        disabled={isCurrentUser || busyTenantId === String(tenant.id)}
                         className="px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                         style={{ background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.22)', color: 'var(--neon-cyan)' }}
                       >
                         Save Role
                       </button>
-                    ) : (
                       <button
-                        onClick={() => handleAssign(tenant.id)}
-                        disabled={busyTenantId === String(tenant.id)}
+                        onClick={() => handleRemove(tenant.id)}
+                        disabled={isCurrentUser || busyTenantId === String(tenant.id)}
                         className="px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                        style={{ background: 'var(--gradient-primary)', color: '#fff' }}
+                        style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444' }}
                       >
-                        Assign
+                        Remove
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleRemove(tenant.id)}
-                      disabled={!access?.membership_role || busyTenantId === String(tenant.id)}
-                      className="px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                      style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444' }}
+                    </div>
+                  ) : (
+                    <div
+                      className="rounded-lg p-3"
+                      style={{ background: 'rgba(148,163,184,0.08)', border: '1px dashed var(--border)', color: 'var(--text-secondary)', fontSize: 12 }}
                     >
-                      Remove
-                    </button>
-                  </div>
+                      New explicit workspace access is invite-only. Use the workspace members panel to send an invitation instead of assigning access here.
+                    </div>
+                  )}
                 </div>
               )
             })

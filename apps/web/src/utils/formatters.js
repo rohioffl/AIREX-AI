@@ -133,7 +133,7 @@ export function buildAcknowledgeMailto(incident, opts = {}) {
 
   const body = `Dear Team,
 
-A ${severity.toLowerCase()} incident has been detected on the ${cloud} ${region ? region + ' ' : ''}environment for tenant ${tenant}.
+A ${severity.toLowerCase()} incident has been detected on the ${cloud} ${region ? region + ' ' : ''}environment for workspace ${tenant}.
 
 
 Incident Details

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { Shield, Mail, Lock, Eye, EyeOff, User, ArrowRight, Loader, CheckCircle2, Activity, Zap } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { register } from '../services/auth'
@@ -10,6 +10,7 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '671714206735-
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login, loginWithGoogle } = useAuth()
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
@@ -27,6 +28,14 @@ export default function LoginPage() {
     { icon: Shield, text: "Security Active", sub: "Threat detection enabled" },
     { icon: Zap, text: "AI Analysis Ready", sub: "Neural engine standby" }
   ]
+  const acceptInvitationToken = searchParams.get('accept_invitation_token')
+
+  const getPostLoginPath = useCallback(() => {
+    if (acceptInvitationToken) {
+      return `/accept-invitation?token=${encodeURIComponent(acceptInvitationToken)}`
+    }
+    return '/incidents'
+  }, [acceptInvitationToken])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -40,13 +49,13 @@ export default function LoginPage() {
     setError(null)
     try {
       await loginWithGoogle(response.credential)
-      navigate('/incidents', { replace: true })
+      navigate(getPostLoginPath(), { replace: true })
     } catch (err) {
       setError(extractErrorMessage(err) || 'Google sign-in failed')
     } finally {
       setLoading(false)
     }
-  }, [loginWithGoogle, navigate])
+  }, [getPostLoginPath, loginWithGoogle, navigate])
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return
@@ -100,7 +109,7 @@ export default function LoginPage() {
       }
       if (mode === 'login' || mode !== 'register') {
         await login({ email, password })
-        navigate('/incidents', { replace: true })
+        navigate(getPostLoginPath(), { replace: true })
       }
     } catch (err) {
       const msg = extractErrorMessage(err) || err.message || 'Something went wrong'

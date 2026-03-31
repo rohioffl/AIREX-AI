@@ -4,7 +4,7 @@ import { useToasts } from '../context/ToastContext'
 import { Lock, CheckCircle, XCircle } from 'lucide-react'
 import api from '../services/api'
 import { setTokens } from '../services/tokenStorage'
-import { acceptInvitationWithGoogle } from '../services/auth'
+import { acceptInvitationWithGoogle, fetchInvitationInfo } from '../services/auth'
 import { extractErrorMessage } from '../utils/errorHandler'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '671714206735-8tdd47qt6el9m33fs4kjnocjqrcsq9dg.apps.googleusercontent.com'
@@ -18,6 +18,7 @@ export default function SetPasswordPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingInvitation, setLoadingInvitation] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
   const googleButtonRef = useRef(null)
@@ -27,6 +28,36 @@ export default function SetPasswordPage() {
       setError('Invalid invitation link. Please check your email for the correct link.')
     }
   }, [token])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function validateMode() {
+      if (!token) return
+
+      setLoadingInvitation(true)
+      try {
+        const invitation = await fetchInvitationInfo(token)
+        if (!cancelled && invitation.mode === 'accept_invitation') {
+          navigate(`/accept-invitation?token=${encodeURIComponent(token)}`, { replace: true })
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(extractErrorMessage(err) || 'Invalid invitation link')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingInvitation(false)
+        }
+      }
+    }
+
+    validateMode()
+
+    return () => {
+      cancelled = true
+    }
+  }, [navigate, token])
 
   const handleGoogleResponse = useCallback(async (response) => {
     if (!token) {
@@ -182,6 +213,16 @@ export default function SetPasswordPage() {
           <p className="text-muted mb-4">
             Your account has been activated. Redirecting to dashboard...
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loadingInvitation) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+        <div className="glass rounded-xl p-8 max-w-md w-full text-center">
+          <p className="text-muted">Checking your invitation…</p>
         </div>
       </div>
     )

@@ -100,7 +100,7 @@ class TenantCreateRequest(BaseModel):
     organization_id: str | None = None
     name: str = Field(..., min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     display_name: str = Field(..., min_length=2, max_length=255)
-    cloud: str = Field(..., pattern=r"^(aws|gcp)$")
+    cloud: str = Field(default="aws")
     escalation_email: str = ""
     slack_channel: str = ""
     ssh_user: str = "ubuntu"
@@ -112,10 +112,8 @@ class TenantCreateRequest(BaseModel):
 class TenantUpdateRequest(BaseModel):
     organization_id: str | None = None
     display_name: str | None = None
-    cloud: str | None = Field(None, pattern=r"^(aws|gcp)$")
     escalation_email: str | None = None
     slack_channel: str | None = None
-    ssh_user: str | None = None
     aws_config: dict | None = None
     gcp_config: dict | None = None
     servers: list | None = None

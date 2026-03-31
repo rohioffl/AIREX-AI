@@ -37,6 +37,13 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
+def _invitation_email_failure() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Invitation email could not be sent. Check EMAIL_FROM and AWS SES configuration.",
+    )
+
+
 def _is_admin_like_role(role: str | None) -> bool:
     return normalize_role_name(role or "") in {"admin", "platform_admin"}
 
@@ -71,7 +78,10 @@ async def _get_requester_admin_org_ids(
         select(
             OrganizationMembership.organization_id,
             OrganizationMembership.role,
-        ).where(OrganizationMembership.user_id == current_user.user_id)
+        ).where(
+            OrganizationMembership.user_id == current_user.user_id,
+            ~OrganizationMembership.role.like("pending\\_%", escape="\\"),
+        )
     )
     for row in membership_result.all():
         if _is_admin_like_role(getattr(row, "role", None)):
@@ -347,18 +357,23 @@ async def create_user(
             from airex_core.core.config import settings
 
             invitation_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/set-password?token={invitation_token}"
-            await send_user_invitation_email(
+            sent = await send_user_invitation_email(
                 email=body.email,
                 display_name=body.display_name,
                 invitation_url=invitation_url,
             )
+            if not sent:
+                raise _invitation_email_failure()
             logger.info(
                 "user_invitation_email_sent", email=body.email, user_id=str(user.id)
             )
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.warning(
                 "user_invitation_email_failed", email=body.email, error=str(exc)
             )
+            raise _invitation_email_failure()
 
     # Determine invitation status
     invitation_status = None
@@ -547,11 +562,13 @@ async def resend_invitation(
     # Send invitation email
     invitation_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/set-password?token={invitation_token}"
     try:
-        await send_user_invitation_email(
+        sent = await send_user_invitation_email(
             email=user.email,
             display_name=user.display_name,
             invitation_url=invitation_url,
         )
+        if not sent:
+            raise _invitation_email_failure()
         logger.info("invitation_resent", email=user.email, user_id=str(user_id))
         return {"message": "Invitation email sent successfully"}
     except Exception as exc:
@@ -631,7 +648,8 @@ async def list_accessible_tenants(
     # 2. Tenants accessible via organization membership
     org_memberships = await session.execute(
         select(OrganizationMembership.organization_id).where(
-            OrganizationMembership.user_id == user_id
+            OrganizationMembership.user_id == user_id,
+            ~OrganizationMembership.role.like("pending\\_%", escape="\\"),
         )
     )
     org_ids = list(org_memberships.scalars().all())

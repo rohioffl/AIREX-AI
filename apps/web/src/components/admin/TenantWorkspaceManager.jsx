@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle,
   Building2,
-  CheckCircle,
   Edit,
-  Globe,
   Plus,
   RefreshCcw,
   Search,
@@ -29,6 +26,7 @@ import {
   deleteProject,
   deleteTenant,
   fetchExternalMonitors,
+  fetchCloudAccounts,
   fetchIntegrationTypes,
   fetchProjectMonitorBindings,
   fetchTenantDetail,
@@ -78,32 +76,9 @@ function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
-const AWS_AUTH_METHODS = [
-  { value: 'role_assume', label: 'Cross-Account Role (Recommended)', desc: 'Assume role using account ID + role name' },
-  { value: 'role_arn',    label: 'Direct Role ARN',                  desc: 'Provide a full AWS IAM role ARN' },
-  { value: 'access_keys', label: 'Access Key + Secret',              desc: 'Static credentials stored in DB' },
-  { value: 'creds_file',  label: 'Credentials File Path',            desc: 'Path to credentials file on server' },
-  { value: 'instance',    label: 'EC2 Instance Role',                desc: 'Use instance profile / metadata role' },
-]
+const ACTIVE_INTEGRATION_TYPE_KEYS = new Set(['site24x7'])
 
-const GCP_AUTH_METHODS = [
-  { value: 'sa_key',  label: 'Service Account Key File', desc: 'Path to JSON key on server' },
-  { value: 'adc',     label: 'Application Default Credentials', desc: 'Uses gcloud auth' },
-  { value: 'auto',    label: 'Automatic (GCE/GKE)',      desc: 'Uses instance metadata' },
-]
 
-function CloudBadge({ cloud }) {
-  const isGcp = cloud === 'gcp'
-  return (
-    <span style={{
-      background: isGcp ? 'rgba(52,211,153,0.12)' : 'rgba(251,191,36,0.12)',
-      color: isGcp ? 'var(--neon-green)' : 'var(--color-accent-amber)',
-      borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-    }}>
-      {cloud || 'unknown'}
-    </span>
-  )
-}
 
 function CredBadge({ status }) {
   const ok = status === 'configured'
@@ -143,6 +118,7 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
   const [bindingBusyKey, setBindingBusyKey] = useState(null)
 
   const isPlatformInventoryMode = mode === 'platform'
+  const isOrgScopedMode = mode === 'organizations' && Boolean(initialOrganizationId)
   const toast = useCallback(
     (msg, type = 'success') => {
       addToast({
@@ -177,10 +153,16 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
   const filtered = useMemo(() => {
     if (!search) return tenants
     const q = search.toLowerCase()
-    return tenants.filter(t => t.name?.toLowerCase().includes(q) || t.display_name?.toLowerCase().includes(q) || t.cloud?.toLowerCase().includes(q))
+    return tenants.filter(t => t.name?.toLowerCase().includes(q) || t.display_name?.toLowerCase().includes(q))
   }, [tenants, search])
 
   const pageIntro = useMemo(() => {
+    if (isOrgScopedMode) {
+      return {
+        title: 'Workspaces',
+        subtitle: 'Manage only the workspaces that belong to this organization.',
+      }
+    }
     if (mode === 'organizations') {
       return {
         title: 'Organizations',
@@ -195,15 +177,15 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
     }
     if (mode === 'platform') {
       return {
-        title: 'Tenant Workspaces',
-        subtitle: 'Manage tenant inventory, onboarding, and organization placement without loading tenant-owned projects or integrations.',
+        title: 'Workspaces',
+        subtitle: 'Manage workspace inventory, onboarding, and organization placement without loading workspace-owned projects or integrations.',
       }
     }
     return {
-      title: 'Tenant Workspaces',
-      subtitle: 'Manage tenants, projects, and workspace-level SaaS configuration.',
+      title: 'Workspaces',
+      subtitle: 'Manage workspaces, projects, and workspace-level SaaS configuration.',
     }
-  }, [mode])
+  }, [isOrgScopedMode, mode])
 
   const canManageOrganizations = normalizeRole(user?.role) === 'platform_admin'
 
@@ -252,7 +234,7 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
     if (!deletingTenant) return
     try {
       await deleteTenant(deletingTenant.name)
-      toast(`Tenant "${deletingTenant.display_name}" deleted`)
+      toast(`Workspace "${deletingTenant.display_name}" deleted`)
       setDeletingTenant(null)
       reloadWorkspace()
     } catch (err) { toast(extractErrorMessage(err) || 'Delete failed', 'error') }
@@ -262,11 +244,11 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
     try {
       const detail = await fetchTenantDetail(t.name)
       setEditingTenant(detail)
-    } catch { toast('Failed to load tenant detail', 'error') }
+    } catch { toast('Failed to load workspace detail', 'error') }
   }
 
   const handleDeleteProject = async (project) => {
-    if (!window.confirm(`Delete project "${project.name}" from ${selectedTenant?.display_name || 'this tenant'}?`)) return
+    if (!window.confirm(`Delete project "${project.name}" from ${selectedTenant?.display_name || 'this workspace'}?`)) return
     try {
       await deleteProject(project.id)
       toast(`Project "${project.name}" deleted`)
@@ -363,33 +345,37 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{pageIntro.subtitle}</div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Organizations" value={organizations.length} color="var(--neon-purple)" icon={ShieldCheck} />
-        <StatCard label="Total Tenants" value={tenants.length} color="var(--neon-indigo)" icon={Building2} />
-        <StatCard label="Cloud Providers" value={[...new Set(tenants.map(t => t.cloud))].filter(Boolean).length} color="var(--neon-cyan)" icon={Globe} />
+      <div className={`grid grid-cols-1 ${isOrgScopedMode ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-4`}>
+        {!isOrgScopedMode && (
+          <StatCard label="Organizations" value={organizations.length} color="var(--neon-purple)" icon={ShieldCheck} />
+        )}
+        <StatCard label="Total Workspaces" value={tenants.length} color="var(--neon-indigo)" icon={Building2} />
+        <StatCard label="Active Workspaces" value={tenants.filter(t => t.is_active !== false).length} color="var(--neon-cyan)" icon={Building2} />
         <StatCard label="Total Servers" value={tenants.reduce((s, t) => s + (t.server_count || 0), 0)} color="var(--neon-green)" icon={Server} />
       </div>
 
       <div className="flex justify-between items-center gap-3 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap flex-1 min-w-[240px]">
-          <select
-            value={activeOrganizationId || ''}
-            onChange={(e) => changeOrganization(e.target.value || null)}
-            style={{ ...inputCls, maxWidth: 280 }}
-          >
-            <option value="">All accessible tenants</option>
-            {organizations.map(org => (
-              <option key={org.id} value={org.id}>{org.name}</option>
-            ))}
-          </select>
+          {!isOrgScopedMode && (
+            <select
+              value={activeOrganizationId || ''}
+              onChange={(e) => changeOrganization(e.target.value || null)}
+              style={{ ...inputCls, maxWidth: 280 }}
+            >
+              <option value="">All accessible workspaces</option>
+              {organizations.map(org => (
+                <option key={org.id} value={org.id}>{org.name}</option>
+              ))}
+            </select>
+          )}
 
           <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 320 }}>
             <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tenants…" style={{ ...inputCls, paddingLeft: 34 }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search workspaces…" style={{ ...inputCls, paddingLeft: 34 }} />
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {canManageOrganizations && (
+          {canManageOrganizations && !isOrgScopedMode && (
             <button onClick={() => setShowCreateOrganization(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
               <ShieldCheck size={14} /> Add Organization
             </button>
@@ -398,7 +384,7 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
             <RefreshCcw size={14} /> Reload Config
           </button>
           <button onClick={() => setShowOnboard(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: 'var(--gradient-primary)' }}>
-            <Plus size={14} /> Onboard Tenant
+            <Plus size={14} /> Onboard Workspace
           </button>
         </div>
       </div>
@@ -406,7 +392,7 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="glass rounded-xl h-16 skeleton" />)}</div>
       ) : filtered.length === 0 ? (
-        <div className="glass rounded-xl py-12 text-center" style={{ color: 'var(--text-muted)', fontSize: 14 }}>{search ? 'No tenants match your search' : 'No tenants configured'}</div>
+        <div className="glass rounded-xl py-12 text-center" style={{ color: 'var(--text-muted)', fontSize: 14 }}>{search ? 'No workspaces match your search' : 'No workspaces configured'}</div>
       ) : (
         <div className="space-y-3">
           {filtered.map(t => (
@@ -438,7 +424,6 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
                   <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--neon-cyan)', fontFamily: 'var(--font-mono)' }}>{t.server_count ?? 0}</div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>servers</div>
                 </div>
-                <CloudBadge cloud={t.cloud} />
                 {!isPlatformInventoryMode && (
                   <div className="flex items-center gap-1">
                     <button onClick={(event) => { event.stopPropagation(); openEdit(t) }} className="p-2 rounded-lg" style={{ background: 'transparent' }} title="Edit">
@@ -459,14 +444,14 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
         <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
           <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
             <SectionHeader
-              title={selectedTenant ? `Tenant Profile · ${selectedTenant.display_name}` : 'Tenant Profile'}
+              title={selectedTenant ? `Workspace Profile · ${selectedTenant.display_name}` : 'Workspace Profile'}
             />
 
             {!selectedTenant ? (
               <div className="rounded-xl p-5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Select a tenant</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>Select a workspace</div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
-                  Pick a tenant from the inventory above to review its SaaS profile, ownership, cloud placement, and onboarding readiness.
+                  Pick a workspace from the inventory above to review its SaaS profile, ownership, cloud placement, and onboarding readiness.
                 </div>
               </div>
             ) : (
@@ -480,18 +465,16 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <CloudBadge cloud={selectedTenant.cloud} />
                       <CredBadge status={selectedTenant.credential_status} />
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <DetailField label="Tenant Slug" value={selectedTenant.name} mono />
+                  <DetailField label="Workspace Slug" value={selectedTenant.name} mono />
                   <DetailField label="Organization" value={selectedTenant.organization_name || organizations.find((org) => org.id === activeOrganizationId)?.name} />
                   <DetailField label="Escalation Email" value={selectedTenant.escalation_email} />
                   <DetailField label="Slack Channel" value={selectedTenant.slack_channel} mono />
-                  <DetailField label="SSH User" value={selectedTenant.ssh_user} mono />
                   <DetailField label="Servers" value={String(selectedTenant.server_count ?? 0)} tone="var(--neon-cyan)" mono />
                 </div>
               </>
@@ -503,16 +486,16 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
             <div className="space-y-3">
               {[
                 {
-                  title: 'Tenant onboarding belongs here',
+                  title: 'Workspace onboarding belongs here',
                   body: 'Provision new customer environments, attach them to the right organization, and maintain customer-facing workspace metadata from this page.',
                 },
                 {
-                  title: 'Tenant internals stay scoped',
-                  body: 'Project catalogs, tenant integrations, and monitor bindings remain in organization or tenant admin surfaces so platform admins do not operate inside shared tenant context by accident.',
+                  title: 'Workspace internals stay scoped',
+                  body: 'Project catalogs, workspace integrations, and monitor bindings remain in organization or workspace admin surfaces so platform admins do not operate inside shared workspace context by accident.',
                 },
                 {
                   title: 'Profiles are view-only here',
-                  body: 'Platform admins can review tenant metadata from this inventory view, while tenant profile changes remain in the scoped admin workflows.',
+                  body: 'Platform admins can review workspace metadata from this inventory view, while workspace profile changes remain in the scoped admin workflows.',
                 },
               ].map((item) => (
                 <div key={item.title} className="rounded-xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
@@ -544,9 +527,9 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
           {detailLoading ? (
             <div className="space-y-2">{[1,2].map(i => <div key={i} className="rounded-xl h-14 skeleton" style={{ background: 'var(--bg-input)' }} />)}</div>
           ) : !selectedTenant ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select a tenant to manage its projects.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select a workspace to manage its projects.</div>
           ) : projects.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No projects configured for this tenant yet.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No projects configured for this workspace yet.</div>
           ) : (
             <div className="space-y-2">
               {projects.map(project => (
@@ -590,9 +573,9 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
           {detailLoading ? (
             <div className="space-y-2">{[1,2].map(i => <div key={i} className="rounded-xl h-14 skeleton" style={{ background: 'var(--bg-input)' }} />)}</div>
           ) : !selectedTenant ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select a tenant to manage integrations.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select a workspace to manage integrations.</div>
           ) : integrations.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No integrations configured for this tenant yet.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No integrations configured for this workspace yet.</div>
           ) : (
             <div className="space-y-2">
               {integrations.map(integration => (
@@ -725,9 +708,9 @@ export default function TenantWorkspaceManager({ mode = 'workspace', initialOrga
       {showCreateProject && selectedTenant && <ProjectCreateModal tenant={selectedTenant} onClose={() => setShowCreateProject(false)} onSaved={() => { setShowCreateProject(false); loadWorkspace(selectedTenant.id) }} />}
       {showCreateIntegration && selectedTenant && <IntegrationCreateModal tenant={selectedTenant} onClose={() => setShowCreateIntegration(false)} onSaved={() => { setShowCreateIntegration(false); loadWorkspace(selectedTenant.id) }} />}
       {deletingTenant && (
-        <ModalShell onClose={() => setDeletingTenant(null)} title="Delete Tenant" maxWidth="max-w-sm" panelClassName="space-y-4">
+        <ModalShell onClose={() => setDeletingTenant(null)} title="Delete Workspace" maxWidth="max-w-sm" panelClassName="space-y-4">
             <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Are you sure you want to delete <strong>{deletingTenant.display_name}</strong>? This will deactivate the tenant configuration.
+              Are you sure you want to delete <strong>{deletingTenant.display_name}</strong>? This will deactivate the workspace configuration.
             </p>
             <div className="flex gap-3">
               <button onClick={() => setDeletingTenant(null)} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
@@ -754,21 +737,15 @@ function TenantEditDrawer({ tenant, onClose, onSaved }) {
     try {
       await updateTenant(tenant.name, {
         display_name: form.display_name,
-        cloud: form.cloud,
         escalation_email: form.escalation_email,
         slack_channel: form.slack_channel,
-        ssh_user: form.ssh_user,
-        aws_config: form.aws_config,
-        gcp_config: form.gcp_config,
       })
-      toast('Tenant updated successfully')
+      toast('Workspace updated successfully')
       onSaved()
     } catch (err) { toast(extractErrorMessage(err) || 'Update failed', 'error') } finally { setSaving(false) }
   }
 
   const upd = (key, val) => setForm(f => ({ ...f, [key]: val }))
-  const updAws = (key, val) => setForm(f => ({ ...f, aws_config: { ...f.aws_config, [key]: val } }))
-  const updGcp = (key, val) => setForm(f => ({ ...f, gcp_config: { ...f.gcp_config, [key]: val } }))
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -781,37 +758,10 @@ function TenantEditDrawer({ tenant, onClose, onSaved }) {
         <div className="space-y-3">
           <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Display Name</label>
             <input value={form.display_name || ''} onChange={e => upd('display_name', e.target.value)} style={inputCls} /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cloud</label>
-              <select value={form.cloud || 'aws'} onChange={e => upd('cloud', e.target.value)} style={inputCls}><option value="aws">AWS</option><option value="gcp">GCP</option></select></div>
-            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>SSH User</label>
-              <input value={form.ssh_user || ''} onChange={e => upd('ssh_user', e.target.value)} style={inputCls} /></div>
-          </div>
           <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Escalation Email</label>
             <input value={form.escalation_email || ''} onChange={e => upd('escalation_email', e.target.value)} style={inputCls} /></div>
           <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slack Channel</label>
             <input value={form.slack_channel || ''} onChange={e => upd('slack_channel', e.target.value)} style={inputCls} /></div>
-
-          {form.cloud === 'aws' && (
-            <div className="space-y-2 p-3 rounded-xl" style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-accent-amber)' }}>AWS Config</span>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Account ID</label><input value={form.aws_config?.account_id || ''} onChange={e => updAws('account_id', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
-                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Role Name</label><input value={form.aws_config?.role_name || ''} onChange={e => updAws('role_name', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
-                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>External ID</label><input value={form.aws_config?.external_id || ''} onChange={e => updAws('external_id', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
-                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Region</label><input value={form.aws_config?.region || ''} onChange={e => updAws('region', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
-              </div>
-            </div>
-          )}
-          {form.cloud === 'gcp' && (
-            <div className="space-y-2 p-3 rounded-xl" style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.15)' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--neon-green)' }}>GCP Config</span>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Project ID</label><input value={form.gcp_config?.project_id || ''} onChange={e => updGcp('project_id', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
-                <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>SA Key Path</label><input value={form.gcp_config?.service_account_key || ''} onChange={e => updGcp('service_account_key', e.target.value)} style={{ ...inputCls, fontSize: 12 }} /></div>
-              </div>
-            </div>
-          )}
         </div>
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
@@ -824,35 +774,18 @@ function TenantEditDrawer({ tenant, onClose, onSaved }) {
   )
 }
 
-// ── Tenant Onboard Wizard (4 steps) ─────────────────────────────────────────
+// ── Tenant Onboard Modal ─────────────────────────────────────────────────────
 
 function TenantOnboardModal({ organizationId = null, onClose, onSaved }) {
   const { addToast } = useToasts()
-  const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [awsAuth, setAwsAuth] = useState('role_assume')
-  const [gcpAuth, setGcpAuth] = useState('sa_key')
 
-  const [form, setForm] = useState({
-    display_name: '', name: '', cloud: 'aws', escalation_email: '', slack_channel: '',
-    ssh_user: 'ubuntu',
-    aws_config: { account_id: '', role_name: '', role_arn: '', external_id: '', access_key_id: '', secret_access_key: '', credentials_file: '', region: '' },
-    gcp_config: { project_id: '', service_account_key: '' },
-  })
+  const [form, setForm] = useState({ display_name: '', name: '' })
 
   const toast = (msg, type = 'success') =>
     addToast({ title: type === 'error' ? 'Error' : 'Success', message: msg, severity: type === 'error' ? 'CRITICAL' : 'LOW' })
 
   const upd = (key, val) => setForm(f => ({ ...f, [key]: val }))
-  const updAws = (key, val) => setForm(f => ({ ...f, aws_config: { ...f.aws_config, [key]: val } }))
-  const updGcp = (key, val) => setForm(f => ({ ...f, gcp_config: { ...f.gcp_config, [key]: val } }))
-
-  const steps = ['Basic Info', 'Cloud Credentials', 'SSH & Defaults', 'Review']
-
-  const canNext = () => {
-    if (step === 0) return form.display_name && form.name
-    return true
-  }
 
   const handleCreate = async () => {
     setSaving(true)
@@ -862,7 +795,7 @@ function TenantOnboardModal({ organizationId = null, onClose, onSaved }) {
       } else {
         await createTenant({ ...form, organization_id: organizationId })
       }
-      toast(`Tenant "${form.display_name}" created successfully`)
+      toast(`Workspace "${form.display_name}" created successfully`)
       onSaved()
     } catch (err) { toast(extractErrorMessage(err) || 'Create failed', 'error') } finally { setSaving(false) }
   }
@@ -870,158 +803,27 @@ function TenantOnboardModal({ organizationId = null, onClose, onSaved }) {
   return (
     <ModalShell
       onClose={onClose}
-      title="Onboard New Tenant"
-      subtitle={`Step ${step + 1} of ${steps.length}`}
-      maxWidth="max-w-lg"
-      panelClassName="space-y-5 overflow-y-auto"
-      panelStyle={{ maxHeight: '90vh' }}
+      title="Onboard New Workspace"
+      subtitle="Additional settings can be configured via Edit after creation."
+      maxWidth="max-w-sm"
+      panelClassName="space-y-4"
     >
         <div className="flex items-center justify-end">
-          <button onClick={onClose} aria-label="Close onboard tenant modal"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+          <button onClick={onClose} aria-label="Close onboard workspace modal"><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
         </div>
 
-        {/* Progress */}
-        <div className="flex items-center gap-1">
-          {steps.map((s, i) => (
-            <div key={s} className="flex items-center gap-1" style={{ flex: 1 }}>
-              <div style={{
-                width: 22, height: 22, borderRadius: '50%', fontSize: 11, fontWeight: 700,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: i <= step ? 'var(--neon-indigo)' : 'var(--bg-input)', color: i <= step ? '#fff' : 'var(--text-muted)',
-              }}>{i < step ? '✓' : i + 1}</div>
-              <span style={{ fontSize: 10, color: i <= step ? 'var(--text-heading)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>{s}</span>
-              {i < steps.length - 1 && <div style={{ flex: 1, height: 1, background: i < step ? 'var(--neon-indigo)' : 'var(--border)', margin: '0 4px' }} />}
-            </div>
-          ))}
+        <div className="space-y-3">
+          <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Display Name *</label>
+            <input value={form.display_name} onChange={e => { upd('display_name', e.target.value); if (!form.name || form.name === slugify(form.display_name)) upd('name', slugify(e.target.value)) }} placeholder="Acme Corporation" style={inputCls} /></div>
+          <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug *</label>
+            <input value={form.name} onChange={e => upd('name', slugify(e.target.value))} placeholder="acme-corp" style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} /></div>
         </div>
 
-        {/* Step 0: Basic Info */}
-        {step === 0 && (
-          <div className="space-y-3">
-            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Display Name *</label>
-              <input value={form.display_name} onChange={e => { upd('display_name', e.target.value); if (!form.name || form.name === slugify(form.display_name)) upd('name', slugify(e.target.value)) }} placeholder="Acme Corporation" style={inputCls} /></div>
-            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug (URL-safe identifier) *</label>
-              <input value={form.name} onChange={e => upd('name', slugify(e.target.value))} placeholder="acme-corp" style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} /></div>
-            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cloud Provider *</label>
-              <select value={form.cloud} onChange={e => upd('cloud', e.target.value)} style={inputCls}><option value="aws">AWS</option><option value="gcp">GCP</option></select></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Escalation Email</label>
-                <input value={form.escalation_email} onChange={e => upd('escalation_email', e.target.value)} placeholder="sre@acme.com" style={inputCls} /></div>
-              <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slack Channel</label>
-                <input value={form.slack_channel} onChange={e => upd('slack_channel', e.target.value)} placeholder="#acme-alerts" style={inputCls} /></div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 1: Cloud Credentials */}
-        {step === 1 && form.cloud === 'aws' && (
-          <div className="space-y-3">
-            {AWS_AUTH_METHODS.map(m => (
-              <div key={m.value} className="rounded-xl p-3" style={{ background: awsAuth === m.value ? 'rgba(251,191,36,0.06)' : 'transparent', border: awsAuth === m.value ? '1px solid rgba(251,191,36,0.2)' : '1px solid var(--border)', cursor: 'pointer' }} onClick={() => setAwsAuth(m.value)}>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="radio" checked={awsAuth === m.value} onChange={() => setAwsAuth(m.value)} style={{ marginTop: 3, accentColor: 'var(--color-accent-amber)' }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{m.label}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.desc}</div>
-                  </div>
-                </label>
-                {awsAuth === m.value && m.value === 'role_assume' && (
-                  <div className="grid grid-cols-2 gap-2 mt-3 ml-6">
-                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Account ID *</label><input value={form.aws_config.account_id} onChange={e => updAws('account_id', e.target.value)} placeholder="123456789012" style={{ ...inputCls, fontSize: 12 }} /></div>
-                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Role Name *</label><input value={form.aws_config.role_name} onChange={e => updAws('role_name', e.target.value)} placeholder="AirexReadOnly" style={{ ...inputCls, fontSize: 12 }} /></div>
-                    <div className="col-span-2"><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>External ID <span style={{ opacity: 0.6 }}>(optional)</span></label><input value={form.aws_config.external_id} onChange={e => updAws('external_id', e.target.value)} placeholder="airex-trust-xyz" style={{ ...inputCls, fontSize: 12 }} /></div>
-                  </div>
-                )}
-                {awsAuth === m.value && m.value === 'role_arn' && (
-                  <div className="mt-3 ml-6"><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Role ARN *</label><input value={form.aws_config.role_arn} onChange={e => updAws('role_arn', e.target.value)} placeholder="arn:aws:iam::123456789012:role/AirexRole" style={{ ...inputCls, fontSize: 12 }} /></div>
-                )}
-                {awsAuth === m.value && m.value === 'access_keys' && (
-                  <div className="space-y-2 mt-3 ml-6">
-                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Access Key ID *</label><input value={form.aws_config.access_key_id} onChange={e => updAws('access_key_id', e.target.value)} placeholder="AKIAIOSFODNN7EXAMPLE" style={{ ...inputCls, fontSize: 12, fontFamily: 'var(--font-mono)' }} /></div>
-                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Secret Access Key *</label><input type="password" value={form.aws_config.secret_access_key} onChange={e => updAws('secret_access_key', e.target.value)} placeholder="••••••••" style={{ ...inputCls, fontSize: 12, fontFamily: 'var(--font-mono)' }} /></div>
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(251,191,36,0.08)', fontSize: 11, color: 'var(--color-accent-amber)' }}>
-                      <AlertTriangle size={13} /> Keys stored in DB. Use Role Assumption for production.
-                    </div>
-                  </div>
-                )}
-                {awsAuth === m.value && m.value === 'creds_file' && (
-                  <div className="mt-3 ml-6"><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>File Path on Server *</label><input value={form.aws_config.credentials_file} onChange={e => updAws('credentials_file', e.target.value)} placeholder="/etc/airex/aws-creds.json" style={{ ...inputCls, fontSize: 12, fontFamily: 'var(--font-mono)' }} /></div>
-                )}
-                {awsAuth === m.value && m.value === 'instance' && (
-                  <div className="mt-3 ml-6 px-3 py-2 rounded-lg" style={{ background: 'rgba(52,211,153,0.08)', fontSize: 11, color: 'var(--neon-green)' }}>
-                    <CheckCircle size={13} style={{ display: 'inline', marginRight: 4 }} /> No credentials needed — AIREX will use the EC2 instance role.
-                  </div>
-                )}
-              </div>
-            ))}
-            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>AWS Region</label>
-              <input value={form.aws_config.region} onChange={e => updAws('region', e.target.value)} placeholder="Leave empty for auto-discover" style={inputCls} /></div>
-          </div>
-        )}
-
-        {step === 1 && form.cloud === 'gcp' && (
-          <div className="space-y-3">
-            {GCP_AUTH_METHODS.map(m => (
-              <div key={m.value} className="rounded-xl p-3" style={{ background: gcpAuth === m.value ? 'rgba(52,211,153,0.06)' : 'transparent', border: gcpAuth === m.value ? '1px solid rgba(52,211,153,0.2)' : '1px solid var(--border)', cursor: 'pointer' }} onClick={() => setGcpAuth(m.value)}>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="radio" checked={gcpAuth === m.value} onChange={() => setGcpAuth(m.value)} style={{ marginTop: 3, accentColor: 'var(--neon-green)' }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{m.label}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.desc}</div>
-                  </div>
-                </label>
-                {gcpAuth === m.value && m.value === 'sa_key' && (
-                  <div className="grid grid-cols-2 gap-2 mt-3 ml-6">
-                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Project ID *</label><input value={form.gcp_config.project_id} onChange={e => updGcp('project_id', e.target.value)} placeholder="my-project-123" style={{ ...inputCls, fontSize: 12 }} /></div>
-                    <div><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Key File Path *</label><input value={form.gcp_config.service_account_key} onChange={e => updGcp('service_account_key', e.target.value)} placeholder="/etc/airex/sa.json" style={{ ...inputCls, fontSize: 12, fontFamily: 'var(--font-mono)' }} /></div>
-                  </div>
-                )}
-                {gcpAuth === m.value && (m.value === 'adc' || m.value === 'auto') && (
-                  <div className="mt-3 ml-6"><label style={{ fontSize: 10, color: 'var(--text-muted)' }}>Project ID *</label><input value={form.gcp_config.project_id} onChange={e => updGcp('project_id', e.target.value)} placeholder="my-project-123" style={{ ...inputCls, fontSize: 12 }} /></div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Step 2: SSH */}
-        {step === 2 && (
-          <div className="space-y-3">
-            <div><label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Default SSH User</label>
-              <input value={form.ssh_user} onChange={e => upd('ssh_user', e.target.value)} placeholder="ubuntu" style={inputCls} /></div>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Per-server SSH overrides can be configured after tenant creation by editing the server list.</p>
-          </div>
-        )}
-
-        {/* Step 3: Review */}
-        {step === 3 && (
-          <div className="space-y-3">
-            <div className="glass rounded-xl p-4 space-y-2">
-              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Name</span><span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-heading)' }}>{form.display_name}</span></div>
-              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Slug</span><span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-heading)' }}>{form.name}</span></div>
-              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cloud</span><CloudBadge cloud={form.cloud} /></div>
-              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Auth Method</span><span style={{ fontSize: 12, color: 'var(--text-heading)' }}>{form.cloud === 'aws' ? (AWS_AUTH_METHODS.find(m => m.value === awsAuth)?.label || awsAuth) : (GCP_AUTH_METHODS.find(m => m.value === gcpAuth)?.label || gcpAuth)}</span></div>
-              {form.escalation_email && <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Email</span><span style={{ fontSize: 12, color: 'var(--text-heading)' }}>{form.escalation_email}</span></div>}
-              {form.slack_channel && <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Slack</span><span style={{ fontSize: 12, color: 'var(--text-heading)' }}>{form.slack_channel}</span></div>}
-              <div className="flex items-center justify-between"><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>SSH User</span><span style={{ fontSize: 12, color: 'var(--text-heading)' }}>{form.ssh_user}</span></div>
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
         <div className="flex gap-3 pt-2">
-          {step > 0 ? (
-            <button onClick={() => setStep(s => s - 1)} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Back</button>
-          ) : (
-            <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
-          )}
-          {step < steps.length - 1 ? (
-            <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>Next</button>
-          ) : (
-            <button onClick={handleCreate} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
-              {saving ? 'Creating…' : 'Create Tenant'}
-            </button>
-          )}
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
+          <button onClick={handleCreate} disabled={saving || !form.display_name || !form.name} className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: 'var(--gradient-primary)' }}>
+            {saving ? 'Creating…' : 'Create Workspace'}
+          </button>
         </div>
     </ModalShell>
   )
@@ -1122,10 +924,12 @@ function ProjectCreateModal({ tenant, onClose, onSaved }) {
 function IntegrationCreateModal({ tenant, onClose, onSaved }) {
   const { addToast } = useToasts()
   const [types, setTypes] = useState([])
+  const [cloudAccounts, setCloudAccounts] = useState([])
   const [loadingTypes, setLoadingTypes] = useState(true)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     integration_type_key: 'site24x7',
+    cloud_account_binding_id: '',
     name: '',
     slug: '',
     secret_ref: '',
@@ -1139,20 +943,43 @@ function IntegrationCreateModal({ tenant, onClose, onSaved }) {
     fetchIntegrationTypes()
       .then(data => {
         const nextTypes = Array.isArray(data) ? data : []
-        setTypes(nextTypes)
-        if (nextTypes[0]?.key && !form.integration_type_key) {
-          setForm(current => ({ ...current, integration_type_key: nextTypes[0].key }))
+        const sortedTypes = nextTypes
+          .slice()
+          .sort((left, right) => {
+            const leftActive = ACTIVE_INTEGRATION_TYPE_KEYS.has(left.key)
+            const rightActive = ACTIVE_INTEGRATION_TYPE_KEYS.has(right.key)
+            if (leftActive !== rightActive) return leftActive ? -1 : 1
+            return left.display_name.localeCompare(right.display_name)
+          })
+        setTypes(sortedTypes)
+        if (!ACTIVE_INTEGRATION_TYPE_KEYS.has(form.integration_type_key)) {
+          const firstActiveType = sortedTypes.find((type) => ACTIVE_INTEGRATION_TYPE_KEYS.has(type.key))
+          setForm(current => ({
+            ...current,
+            integration_type_key: firstActiveType?.key || current.integration_type_key,
+          }))
         }
       })
       .catch(() => toast('Failed to load integration types', 'error'))
       .finally(() => setLoadingTypes(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    fetchCloudAccounts(null, tenant.id)
+      .then((data) => setCloudAccounts(Array.isArray(data) ? data : []))
+      .catch(() => toast('Failed to load cloud accounts', 'error'))
+  }, [tenant.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSave = async () => {
+    if (cloudAccounts.length > 0 && !form.cloud_account_binding_id) {
+      toast('Choose a cloud account for this integration', 'error')
+      return
+    }
     setSaving(true)
     try {
       await createIntegration(tenant.id, {
         ...form,
+        cloud_account_binding_id: form.cloud_account_binding_id || null,
         slug: slugify(form.slug || form.name),
         config_json: {},
       })
@@ -1180,14 +1007,43 @@ function IntegrationCreateModal({ tenant, onClose, onSaved }) {
             style={inputCls}
           >
             {types.map(type => (
-              <option key={type.id} value={type.key}>{type.display_name}</option>
+              <option
+                key={type.id}
+                value={type.key}
+                disabled={!ACTIVE_INTEGRATION_TYPE_KEYS.has(type.key)}
+              >
+                {ACTIVE_INTEGRATION_TYPE_KEYS.has(type.key)
+                  ? type.display_name
+                  : `${type.display_name} (Coming Soon)`}
+              </option>
             ))}
           </select>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+            Only Site24x7 is available for tenant setup right now. Other providers are shown as coming soon.
+          </p>
         </div>
         <div>
           <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Name</label>
           <input aria-label="Name" value={form.name} onChange={e => setForm(current => ({ ...current, name: e.target.value, slug: current.slug || slugify(e.target.value) }))} style={inputCls} />
         </div>
+        {cloudAccounts.length > 0 && (
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cloud Account</label>
+            <select
+              aria-label="Cloud Account"
+              value={form.cloud_account_binding_id}
+              onChange={e => setForm(current => ({ ...current, cloud_account_binding_id: e.target.value }))}
+              style={inputCls}
+            >
+              <option value="">Select cloud account</option>
+              {cloudAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.display_name || account.external_account_id || account.id}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Slug</label>
           <input aria-label="Slug" value={form.slug} onChange={e => setForm(current => ({ ...current, slug: e.target.value }))} style={{ ...inputCls, fontFamily: 'var(--font-mono)' }} />

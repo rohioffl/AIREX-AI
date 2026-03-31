@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Mail, Plus, Shield, Trash2, UserCog } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Mail, RefreshCw, Shield, Trash2, UserCog } from 'lucide-react'
 
 import { useToasts } from '../../context/ToastContext'
+import { useAuth } from '../../context/AuthContext'
 import {
-  addOrgMember,
   fetchOrgMembers,
-  fetchUsers,
   removeOrgMember,
+  resendOrgInvitation,
   updateOrgMember,
 } from '../../services/api'
 import { extractErrorMessage } from '../../utils/errorHandler'
@@ -59,21 +59,18 @@ function memberStatusMeta(member) {
 }
 
 export default function AccessMatrixView({ organization, tenants = [], onInspectUser }) {
+  const auth = useAuth()
   const { addToast } = useToasts()
   const [members, setMembers] = useState([])
-  const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(false)
-  const [showAdd, setShowAdd] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
-  const [addUserId, setAddUserId] = useState('')
-  const [addRole, setAddRole] = useState('operator')
-  const [saving, setSaving] = useState(false)
 
   const toast = useCallback((message, severity = 'LOW', title = 'Success') => {
     addToast({ title, message, severity })
   }, [addToast])
 
   const organizationId = organization?.id || ''
+  const currentUserId = auth?.user?.userId || auth?.user?.user_id || auth?.user?.id || null
 
   const loadMembers = useCallback(async () => {
     if (!organizationId) {
@@ -82,14 +79,11 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
     }
     setLoading(true)
     try {
-      const [membersData, usersData] = await Promise.all([
-        fetchOrgMembers(organizationId),
-        fetchUsers(),
-      ])
+      const membersData = await fetchOrgMembers(organizationId)
       const nextMembers = Array.isArray(membersData) ? membersData : []
       setMembers(nextMembers)
-      setUsers(Array.isArray(usersData) ? usersData : (usersData?.items || []))
     } catch (err) {
+      setMembers([])
       toast(extractErrorMessage(err) || 'Failed to load organization access', 'CRITICAL', 'Error')
     } finally {
       setLoading(false)
@@ -100,37 +94,9 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
     loadMembers()
   }, [loadMembers])
 
-  const userMap = useMemo(
-    () => new Map(users.map((user) => [String(user.id), user])),
-    [users]
-  )
-
-  const nonMembers = useMemo(
-    () => users.filter((user) => !members.some((member) => String(member.user_id) === String(user.id))),
-    [members, users]
-  )
-
   const resolveUserLabel = useCallback((member) => {
-    const user = userMap.get(String(member?.user_id))
-    return member?.display_name || user?.display_name || member?.email || user?.email || `${String(member?.user_id).slice(0, 8)}…`
-  }, [userMap])
-
-  async function handleAdd() {
-    if (!organizationId || !addUserId) return
-    setSaving(true)
-    try {
-      const created = await addOrgMember(organizationId, { user_id: addUserId, role: addRole })
-      setMembers((current) => [...current, created])
-      setAddUserId('')
-      setAddRole('operator')
-      setShowAdd(false)
-      toast('Organization member added')
-    } catch (err) {
-      toast(extractErrorMessage(err) || 'Failed to add organization member', 'CRITICAL', 'Error')
-    } finally {
-      setSaving(false)
-    }
-  }
+    return member?.display_name || member?.email || `${String(member?.user_id).slice(0, 8)}…`
+  }, [])
 
   async function handleRoleChange(userId, role) {
     try {
@@ -156,6 +122,19 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
     }
   }
 
+  async function handleResendInvite(member) {
+    try {
+      const data = await resendOrgInvitation(organizationId, member.user_id)
+      const message = data.delivery_mode === 'accept_invitation'
+        ? `Accept invitation email resent to ${data.email}`
+        : `Invitation resent to ${data.email}`
+      toast(message)
+      loadMembers()
+    } catch (err) {
+      toast(extractErrorMessage(err) || 'Failed to resend invitation', 'CRITICAL', 'Error')
+    }
+  }
+
   return (
     <div className="glass rounded-xl p-5 space-y-4" style={{ border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -164,17 +143,9 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
             Organization Members
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
-            Review organization-level roles for members in {organization?.name || 'this organization'} and open tenant access details only when needed.
+            Review organization-level roles for members in {organization?.name || 'this organization'}. New access is invite-only.
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd((current) => !current)}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: 'rgba(99,102,241,0.12)', color: 'var(--neon-indigo)', border: '1px solid rgba(99,102,241,0.24)' }}
-        >
-          <Plus size={14} />
-          Add Org Member
-        </button>
         <button
           onClick={() => setShowInvite(true)}
           className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold"
@@ -184,36 +155,6 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
           Invite Org Member
         </button>
       </div>
-
-      {showAdd && (
-        <div className="grid grid-cols-1 md:grid-cols-[1.5fr_0.9fr_auto] gap-3 items-end rounded-xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-          <div>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>User</label>
-            <select aria-label="Organization member user" value={addUserId} onChange={(e) => setAddUserId(e.target.value)} style={inputCls}>
-              <option value="">Select a user…</option>
-              {nonMembers.map((user) => (
-                <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Role</label>
-            <select aria-label="Organization member role" value={addRole} onChange={(e) => setAddRole(e.target.value)} style={inputCls}>
-              {ORG_ROLE_OPTIONS.map((role) => (
-                <option key={role.value} value={role.value}>{role.label}</option>
-              ))}
-            </select>
-          </div>
-          <button
-            onClick={handleAdd}
-            disabled={!addUserId || saving}
-            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-            style={{ background: 'var(--gradient-primary)', color: '#fff' }}
-          >
-            {saving ? 'Adding…' : 'Add'}
-          </button>
-        </div>
-      )}
 
       {showInvite && (
         <InviteOrgMemberModal
@@ -246,6 +187,7 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
             <tbody>
               {members.map((member) => {
                 const statusMeta = memberStatusMeta(member)
+                const isCurrentUser = String(member.user_id) === String(currentUserId)
                 return (
                   <tr key={member.id || member.user_id} style={{ background: 'var(--bg-input)' }}>
                     <td style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
@@ -256,7 +198,7 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)' }}>{resolveUserLabel(member)}</div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                            {member.email || userMap.get(String(member.user_id))?.email || String(member.user_id)}
+                            {member.email || String(member.user_id)}
                           </div>
                           <div style={{ marginTop: 8 }}>
                             <span
@@ -278,6 +220,27 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
                             >
                               {statusMeta.label}
                             </span>
+                            {isCurrentUser && (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  marginLeft: 8,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  padding: '3px 8px',
+                                  borderRadius: 999,
+                                  color: 'var(--neon-cyan)',
+                                  background: 'rgba(34,211,238,0.08)',
+                                  border: '1px solid rgba(34,211,238,0.22)',
+                                  letterSpacing: '0.03em',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                You
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -289,6 +252,7 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
                           aria-label={`Organization role for ${resolveUserLabel(member)}`}
                           value={member.role}
                           onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
+                          disabled={isCurrentUser}
                           style={{ ...inputCls, padding: '6px 10px' }}
                         >
                           {ORG_ROLE_OPTIONS.map((role) => (
@@ -300,7 +264,7 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
                     <td style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => onInspectUser?.(userMap.get(String(member.user_id)) || {
+                          onClick={() => onInspectUser?.({
                             id: member.user_id,
                             display_name: resolveUserLabel(member),
                             email: member.email,
@@ -313,10 +277,29 @@ export default function AccessMatrixView({ organization, tenants = [], onInspect
                           <UserCog size={14} />
                           View
                         </button>
+                        {member.invitation_status === 'pending' && (
+                          <button
+                            onClick={() => handleResendInvite(member)}
+                            title="Resend invitation email"
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold"
+                            style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.22)', color: 'var(--neon-cyan)' }}
+                          >
+                            <RefreshCw size={14} />
+                            Resend
+                          </button>
+                        )}
                         <button
                           onClick={() => handleRemove(member.user_id)}
                           title="Remove organization member"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 6 }}
+                          disabled={isCurrentUser}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: isCurrentUser ? 'not-allowed' : 'pointer',
+                            color: isCurrentUser ? 'var(--text-muted)' : '#ef4444',
+                            padding: 6,
+                            opacity: isCurrentUser ? 0.45 : 1,
+                          }}
                         >
                           <Trash2 size={15} />
                         </button>

@@ -39,7 +39,7 @@ export default function InviteOrgMemberModal({ organization, tenants = [], onClo
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!email.trim() || !hasTenants) return
+    if (!email.trim()) return
     setSaving(true)
     try {
       const data = await inviteOrgMember(organization.id, {
@@ -49,8 +49,10 @@ export default function InviteOrgMemberModal({ organization, tenants = [], onClo
       })
       setResult(data)
       onInvited?.(data)
-      if (data.status === 'access_granted') {
-        addToast({ title: 'Access granted', message: `${data.email} was added to the organization`, severity: 'LOW' })
+      if (data.status === 'already_has_access') {
+        addToast({ title: 'Access already available', message: `${data.email} already belongs to this organization`, severity: 'LOW' })
+      } else if (data.delivery_mode === 'accept_invitation') {
+        addToast({ title: 'Invitation sent', message: `Accept invitation email sent to ${data.email}`, severity: 'LOW' })
       } else {
         addToast({ title: 'Invitation sent', message: `Org invite sent to ${data.email}`, severity: 'LOW' })
       }
@@ -131,31 +133,19 @@ export default function InviteOrgMemberModal({ organization, tenants = [], onClo
               </select>
             </div>
 
-            {!hasTenants ? (
-              <div
-                className="rounded-xl p-3"
-                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.24)' }}
-              >
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#f87171' }}>
-                  Create a workspace first
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                  This organization does not have any workspaces yet. Add one before inviting org members.
-                </div>
+            <div
+              className="rounded-xl p-3"
+              style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.24)' }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--neon-cyan)' }}>
+                {hasTenants ? 'Org access covers all workspaces' : 'Org access is ready before workspace setup'}
               </div>
-            ) : (
-              <div
-                className="rounded-xl p-3"
-                style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.24)' }}
-              >
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--neon-cyan)' }}>
-                  Org access covers all workspaces
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                  Members invited here inherit access across the organization and can switch between available workspaces after they sign in.
-                </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                {hasTenants
+                  ? 'Members invited here inherit access across the organization and can switch between available workspaces after they sign in.'
+                  : 'You can invite org members before the first workspace is created. They will see the organization immediately and gain workspace access as new workspaces are added.'}
               </div>
-            )}
+            </div>
 
             <div className="flex gap-3 justify-end pt-1">
               <button
@@ -168,7 +158,7 @@ export default function InviteOrgMemberModal({ organization, tenants = [], onClo
               </button>
               <button
                 type="submit"
-                disabled={saving || !email.trim() || !hasTenants}
+                disabled={saving || !email.trim()}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: 'var(--gradient-primary)', color: '#fff' }}
               >
@@ -181,18 +171,24 @@ export default function InviteOrgMemberModal({ organization, tenants = [], onClo
           <div className="space-y-4">
             <div className="rounded-xl p-4 space-y-2" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.24)' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#22c55e' }}>
-                {result.status === 'access_granted' ? 'Access granted' : 'Invitation sent'}
+                {result.status === 'already_has_access' ? 'Access already available' : 'Invitation sent'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {result.status === 'access_granted'
+                {result.status === 'already_has_access'
                   ? (
                     <>
-                      <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong> already had an account and has now been added to this organization.
+                      <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong> already belongs to this organization.
                     </>
                   )
                   : (
                     <>
-                      An organization invite has been sent to <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong>. It expires in 7 days.
+                      {result.delivery_mode === 'accept_invitation'
+                        ? 'An accept invitation email has been sent to '
+                        : 'An organization invite has been sent to '}
+                      <strong style={{ color: 'var(--text-primary)' }}>{result.email}</strong>.{' '}
+                      {result.home_tenant_id
+                        ? 'It expires in 7 days.'
+                        : 'They can accept it now, and workspace access will finish as soon as the first workspace is created.'}
                     </>
                   )}
               </div>

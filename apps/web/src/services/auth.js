@@ -5,8 +5,6 @@
 import api from './api'
 import {
   clearTokens,
-  getToken as readAccessToken,
-  hasValidAccessToken,
   setTokens,
 } from './tokenStorage'
 
@@ -84,3 +82,20 @@ export async function acceptInvitationWithGoogle(invitationToken, idToken) {
   return res.data
 }
 
+export async function fetchInvitationInfo(token) {
+  const res = await api.get('/auth/invitation-info', {
+    params: { token },
+  })
+  return res.data
+}
+
+export async function acceptInvitation(invitationToken) {
+  const res = await api.post('/auth/accept-invitation', {
+    invitation_token: invitationToken,
+  })
+  const { access_token, refresh_token, expires_in } = res.data
+
+  setTokens({ accessToken: access_token, refreshToken: refresh_token, expiresIn: expires_in })
+
+  return res.data
+}

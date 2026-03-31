@@ -44,13 +44,13 @@ describe('AnalyticsPage', () => {
     render(<AnalyticsPage />)
 
     expect(await screen.findByText('Analytics Dashboard')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /all org tenants/i }))
+    await user.click(screen.getByRole('button', { name: /all org workspaces/i }))
 
     await waitFor(() => {
       expect(mockApi.fetchOrganizationAnalytics).toHaveBeenCalledWith('org-1')
     })
-    expect(await screen.findByText('Total Tenants')).toBeInTheDocument()
-    expect(screen.getByText('Active Tenants')).toBeInTheDocument()
+    expect(await screen.findByText('Total Workspaces')).toBeInTheDocument()
+    expect(screen.getByText('Active Workspaces')).toBeInTheDocument()
     expect(screen.getByText('Org Members')).toBeInTheDocument()
   })
 })

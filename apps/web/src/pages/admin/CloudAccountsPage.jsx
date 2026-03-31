@@ -47,6 +47,8 @@ const NATIVE_INTEGRATION_KEYS = {
   gcp: new Set(['gcp_monitoring']),
 }
 
+const ACTIVE_INTEGRATION_TYPE_KEYS = new Set(['site24x7'])
+
 function getAuthTypeLabel(binding) {
   if (binding.provider === 'aws') {
     return binding.has_static_credentials ? 'Static Keys' : 'IAM Role'
@@ -66,7 +68,12 @@ function getConnectionState(binding) {
 
 function getMonitoringState(binding, integrations) {
   const providerNativeKeys = NATIVE_INTEGRATION_KEYS[binding.provider] || new Set()
-  const activeIntegrations = integrations.filter((integration) => integration.enabled !== false && integration.status !== 'disabled')
+  const activeIntegrations = integrations.filter(
+    (integration) =>
+      integration.enabled !== false &&
+      integration.status !== 'disabled' &&
+      integration.cloud_account_binding_id === binding.id
+  )
   const nativeConnected = activeIntegrations.some((integration) => providerNativeKeys.has(integration.integration_type_key))
   const optionalConnected = activeIntegrations.some((integration) => !providerNativeKeys.has(integration.integration_type_key))
 
@@ -149,7 +156,7 @@ function SummaryCard({ label, value, hint, tone = 'muted', action = null }) {
   )
 }
 
-function ActionRow({ title, subtitle, statusLabel, statusTone, actionLabel, onAction }) {
+function ActionRow({ title, subtitle, statusLabel, statusTone, actionLabel, onAction, disabled = false }) {
   return (
     <div
       style={{
@@ -175,16 +182,18 @@ function ActionRow({ title, subtitle, statusLabel, statusTone, actionLabel, onAc
       <button
         type="button"
         onClick={onAction}
+        disabled={disabled}
         style={{
           flexShrink: 0,
           padding: '8px 12px',
           borderRadius: 8,
-          border: '1px solid rgba(34,211,238,0.28)',
-          background: 'rgba(34,211,238,0.08)',
-          color: 'var(--neon-cyan)',
+          border: disabled ? '1px solid var(--border)' : '1px solid rgba(34,211,238,0.28)',
+          background: disabled ? 'var(--bg-elevated)' : 'rgba(34,211,238,0.08)',
+          color: disabled ? 'var(--text-muted)' : 'var(--neon-cyan)',
           fontSize: 12,
           fontWeight: 700,
-          cursor: 'pointer',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.8 : 1,
         }}
       >
         {actionLabel}
@@ -1016,7 +1025,7 @@ function AddBindingModal({ onClose, onCreated, onLaunchIntegration, tenantId = n
                     key={integration.key}
                     type="button"
                     onClick={() => {
-                      onLaunchIntegration?.(integration.key)
+                      onLaunchIntegration?.(integration.key, createdBinding.id)
                       onClose()
                     }}
                     style={{
@@ -1364,7 +1373,7 @@ function BindingCard({ binding, integrations, onDelete, onRotate, onSetDefault, 
           {/* Action row */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button
-              onClick={() => onLaunchIntegration?.(binding.provider === 'aws' ? 'cloudwatch' : 'gcp_monitoring')}
+              onClick={() => onLaunchIntegration?.(binding.provider === 'aws' ? 'cloudwatch' : 'gcp_monitoring', binding.id)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 padding: '5px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
@@ -1523,6 +1532,18 @@ export default function CloudAccountsPage({
     loadIntegrations()
   }, [loadIntegrations])
 
+  const hasActiveIntegration = useCallback(
+    (integrationTypeKey) => integrations.some(
+      (integration) => integration.enabled !== false && integration.integration_type_key === integrationTypeKey
+    ),
+    [integrations]
+  )
+
+  const isAvailableIntegration = useCallback(
+    (integrationTypeKey) => ACTIVE_INTEGRATION_TYPE_KEYS.has(integrationTypeKey),
+    []
+  )
+
   function handleCreated(binding) {
     setBindings((prev) => [binding, ...prev])
   }
@@ -1574,6 +1595,18 @@ export default function CloudAccountsPage({
     return true
   })
 
+  const launchMonitoring = useCallback((key, bindingId = null) => {
+    if (onLaunchIntegration) {
+      onLaunchIntegration(key, bindingId)
+      return
+    }
+    const params = new URLSearchParams()
+    if (key) params.set('integration', key)
+    if (bindingId) params.set('binding', bindingId)
+    const suffix = params.toString()
+    navigate(`/admin/integrations${suffix ? `?${suffix}` : ''}`)
+  }, [navigate, onLaunchIntegration])
+
   if (!tenantId) {
     return (
       <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--text-muted)' }}>
@@ -1584,13 +1617,6 @@ export default function CloudAccountsPage({
   }
 
   const tenantLabel = propTenantId ? null : (activeTenant?.display_name || activeTenant?.name || activeTenant?.slug || activeTenant?.id)
-  const launchMonitoring = useCallback((key) => {
-    if (onLaunchIntegration) {
-      onLaunchIntegration(key)
-      return
-    }
-    navigate('/admin/integrations')
-  }, [navigate, onLaunchIntegration])
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -1740,56 +1766,62 @@ export default function CloudAccountsPage({
             <ActionRow
               title="CloudWatch"
               subtitle="Connect native AWS alarms for onboarded AWS accounts."
-              statusLabel={integrationsLoading ? 'Checking' : integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'cloudwatch') ? 'Connected' : 'Not Connected'}
-              statusTone={integrationsLoading ? 'muted' : integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'cloudwatch') ? 'healthy' : 'attention'}
-              actionLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'cloudwatch') ? 'Manage' : 'Connect'}
+              statusLabel={integrationsLoading ? 'Checking' : hasActiveIntegration('cloudwatch') ? 'Configured' : 'Coming Soon'}
+              statusTone={integrationsLoading ? 'muted' : hasActiveIntegration('cloudwatch') ? 'healthy' : 'muted'}
+              actionLabel={hasActiveIntegration('cloudwatch') ? 'Manage' : 'Unavailable'}
               onAction={() => launchMonitoring('cloudwatch')}
+              disabled={!hasActiveIntegration('cloudwatch') && !isAvailableIntegration('cloudwatch')}
             />
             <ActionRow
               title="GCP Monitoring"
               subtitle="Connect Google Cloud Monitoring for onboarded GCP projects."
-              statusLabel={integrationsLoading ? 'Checking' : integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'gcp_monitoring') ? 'Connected' : 'Not Connected'}
-              statusTone={integrationsLoading ? 'muted' : integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'gcp_monitoring') ? 'healthy' : 'attention'}
-              actionLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'gcp_monitoring') ? 'Manage' : 'Connect'}
+              statusLabel={integrationsLoading ? 'Checking' : hasActiveIntegration('gcp_monitoring') ? 'Configured' : 'Coming Soon'}
+              statusTone={integrationsLoading ? 'muted' : hasActiveIntegration('gcp_monitoring') ? 'healthy' : 'muted'}
+              actionLabel={hasActiveIntegration('gcp_monitoring') ? 'Manage' : 'Unavailable'}
               onAction={() => launchMonitoring('gcp_monitoring')}
+              disabled={!hasActiveIntegration('gcp_monitoring') && !isAvailableIntegration('gcp_monitoring')}
             />
           </div>
 
           <div style={{ border: '1px solid var(--border)', borderRadius: 14, background: 'var(--bg-card)', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Tenant-Level Integrations
+              Workspace-Level Integrations
             </div>
             <ActionRow
               title="Datadog"
               subtitle="Route Datadog monitors and incidents into AIREX workflows."
-              statusLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'datadog') ? 'Connected' : 'Not Connected'}
-              statusTone={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'datadog') ? 'healthy' : 'attention'}
-              actionLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'datadog') ? 'Manage' : 'Connect'}
+              statusLabel={hasActiveIntegration('datadog') ? 'Configured' : 'Coming Soon'}
+              statusTone={hasActiveIntegration('datadog') ? 'healthy' : 'muted'}
+              actionLabel={hasActiveIntegration('datadog') ? 'Manage' : 'Unavailable'}
               onAction={() => launchMonitoring('datadog')}
+              disabled={!hasActiveIntegration('datadog') && !isAvailableIntegration('datadog')}
             />
             <ActionRow
               title="Grafana"
-              subtitle="Connect Grafana alerting for tenant-wide dashboards and services."
-              statusLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'grafana') ? 'Connected' : 'Not Connected'}
-              statusTone={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'grafana') ? 'healthy' : 'attention'}
-              actionLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'grafana') ? 'Manage' : 'Connect'}
+              subtitle="Connect Grafana alerting for workspace-wide dashboards and services."
+              statusLabel={hasActiveIntegration('grafana') ? 'Configured' : 'Coming Soon'}
+              statusTone={hasActiveIntegration('grafana') ? 'healthy' : 'muted'}
+              actionLabel={hasActiveIntegration('grafana') ? 'Manage' : 'Unavailable'}
               onAction={() => launchMonitoring('grafana')}
+              disabled={!hasActiveIntegration('grafana') && !isAvailableIntegration('grafana')}
             />
             <ActionRow
               title="Prometheus"
               subtitle="Use Prometheus or Alertmanager webhooks as a tenant-level alert source."
-              statusLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'prometheus') ? 'Connected' : 'Not Connected'}
-              statusTone={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'prometheus') ? 'healthy' : 'attention'}
-              actionLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'prometheus') ? 'Manage' : 'Connect'}
+              statusLabel={hasActiveIntegration('prometheus') ? 'Configured' : 'Coming Soon'}
+              statusTone={hasActiveIntegration('prometheus') ? 'healthy' : 'muted'}
+              actionLabel={hasActiveIntegration('prometheus') ? 'Manage' : 'Unavailable'}
               onAction={() => launchMonitoring('prometheus')}
+              disabled={!hasActiveIntegration('prometheus') && !isAvailableIntegration('prometheus')}
             />
             <ActionRow
               title="Custom Webhook"
               subtitle="Accept alerts from sources that can push webhooks into AIREX."
-              statusLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'custom_webhook') ? 'Connected' : 'Not Connected'}
-              statusTone={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'custom_webhook') ? 'healthy' : 'attention'}
-              actionLabel={integrations.some((integration) => integration.enabled !== false && integration.integration_type_key === 'custom_webhook') ? 'Manage' : 'Connect'}
+              statusLabel={hasActiveIntegration('custom_webhook') ? 'Configured' : 'Coming Soon'}
+              statusTone={hasActiveIntegration('custom_webhook') ? 'healthy' : 'muted'}
+              actionLabel={hasActiveIntegration('custom_webhook') ? 'Manage' : 'Unavailable'}
               onAction={() => launchMonitoring('custom_webhook')}
+              disabled={!hasActiveIntegration('custom_webhook') && !isAvailableIntegration('custom_webhook')}
             />
           </div>
 

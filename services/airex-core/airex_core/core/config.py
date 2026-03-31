@@ -4,7 +4,12 @@ This module exposes a singleton ``settings`` object used across the backend.
 Keep setting names stable because they are imported in multiple modules.
 """
 
-from pydantic_settings import BaseSettings
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_REPO_ROOT_ENV = Path(__file__).resolve().parents[4] / ".env"
 
 
 class Settings(BaseSettings):
@@ -30,6 +35,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "CHANGE_THIS_IN_PRODUCTION_TO_A_SECURE_RANDOM_STRING"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 11520
     ALGORITHM: str = "HS256"
+    AUTH_RATE_LIMIT_REQUESTS: int = 20
+    AUTH_RATE_LIMIT_WINDOW_SECONDS: int = 60
+    APPROVAL_RATE_LIMIT_REQUESTS: int = 10
+    APPROVAL_RATE_LIMIT_WINDOW_SECONDS: int = 60
+    WEBHOOK_RATE_LIMIT_REQUESTS: int = 30
+    WEBHOOK_RATE_LIMIT_WINDOW_SECONDS: int = 60
 
     # AI / LLM (LiteLLM + Vertex AI Gemini)
     LLM_PROVIDER: str = "vertex_ai"
@@ -152,7 +163,11 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: str = ""
     EMAIL_FROM: str = ""
 
-    model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
+    model_config = SettingsConfigDict(
+        env_file=(str(_REPO_ROOT_ENV), ".env"),
+        case_sensitive=True,
+        extra="ignore",
+    )
 
 
 settings = Settings()
