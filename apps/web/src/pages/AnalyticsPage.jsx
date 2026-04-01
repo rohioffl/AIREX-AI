@@ -7,11 +7,13 @@ import {
 import { fetchAnalyticsTrends, fetchOrganizationAnalytics } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { formatDuration } from '../utils/formatters'
+import { useWorkspacePath } from '../hooks/useWorkspacePath'
 
 export default function AnalyticsPage() {
   const { organizations, activeOrganization } = useAuth()
+  const { isOrgScoped } = useWorkspacePath()
   const [days, setDays] = useState(30)
-  const [scope, setScope] = useState('tenant')
+  const [scope, setScope] = useState(() => isOrgScoped ? 'org' : 'tenant')
   const [trends, setTrends] = useState(null)
   const [orgStats, setOrgStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -70,7 +72,7 @@ export default function AnalyticsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {hasOrgAccess && (
+          {hasOrgAccess && !isOrgScoped && (
             <div className="flex rounded-lg overflow-hidden border border-border" style={{ fontSize: 12 }}>
               <button
                 onClick={() => setScope('tenant')}

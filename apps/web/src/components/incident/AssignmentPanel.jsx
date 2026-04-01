@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { User, UserCheck, X } from 'lucide-react'
 import { assignIncident, unassignIncident, fetchUsers } from '../../services/api'
 
-export default function AssignmentPanel({ incident }) {
+export default function AssignmentPanel({ incident, onRefresh }) {
   const [users, setUsers] = useState([])
   const [assigning, setAssigning] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
@@ -28,7 +28,7 @@ export default function AssignmentPanel({ incident }) {
     try {
       await assignIncident(incident.id, userId)
       setShowDropdown(false)
-      window.location.reload() // Refresh to show updated assignment
+      onRefresh?.()
     } catch (err) {
       console.error('Failed to assign incident:', err)
       alert('Failed to assign incident: ' + (err.message || 'Unknown error'))
@@ -41,7 +41,7 @@ export default function AssignmentPanel({ incident }) {
     setAssigning(true)
     try {
       await unassignIncident(incident.id)
-      window.location.reload() // Refresh to show updated assignment
+      onRefresh?.()
     } catch (err) {
       console.error('Failed to unassign incident:', err)
       alert('Failed to unassign incident: ' + (err.message || 'Unknown error'))

@@ -34,7 +34,7 @@ export default function LoginPage() {
     if (acceptInvitationToken) {
       return `/accept-invitation?token=${encodeURIComponent(acceptInvitationToken)}`
     }
-    return '/incidents'
+    return '/dashboard'
   }, [acceptInvitationToken])
 
   useEffect(() => {

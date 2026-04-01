@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, forwardRef, useCallback, useMemo } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
+import { useWorkspacePath } from '../../hooks/useWorkspacePath'
 import { motion as Motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, AlertTriangle, Settings,
@@ -16,7 +17,6 @@ import {
   setActiveOrganizationIdOverride,
 } from '../../utils/organizationScope'
 import {
-  getAllTenantsScopeValue,
   getTenantScopeValue,
   getWorkspaceScope,
   setWorkspaceScope,
@@ -103,11 +103,34 @@ export default function Layout({ children }) {
     setSearchQuery(urlSearchParam)
   }
 
+  const { buildPath } = useWorkspacePath()
+
+  // Resolve the current workspace "page" segment from:
+  //   /:orgSlug/:tenantSlug/:page  (tenant-scoped, 3+ segments)
+  //   /:orgSlug/:page              (org-scoped, 2 segments)
+  const workspacePageMatch = location.pathname.match(/^\/[^/]+\/[^/]+\/(.+)$/)
+  const orgScopePageMatch = !location.pathname.startsWith('/admin')
+    ? location.pathname.match(/^\/[^/]+\/([^/]+)$/)
+    : null
+  const currentWorkspacePage = workspacePageMatch
+    ? workspacePageMatch[1]
+    : orgScopePageMatch
+      ? orgScopePageMatch[1]
+      : null
+
   const isActive = (path) => {
-    if (path === '/admin') {
-      return location.pathname === '/admin'
+    if (path === '/admin') return location.pathname === '/admin'
+    if (path.startsWith('/admin')) {
+      return location.pathname === path || location.pathname.startsWith(`${path}/`)
     }
     return location.pathname === path || location.pathname.startsWith(`${path}/`)
+  }
+
+  /** Build the nav `to` href for a given NAV_ITEM. */
+  const navPath = (item) => {
+    if (item.path.startsWith('/admin')) return item.path
+    const page = item.path.replace(/^\//, '')
+    return buildPath(page)
   }
 
   const handleLogout = () => {
@@ -297,11 +320,13 @@ export default function Layout({ children }) {
             }
             // Show all items if no role filter or no user (dev mode)
             return true
-          }).map(item => (
+          }).map(item => {
+            const to = navPath(item)
+            return (
             <Link
               key={item.path}
-              to={item.path}
-              className={`sidebar-nav-item ${isActive(item.path) ? 'active' : ''}`}
+              to={to}
+              className={`sidebar-nav-item ${isActive(to) ? 'active' : ''}`}
               onClick={() => setMobileOpen(false)}
             >
               <div className="relative">
@@ -321,14 +346,15 @@ export default function Layout({ children }) {
               </div>
               <span className="sidebar-label">{item.label}</span>
             </Link>
-          ))}
+          )})}
+
         </nav>
 
         {/* Footer */}
         <div className="sidebar-footer">
           <div className="sidebar-user">
             <Link
-              to="/profile"
+              to={buildPath('profile')}
               className="flex items-center gap-2 flex-1 min-w-0"
               style={{ textDecoration: 'none', color: 'inherit' }}
               onClick={() => setMobileOpen(false)}
@@ -382,10 +408,14 @@ export default function Layout({ children }) {
 
             {/* Breadcrumb */}
             {(() => {
-              const exact = ROUTE_TITLES[location.pathname]
+              // For workspace-scoped paths /:orgSlug/:tenantSlug/:page, look up by page key
+              const routeTitleKey = currentWorkspacePage
+                ? `/${currentWorkspacePage.split('/')[0]}`
+                : location.pathname
+              const exact = ROUTE_TITLES[location.pathname] || ROUTE_TITLES[routeTitleKey]
               const dynamic = !exact
                 ? (
-                    location.pathname.startsWith('/incidents/')
+                    (currentWorkspacePage?.startsWith('incidents/') || location.pathname.startsWith('/incidents/'))
                       ? { label: 'Incident Detail', parent: 'Alerts' }
                       : location.pathname.match(/^\/admin\/organizations\/[^/]+\/workspaces$/)
                         ? { label: 'Workspaces', parent: null }
@@ -420,7 +450,7 @@ export default function Layout({ children }) {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && searchQuery.trim()) {
-                    navigate(`/alerts?search=${encodeURIComponent(searchQuery.trim())}`)
+                    navigate(`${buildPath('alerts')}?search=${encodeURIComponent(searchQuery.trim())}`)
                   }
                 }}
                 className="focus:outline-none"
@@ -437,7 +467,7 @@ export default function Layout({ children }) {
                 <button
                   onClick={() => {
                     setSearchQuery('')
-                    navigate('/alerts')
+                    navigate(buildPath('alerts'))
                   }}
                   className="p-1 rounded hover:bg-elevated transition-colors"
                   title="Clear search"
@@ -517,6 +547,7 @@ export default function Layout({ children }) {
                       notifications={notifications}
                       unreadCount={unreadCount}
                       markAllRead={markAllRead}
+                      buildPath={buildPath}
                       onClose={() => setShowNotifications(false)}
                       onClickItem={(id) => {
                         setShowNotifications(false)
@@ -545,7 +576,7 @@ export default function Layout({ children }) {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.18, ease: 'easeInOut' }}
               >
-                {children}
+                {children ?? <Outlet />}
               </Motion.div>
             </AnimatePresence>
           </div>
@@ -674,7 +705,10 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
   }, [currentUserId])
 
   const tenantDetailsMap = new Map((tenants || []).map((tenant) => [String(tenant.id), tenant]))
-  const organizationMap = new Map((organizations || []).map((org) => [String(org.id), org]))
+  const organizationMap = useMemo(
+    () => new Map((organizations || []).map((org) => [String(org.id), org])),
+    [organizations]
+  )
   const validOrganizationOverrideId = useMemo(() => {
     if (!organizationOverrideId) return null
     return organizationMap.has(String(organizationOverrideId)) ? String(organizationOverrideId) : null
@@ -712,26 +746,25 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
   ))
   const hasOrgWideAccess = String(activeOrganization?.role || '').toLowerCase() !== 'tenant_member'
   const showAllTenantsOption = currentOrgTenants.length > 1 && hasOrgWideAccess
-  const allTenantsScopeValue = getAllTenantsScopeValue(currentOrganizationId)
-  const isAllTenantsSelected = Boolean(
-    showAllTenantsOption && allTenantsScopeValue && workspaceScope === allTenantsScopeValue
-  )
+  // URL-based detection: on /:orgSlug/:page (2 non-admin segments) → "All Workspaces" is selected
+  const urlSegments = currentPathname.split('/').filter(Boolean)
+  const isCurrentOrgScoped = !currentPathname.startsWith('/admin') && urlSegments.length === 2
+  const isAllTenantsSelected = showAllTenantsOption && isCurrentOrgScoped
 
-  const supportsAllTenantsPath = useCallback((path) => {
-    if (!path) return false
-    return (
-      path.startsWith('/alerts')
-      || path.startsWith('/admin/organizations')
-      || path.startsWith('/admin/workspaces')
-    )
-  }, [])
-
-  const getTenantTargetPath = useCallback((organizationId = null) => {
+  /**
+   * Build target path after tenant switch.
+   * - Admin routes: adjust org slug if organizationId provided.
+   * - Workspace routes /:orgSlug/:tenantSlug/:page: replace with new tenant slugs.
+   * - Otherwise: fall back to dashboard for the new tenant.
+   */
+  const getTenantTargetPath = useCallback((newOrgSlug = null, newTenantSlug = null, organizationId = null) => {
     if (!currentPath || currentPath === '/') {
+      if (newOrgSlug && newTenantSlug) return `/${newOrgSlug}/${newTenantSlug}/dashboard`
       return '/dashboard'
     }
     const [pathname, search = ''] = currentPath.split('?')
     try {
+      // Admin path: adjust org slug portion
       const organizationRecord = organizationId
         ? (organizations || []).find((organization) => String(organization.id) === String(organizationId))
         : null
@@ -749,6 +782,28 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
           : pathname
         return search ? `${nextPathname}?${search}` : nextPathname
       }
+      // Org-scoped path /:orgSlug/:page → tenant-scoped path
+      const orgScopeMatch = !pathname.startsWith('/admin') ? pathname.match(/^\/[^/]+\/([^/]+)$/) : null
+      if (orgScopeMatch && newOrgSlug && newTenantSlug) {
+        const page = orgScopeMatch[1]
+        const qs = search ? `?${search}` : ''
+        return `/${newOrgSlug}/${newTenantSlug}/${page}${qs}`
+      }
+      // Workspace-scoped path /:orgSlug/:tenantSlug/:page
+      const wsMatch = pathname.match(/^\/[^/]+\/[^/]+\/(.+)$/)
+      if (wsMatch && newOrgSlug && newTenantSlug) {
+        const page = wsMatch[1]
+        return `/${newOrgSlug}/${newTenantSlug}/${page}`
+      }
+      // Legacy flat workspace path (e.g., /alerts, /dashboard) → preserve the page
+      const WORKSPACE_PAGES = new Set(['alerts', 'dashboard', 'analytics', 'knowledge-base', 'rejected', 'live', 'runbooks', 'patterns', 'reports', 'settings', 'profile'])
+      const legacyPageMatch = pathname.match(/^\/([^/]+)$/)
+      if (legacyPageMatch && WORKSPACE_PAGES.has(legacyPageMatch[1]) && newOrgSlug && newTenantSlug) {
+        return `/${newOrgSlug}/${newTenantSlug}/${legacyPageMatch[1]}`
+      }
+      if (newOrgSlug && newTenantSlug) {
+        return `/${newOrgSlug}/${newTenantSlug}/dashboard`
+      }
       return currentPath
     } catch {
       return currentPath
@@ -756,11 +811,25 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
   }, [currentPath, organizations])
 
   const getAllTenantsTargetPath = useCallback(() => {
-    if (supportsAllTenantsPath(currentPath)) {
-      return currentPath
+    const orgKey = displayOrganization?.slug || String(displayOrganization?.id || '')
+    if (!orgKey) return '/alerts'
+    // Determine the current page to preserve it in the org-scoped URL
+    const segments = currentPathname.split('/').filter(Boolean)
+    let page = 'alerts'
+    if (segments.length >= 3 && !currentPathname.startsWith('/admin')) {
+      // /:orgSlug/:tenantSlug/:page
+      page = segments[2]
+    } else if (isCurrentOrgScoped) {
+      // Already org-scoped /:orgSlug/:page
+      page = segments[1]
     }
-    return '/alerts'
-  }, [currentPath, supportsAllTenantsPath])
+    const SUPPORTED_ORG_PAGES = new Set([
+      'alerts', 'dashboard', 'analytics', 'knowledge-base',
+      'rejected', 'live', 'runbooks', 'patterns', 'reports',
+    ])
+    if (!SUPPORTED_ORG_PAGES.has(page)) page = 'alerts'
+    return `/${orgKey}/${page}`
+  }, [currentPathname, displayOrganization, isCurrentOrgScoped])
 
   useEffect(() => {
     if (!activeTenant?.id) return
@@ -812,6 +881,13 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
       preserveOrganizationOverride = false,
     } = options
     const nextOrganizationId = organizationId ? String(organizationId) : null
+    // Determine the target tenant's slugs for URL construction
+    const newOrgSlug = tenant.organization_slug
+      || organizationMap.get(String(tenant.organization_id))?.slug
+      || organizationMap.get(String(tenant.organization_id))?.id
+      || displayOrganization?.slug
+      || String(displayOrganization?.id || '')
+    const newTenantSlug = tenant.name || String(tenant.id)
 
     if (String(tenant.id) === String(activeTenant?.id)) {
       const nextScope = getTenantScopeValue(tenant.id)
@@ -824,7 +900,10 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
         setOrganizationOverrideId(null)
         setActiveOrganizationIdOverride(null)
       }
-      navigate(getTenantTargetPath(preserveOrganizationOverride ? nextOrganizationId : null), { replace: false })
+      navigate(
+        getTenantTargetPath(newOrgSlug, newTenantSlug, preserveOrganizationOverride ? nextOrganizationId : null),
+        { replace: false }
+      )
       setOrgOpen(false)
       setTenantOpen(false)
       return
@@ -843,7 +922,10 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
         setOrganizationOverrideId(null)
         setActiveOrganizationIdOverride(null)
       }
-      navigate(getTenantTargetPath(preserveOrganizationOverride ? nextOrganizationId : null), { replace: false })
+      navigate(
+        getTenantTargetPath(newOrgSlug, newTenantSlug, preserveOrganizationOverride ? nextOrganizationId : null),
+        { replace: false }
+      )
     } finally {
       setSwitching(null)
       setOrgOpen(false)
@@ -1067,8 +1149,6 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
                     {showAllTenantsOption && (
                       <button
                         onClick={() => {
-                          setWorkspaceScopeState(allTenantsScopeValue)
-                          setWorkspaceScope(allTenantsScopeValue)
                           navigate(getAllTenantsTargetPath(), { replace: false })
                           setTenantOpen(false)
                         }}
@@ -1149,7 +1229,7 @@ function SidebarWorkspaceSwitcher({ organizations, activeOrganization, tenants, 
 
 
 const NotificationDropdown = forwardRef(function NotificationDropdown(
-  { notifications, unreadCount, markAllRead, onClose, onClickItem },
+  { notifications, unreadCount, markAllRead, buildPath, onClose, onClickItem },
   ref
 ) {
   return (
@@ -1202,7 +1282,7 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
           notifications.map(n => (
             <Link
               key={n.id}
-              to={`/incidents/${n.id}`}
+              to={buildPath ? buildPath(`incidents/${n.id}`) : `/incidents/${n.id}`}
               onClick={() => onClickItem(n.id)}
               className="notification-item flex items-start gap-3 px-4 py-3 transition-colors"
               style={{
@@ -1252,7 +1332,7 @@ const NotificationDropdown = forwardRef(function NotificationDropdown(
 
       {/* Footer */}
       <Link
-        to="/alerts"
+        to={buildPath ? buildPath('alerts') : '/alerts'}
         onClick={onClose}
         className="notification-item block text-center py-2.5 transition-colors"
         style={{ borderTop: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--neon-indigo)' }}

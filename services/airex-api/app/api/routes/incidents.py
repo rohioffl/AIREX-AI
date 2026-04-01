@@ -581,6 +581,8 @@ async def get_incident(
     incident_id: uuid.UUID,
     tenant_id: TenantId,
     session: TenantSession,
+    current_user: CurrentUser,
+    auth_session: AsyncSession = Depends(get_auth_session),
 ) -> IncidentDetail:
     """Get detailed incident information."""
     logger.info(
@@ -589,18 +591,57 @@ async def get_incident(
         incident_id=str(incident_id),
     )
     result = await session.execute(
-        select(Incident).where(
+        select(Incident, Tenant.display_name, Tenant.name)
+        .join(Tenant, Tenant.id == Incident.tenant_id)
+        .where(
             Incident.tenant_id == tenant_id,
             Incident.id == incident_id,
             Incident.deleted_at.is_(None),
         )
     )
-    incident = result.scalar_one_or_none()
-    if incident is None:
+    row = result.one_or_none()
+
+    # Org-level fallback: if the caller's active tenant doesn't own the
+    # incident, try a cross-tenant lookup and verify org membership.
+    used_org_fallback = False
+    if row is None:
+        cross_result = await auth_session.execute(
+            select(Incident, Tenant.display_name, Tenant.name, Tenant.organization_id)
+            .join(Tenant, Tenant.id == Incident.tenant_id)
+            .where(
+                Incident.id == incident_id,
+                Incident.deleted_at.is_(None),
+            )
+        )
+        cross_row = cross_result.one_or_none()
+        if cross_row is not None:
+            _inc, _td, _tn, org_id = cross_row
+            authorized = False
+            if current_user is not None and org_id is not None:
+                authorized = await has_org_membership(
+                    auth_session,
+                    user_id=current_user.user_id,
+                    organization_id=org_id,
+                )
+            if authorized:
+                row = (cross_row[0], cross_row[1], cross_row[2])
+                tenant_id = cross_row[0].tenant_id
+                used_org_fallback = True
+                logger.info(
+                    "incident_detail_org_fallback",
+                    tenant_id=str(tenant_id),
+                    incident_id=str(incident_id),
+                )
+
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Incident not found",
         )
+    incident, tenant_display_name, tenant_db_name = row
+    # When org fallback resolved a different tenant, use the non-RLS session
+    # for downstream queries since the RLS session is scoped to the wrong tenant.
+    qsession = auth_session if used_org_fallback else session
 
     # Recommendation is stored in meta (populated by AI service)
     recommendation = None
@@ -636,7 +677,7 @@ async def get_incident(
 
     # 1. Same host incidents (automatic)
     if incident.host_key:
-        related_result = await session.execute(
+        related_result = await qsession.execute(
             select(Incident)
             .where(
                 Incident.tenant_id == tenant_id,
@@ -662,7 +703,7 @@ async def get_incident(
                 related_ids.add(other.id)
 
     # 2. Manually linked incidents (explicit relationships)
-    manual_links_result = await session.execute(
+    manual_links_result = await qsession.execute(
         select(RelatedIncident, Incident)
         .join(
             Incident,
@@ -702,7 +743,7 @@ async def get_incident(
             from airex_core.services.correlation_service import get_correlated_incidents
 
             correlated_list = await get_correlated_incidents(
-                session,
+                qsession,
                 tenant_id,
                 incident.correlation_group_id,
                 exclude_id=incident_id,
@@ -740,6 +781,8 @@ async def get_incident(
     return IncidentDetail(
         id=incident.id,
         tenant_id=incident.tenant_id,
+        tenant_name=tenant_display_name or tenant_db_name,
+        meta=incident.meta,
         alert_type=incident.alert_type,
         state=incident.state,
         severity=incident.severity,

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, ChevronDown, Copy } from 'lucide-react'
+import { FileText, ChevronDown, Copy, Terminal, Check } from 'lucide-react'
 import { motion as Motion, AnimatePresence } from 'framer-motion'
 import { formatTimestamp } from '../../utils/formatters'
 import AnomalyBadge from './AnomalyBadge'
@@ -11,6 +11,109 @@ function getEvidencePreview(rawOutput, maxChars = 80) {
   const firstLine = lines[0] || rawOutput.split('\n')[0] || ''
   if (firstLine.length <= maxChars) return firstLine
   return firstLine.substring(0, maxChars - 3) + '...'
+}
+
+// Extract commands executed from incident meta (investigation_run or openclaw_run)
+function getCommandsExecuted(incident) {
+  const meta = incident?.meta
+  if (!meta) return []
+  const run = meta.investigation_run || meta.openclaw_run
+  if (!run) return []
+  return run.commands_executed || []
+}
+
+// Command plate: shows shell commands executed on the target machine
+function CommandPlate({ commands }) {
+  const [copiedIdx, setCopiedIdx] = useState(null)
+
+  if (!commands || commands.length === 0) return null
+
+  const handleCopy = (text, idx) => {
+    navigator.clipboard.writeText(text)
+    setCopiedIdx(idx)
+    setTimeout(() => setCopiedIdx(null), 1500)
+  }
+
+  return (
+    <div className="glass rounded-xl overflow-hidden mb-4">
+      <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
+        <Terminal size={13} style={{ color: 'var(--neon-green, #22c55e)' }} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Commands Executed
+        </span>
+        <span className="px-2 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-input)' }}>
+          {commands.length}
+        </span>
+      </div>
+      <div style={{ background: 'var(--terminal-bg)', padding: '8px 0' }}>
+        {commands.map((cmd, idx) => {
+          const cmdText = cmd.command || cmd.name || String(cmd)
+          const status = cmd.status || 'ok'
+          const isCopied = copiedIdx === idx
+
+          return (
+            <div
+              key={idx}
+              className="flex items-center gap-3 px-4 py-1.5 group"
+              style={{ minHeight: 28 }}
+              onMouseEnter={(ev) => ev.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+              onMouseLeave={(ev) => ev.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--neon-green, #22c55e)',
+                flexShrink: 0,
+                userSelect: 'none'
+              }}>$</span>
+              <code style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--terminal-text)',
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                lineHeight: 1.5
+              }}>
+                {cmdText}
+              </code>
+              {status && status !== 'ok' && (
+                <span style={{
+                  fontSize: 9,
+                  fontWeight: 600,
+                  color: 'var(--color-accent-red, #ef4444)',
+                  flexShrink: 0,
+                  padding: '1px 5px',
+                  borderRadius: 3,
+                  background: 'rgba(239,68,68,0.08)'
+                }}>
+                  {status}
+                </span>
+              )}
+              <button
+                onClick={() => handleCopy(cmdText, idx)}
+                className="cmd-copy-btn"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 2,
+                  color: isCopied ? 'var(--neon-green, #22c55e)' : 'var(--text-muted)',
+                  opacity: isCopied ? 1 : 0.3,
+                  transition: 'opacity 0.15s'
+                }}
+                onMouseEnter={(ev) => ev.currentTarget.style.opacity = '1'}
+                onMouseLeave={(ev) => { if (copiedIdx !== idx) ev.currentTarget.style.opacity = '0.3' }}
+              >
+                {isCopied ? <Check size={12} /> : <Copy size={12} />}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 // Look up anomalies for a given tool_name from probe_results
@@ -37,12 +140,16 @@ export default function EvidencePanel({ evidence, incident }) {
     )
   }
 
+  const commandsExecuted = getCommandsExecuted(incident)
+
   return (
     <div className="space-y-3" style={{ width: '100%', boxSizing: 'border-box' }}>
       <div className="flex items-center justify-between mb-1">
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Evidence</span>
         <span className="px-2 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-input)' }}>{evidence.length}</span>
       </div>
+
+      <CommandPlate commands={commandsExecuted} />
 
       {evidence.map((e) => {
         const anomalies = getAnomaliesForTool(incident, e.tool_name)

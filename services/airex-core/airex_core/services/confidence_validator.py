@@ -148,7 +148,7 @@ def _score_evidence_strength(incident: Incident) -> float:
             if str(getattr(item, "tool_name", "")).strip()
         }
     )
-    affected_entities = len(_openclaw_meta(incident).get("affected_entities", []))
+    affected_entities = len(_investigation_meta(incident).get("affected_entities", []))
     return _clamp_score(
         0.15
         + min(0.4, evidence_count * 0.15)
@@ -158,7 +158,7 @@ def _score_evidence_strength(incident: Incident) -> float:
 
 
 def _score_tool_grounding(incident: Incident) -> float:
-    meta = _openclaw_meta(incident)
+    meta = _investigation_meta(incident)
     raw_refs = meta.get("raw_refs", {})
     forensic_tools = raw_refs.get("forensic_tools", [])
     if not isinstance(forensic_tools, list):
@@ -168,12 +168,12 @@ def _score_tool_grounding(incident: Incident) -> float:
         for key, value in raw_refs.items()
         if key != "forensic_tools" and isinstance(value, str) and value.strip()
     )
-    has_openclaw_evidence = any(
-        str(getattr(item, "tool_name", "")).strip() == "openclaw"
+    has_investigation_evidence = any(
+        str(getattr(item, "tool_name", "")).strip() == "investigation"
         for item in (getattr(incident, "evidence", []) or [])
     )
     return _clamp_score(
-        (0.35 if has_openclaw_evidence or meta else 0.0)
+        (0.35 if has_investigation_evidence or meta else 0.0)
         + min(0.4, len(forensic_tools) * 0.2)
         + min(0.25, snippet_count * 0.08)
     )
@@ -209,7 +209,7 @@ def _build_grounding_summary(
     warning: str | None,
 ) -> str:
     evidence_items = list(getattr(incident, "evidence", []) or [])
-    meta = _openclaw_meta(incident)
+    meta = _investigation_meta(incident)
     raw_refs = meta.get("raw_refs", {})
     forensic_tools = raw_refs.get("forensic_tools", [])
     if not isinstance(forensic_tools, list):
@@ -217,7 +217,7 @@ def _build_grounding_summary(
 
     parts = [f"{len(evidence_items)} evidence source(s) considered"]
     if forensic_tools:
-        parts.append(f"{len(forensic_tools)} OpenClaw forensic tool(s) grounded")
+        parts.append(f"{len(forensic_tools)} forensic tool(s) grounded")
     if kg_resolution_count is not None:
         parts.append(f"KG matched {kg_resolution_count} prior resolution(s)")
     if warning:
@@ -227,14 +227,14 @@ def _build_grounding_summary(
     return "; ".join(parts)
 
 
-def _openclaw_meta(incident: Incident) -> dict[str, Any]:
+def _investigation_meta(incident: Incident) -> dict[str, Any]:
     meta = getattr(incident, "meta", None)
     if not isinstance(meta, dict):
         return {}
-    openclaw_meta = meta.get("openclaw")
-    if not isinstance(openclaw_meta, dict):
+    inv_meta = meta.get("investigation")
+    if not isinstance(inv_meta, dict):
         return {}
-    return openclaw_meta
+    return inv_meta
 
 
 def _clamp_score(value: float) -> float:

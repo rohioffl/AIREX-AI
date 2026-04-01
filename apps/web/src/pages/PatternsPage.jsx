@@ -3,6 +3,7 @@ import { Layers, TrendingUp, TrendingDown, Minus, AlertTriangle, Shield, Cpu } f
 import { fetchPatterns, fetchAnomalies, predictRootCause, getPredictionAccuracy } from '../services/api'
 import { useToasts } from '../context/ToastContext'
 import { useNavigate } from 'react-router-dom'
+import { useWorkspacePath } from '../hooks/useWorkspacePath'
 
 const SEVERITY_STYLES = {
   CRITICAL: { background: 'rgba(244,63,94,0.12)', color: 'var(--color-accent-red)' },
@@ -34,6 +35,7 @@ const card = {
 
 function PatternCard({ pattern }) {
   const navigate = useNavigate()
+  const { buildPath } = useWorkspacePath()
   const [expanded, setExpanded] = useState(false)
   const trend = TREND_ICONS[pattern.trend] || TREND_ICONS.stable
   const TrendIcon = trend.icon
@@ -92,7 +94,7 @@ function PatternCard({ pattern }) {
               <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Sample Incidents</p>
               <div className="flex flex-wrap gap-1">
                 {pattern.incident_ids.slice(0, 5).map(id => (
-                  <button key={id} onClick={() => navigate(`/incidents/${id}`)}
+                  <button key={id} onClick={() => navigate(buildPath(`incidents/${id}`))}
                     style={{ padding: '3px 8px', borderRadius: 6, fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--glow-indigo)', color: 'var(--neon-indigo)', border: '1px solid rgba(99,102,241,0.2)', cursor: 'pointer' }}>
                     {id.slice(0, 8)}…
                   </button>

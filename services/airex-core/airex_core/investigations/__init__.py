@@ -4,6 +4,7 @@ from airex_core.investigations.disk_full import DiskFullInvestigation
 from airex_core.investigations.memory_high import MemoryHighInvestigation
 from airex_core.investigations.network_check import NetworkCheckInvestigation
 from airex_core.investigations.healthcheck import HealthCheckInvestigation
+from airex_core.investigations.service_down import ServiceDownInvestigation
 from airex_core.investigations.generic_checks import (
     HttpCheckInvestigation,
     ApiCheckInvestigation,
@@ -25,6 +26,8 @@ INVESTIGATION_REGISTRY: dict[str, type[BaseInvestigation]] = {
     "memory_high": MemoryHighInvestigation,
     "network_issue": NetworkCheckInvestigation,
     "healthcheck": HealthCheckInvestigation,
+    "service_down": ServiceDownInvestigation,
+    "server_check": ServiceDownInvestigation,
     "http_check": HttpCheckInvestigation,
     "api_check": ApiCheckInvestigation,
     "cloud_check": CloudCheckInvestigation,

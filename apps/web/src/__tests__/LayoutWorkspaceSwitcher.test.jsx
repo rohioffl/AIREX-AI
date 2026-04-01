@@ -141,10 +141,10 @@ describe('Layout workspace switcher', () => {
 
     await user.click(screen.getByRole('button', { name: /alpha/i }))
     await user.click(await screen.findByRole('button', { name: /all workspaces/i }))
-    expect(screen.getByTestId('location')).toHaveTextContent('/admin/workspaces')
-    await user.click(screen.getByRole('link', { name: /alerts/i }))
-    expect(screen.getByRole('button', { name: /all workspaces/i })).toBeInTheDocument()
-    expect(screen.getByTestId('location')).toHaveTextContent('/alerts')
+    // New URL-based routing: "All Workspaces" navigates to the org-scoped alerts path
+    expect(screen.getByTestId('location')).toHaveTextContent('/acme-cloud/alerts')
+    // "All Workspaces" button should still be selected (2-segment org-scoped URL)
+    expect(screen.getAllByRole('button', { name: /all workspaces/i }).length).toBeGreaterThan(0)
     expect(mockSwitchTenant).not.toHaveBeenCalled()
   })
 

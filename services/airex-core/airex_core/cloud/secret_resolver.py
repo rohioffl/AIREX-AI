@@ -4,7 +4,7 @@ Fetch JSON secrets at runtime so sensitive material never lives in PostgreSQL
 or environment variables.  The cache is thread-safe and works from both async
 and sync call paths (the underlying boto3 call is blocking but fast).
 
-Secrets Manager is **never** called from OpenClaw or browser clients — only
+Secrets Manager is **never** called from external clients — only
 ``airex-api`` and ``airex-worker`` use this module via the ECS task IAM role.
 
 Usage::
@@ -114,7 +114,7 @@ def get_secret_json(
 
     Security contract:
     - The returned dict is **never logged** — only the ARN suffix appears in logs.
-    - Callers must not pass the returned dict to OpenClaw, browser clients, or
+    - Callers must not pass the returned dict to browser clients or
       any external system.
 
     Args:

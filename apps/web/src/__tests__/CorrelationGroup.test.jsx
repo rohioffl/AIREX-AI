@@ -16,6 +16,11 @@ vi.mock('../utils/formatters', () => ({
   formatRelativeTime: () => '2m ago',
 }))
 
+// Mock useWorkspacePath
+vi.mock('../hooks/useWorkspacePath', () => ({
+  useWorkspacePath: () => ({ buildPath: (p) => `/${p}`, isOrgScoped: false }),
+}))
+
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')

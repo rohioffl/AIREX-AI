@@ -1,20 +1,14 @@
-"""
-Investigation orchestrator.
+"""LangGraph-based investigation orchestrator.
 
-Runs the appropriate investigation plugin(s), stores evidence,
-handles retries, and transitions state on completion or failure.
+Replaces the OpenClaw gateway with a Python-native StateGraph.
+Six nodes mirror the investigation lifecycle:
 
-Multi-probe execution:
-  For each incident, runs a primary probe (matched by alert_type) plus
-  correlated secondary probes in parallel via asyncio.gather. Each probe
-  emits SSE progress events so the frontend can show a live timeline.
-  After all probes complete, the anomaly detector annotates results.
+  resolve_context  ->  plan_probes  ->  execute_probes
+       ->  analyze  ->  store  ->  transition
 
-Cloud-aware routing:
-  When incident meta contains `_cloud` = "gcp" or "aws" (parsed from
-  Site24x7 tags), the orchestrator routes to CloudInvestigation which
-  connects via SSM / OS Login to run real diagnostics on the server.
-  Otherwise, it falls back to the simulated investigation plugins.
+The ``AsyncSession`` is stored in a ``ContextVar`` before the graph runs
+so nodes stay as pure functions over ``InvestigationState`` while still
+having DB access.
 """
 
 from __future__ import annotations
@@ -22,14 +16,19 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Sequence
-from typing import Any
+from contextvars import ContextVar
+from typing import Any, TypedDict
 
 import structlog
+from langgraph.graph import END, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from airex_core.core.config import settings
 from airex_core.core.events import emit_evidence_added, emit_investigation_progress
+from airex_core.core.investigation_context_resolver import (
+    resolve_investigation_context as _resolve_ctx,
+)
 from airex_core.core.knowledge_graph import knowledge_graph
 from airex_core.core.state_machine import transition_state
 from airex_core.investigations import INVESTIGATION_REGISTRY
@@ -47,116 +46,47 @@ from airex_core.services.anomaly_detector import annotate_probe_results, summari
 
 logger = structlog.get_logger()
 
-
-def _should_use_cloud_investigation(meta: dict[str, Any]) -> bool:
-    """Check if incident meta has enough cloud context for a real investigation."""
-    cloud = (meta.get("_cloud") or "").lower()
-    has_target = meta.get("_has_cloud_target", False)
-    return cloud in ("gcp", "aws") and has_target
+# ── ContextVar for DB session ─────────────────────────────────────
+_session_var: ContextVar[AsyncSession] = ContextVar("investigation_session")
+_incident_var: ContextVar[Incident] = ContextVar("investigation_incident")
 
 
-def _build_timeline_observations(
-    results: Sequence[InvestigationResult],
-    anomaly_summary: dict[str, Any] | None = None,
-) -> list[str]:
-    observations: list[str] = []
-    for result in results:
-        if isinstance(result, ProbeResult):
-            for metric_name, value in result.metrics.items():
-                if isinstance(value, (int, float, str, bool)):
-                    observations.append(f"{result.tool_name}:{metric_name}={value}")
-        raw_output = getattr(result, "raw_output", "")
-        if isinstance(raw_output, str):
-            first_line = next((line.strip() for line in raw_output.splitlines() if line.strip()), "")
-            if first_line:
-                observations.append(first_line)
+# ── State schema ──────────────────────────────────────────────────
 
-    if anomaly_summary:
-        observations.append(
-            f"anomalies={anomaly_summary.get('total_count', 0)} critical={anomaly_summary.get('critical_count', 0)}"
-        )
-    return list(dict.fromkeys(observations))[:12]
+class InvestigationState(TypedDict, total=False):
+    """Typed state flowing through the LangGraph investigation graph."""
 
+    # Identity
+    tenant_id: str
+    incident_id: str
+    alert_type: str
+    meta: dict[str, Any]
 
-def _build_timeline_metrics(results: Sequence[InvestigationResult]) -> dict[str, Any]:
-    metrics: dict[str, Any] = {}
-    for result in results:
-        if not isinstance(result, ProbeResult):
-            continue
-        for metric_name, value in result.metrics.items():
-            if isinstance(value, (int, float, str, bool)):
-                metrics[f"{result.tool_name}.{metric_name}"] = value
-    return metrics
+    # Context resolution
+    use_cloud: bool
+
+    # Probe planning
+    primary_plugin: Any  # BaseInvestigation instance
+    secondary_plugins: list[tuple[str, Any]]
+    total_probes: int
+
+    # Execution
+    all_results: list[Any]  # list[InvestigationResult]
+    anomaly_summary: dict[str, Any] | None
+
+    # Control
+    error: str | None
+    failed: bool
 
 
-def _extract_config_snapshot(results: Sequence[InvestigationResult]) -> tuple[str | None, dict[str, Any] | None]:
-    for result in results:
-        if not isinstance(result, ProbeResult):
-            continue
-        if result.tool_name not in {"change_detection_aws", "change_detection_gcp", "change_detection"}:
-            continue
-        metrics = dict(result.metrics or {})
-        if not metrics:
-            continue
-        config_name = (
-            str(metrics.get("resource_name") or metrics.get("service_name") or metrics.get("instance_id") or "deployment")
-            .strip()
-        )
-        return config_name, metrics
-    return None, None
+# ── Node: resolve_context ─────────────────────────────────────────
 
+async def resolve_context_node(state: InvestigationState) -> dict:
+    """Enrich incident meta with cloud target info and transition to INVESTIGATING."""
+    session = _session_var.get()
+    incident = _incident_var.get()
 
-async def run_investigation(
-    session: AsyncSession,
-    incident: Incident,
-) -> None:
-    """Execute investigation probes for the incident's alert_type.
-
-    Routes to the LangGraph graph or the legacy orchestrator based on
-    the ``USE_LANGGRAPH_INVESTIGATION`` feature flag.
-    """
-    if settings.USE_LANGGRAPH_INVESTIGATION:
-        from airex_core.core.investigation_graph import run_investigation_graph
-
-        await run_investigation_graph(session, incident)
-        return
-
-    await _run_investigation_legacy(session, incident)
-
-
-async def _run_investigation_legacy(
-    session: AsyncSession,
-    incident: Incident,
-) -> None:
-    """Legacy investigation orchestrator (pre-LangGraph).
-
-    Execution strategy:
-      1. Resolve primary probe (cloud or simulated)
-      2. Resolve secondary probes from CORRELATION_MAP
-      3. Run all probes in parallel with asyncio.gather
-      4. Emit SSE progress events for each probe
-      5. Run anomaly detection on all results
-      6. Store evidence records for each probe
-      7. Transition to RECOMMENDATION_READY
-
-    Timeouts: INVESTIGATION_TIMEOUT seconds (shared across all probes).
-    Retries: MAX_INVESTIGATION_RETRIES.
-    """
-    log = logger.bind(
-        tenant_id=str(incident.tenant_id),
-        incident_id=str(incident.id),
-        correlation_id=str(incident.id),
-        alert_type=incident.alert_type,
-    )
-
-    meta = incident.meta or {}
-    tenant_id = str(incident.tenant_id)
-    incident_id = str(incident.id)
-
-    # ── Transition RECEIVED → INVESTIGATING ──────────────────────
-    # The state machine requires RECEIVED → INVESTIGATING before any probe
-    # can run. Retry attempts come in as FAILED_ANALYSIS which transitions
-    # directly to RECOMMENDATION_READY or FAILED_ANALYSIS — both valid.
+    # Transition RECEIVED -> INVESTIGATING
     if incident.state == IncidentState.RECEIVED:
         await transition_state(
             session,
@@ -165,14 +95,52 @@ async def _run_investigation_legacy(
             reason="Investigation started",
         )
 
-    # ── Resolve primary probe ────────────────────────────────────
-    use_cloud = _should_use_cloud_investigation(meta)
+    meta = dict(incident.meta or {})
+    enriched = await _resolve_ctx(meta)
 
+    use_cloud = _should_use_cloud_investigation(enriched)
+
+    return {
+        "meta": enriched,
+        "use_cloud": use_cloud,
+        "tenant_id": str(incident.tenant_id),
+        "incident_id": str(incident.id),
+        "alert_type": incident.alert_type,
+    }
+
+
+def _should_use_cloud_investigation(meta: dict[str, Any]) -> bool:
+    """Check if incident meta has enough cloud context for a real investigation."""
+    cloud = (meta.get("_cloud") or "").lower()
+    has_target = meta.get("_has_cloud_target", False)
+    return cloud in ("gcp", "aws") and has_target
+
+
+# ── Node: plan_probes ─────────────────────────────────────────────
+
+async def plan_probes_node(state: InvestigationState) -> dict:
+    """Select primary and secondary probes based on alert type and meta.
+
+    Extracted from investigation_service.py L151-270.
+    """
+    session = _session_var.get()
+    incident = _incident_var.get()
+    log = logger.bind(
+        tenant_id=state["tenant_id"],
+        incident_id=state["incident_id"],
+        alert_type=state["alert_type"],
+    )
+
+    meta = state["meta"]
+    use_cloud = state["use_cloud"]
+    alert_type = state["alert_type"]
+
+    # ── Resolve primary probe ────────────────────────────────────
     if use_cloud:
         from airex_core.investigations.cloud_investigation import CloudInvestigation
 
         primary_plugin: BaseInvestigation = CloudInvestigation()
-        meta["alert_type"] = incident.alert_type
+        meta["alert_type"] = alert_type
         log.info(
             "using_cloud_investigation",
             cloud=meta.get("_cloud"),
@@ -180,14 +148,14 @@ async def _run_investigation_legacy(
             instance_id=meta.get("_instance_id"),
         )
     else:
-        primary_cls = INVESTIGATION_REGISTRY.get(incident.alert_type)
+        primary_cls = INVESTIGATION_REGISTRY.get(alert_type)
         if primary_cls is None:
-            log.warning("no_investigation_plugin", alert_type=incident.alert_type)
+            log.warning("no_investigation_plugin", alert_type=alert_type)
             meta = dict(meta)
             meta.setdefault("_manual_review_required", True)
             meta.setdefault(
                 "_manual_review_reason",
-                f"No automation plugin for alert_type {incident.alert_type}",
+                f"No automation plugin for alert_type {alert_type}",
             )
             incident.meta = meta
             flag_modified(incident, "meta")
@@ -197,81 +165,74 @@ async def _run_investigation_legacy(
                 session,
                 incident,
                 IncidentState.FAILED_ANALYSIS,
-                reason=f"Manual review required: no plugin for {incident.alert_type}",
+                reason=f"Manual review required: no plugin for {alert_type}",
             )
-            return
+            return {"failed": True, "error": f"No plugin for {alert_type}"}
         primary_plugin = primary_cls()
         log.info("using_simulated_investigation", plugin=type(primary_plugin).__name__)
 
     # ── Resolve secondary probes ─────────────────────────────────
     secondary_plugins: list[tuple[str, BaseInvestigation]] = []
     if not use_cloud:
-        # Only run secondary probes for simulated investigations
-        # Cloud investigation already does comprehensive checks
-        for secondary_type in get_secondary_probes(incident.alert_type):
+        for secondary_type in get_secondary_probes(alert_type):
             sec_cls = INVESTIGATION_REGISTRY.get(secondary_type)
             if sec_cls is not None:
                 secondary_plugins.append((secondary_type, sec_cls()))
 
-    # Add Site24x7 enrichment probe when incident originated from Site24x7
+    # Add Site24x7 enrichment probe
     try:
         from airex_core.investigations.site24x7_probe import (
             Site24x7Probe,
             should_run_site24x7_probe,
         )
-
         if should_run_site24x7_probe(meta):
             secondary_plugins.append(("site24x7_enrichment", Site24x7Probe()))
             log.info("site24x7_probe_added")
     except Exception:
         pass
 
-    # Add Site24x7 outage history probe for pattern analysis
+    # Add Site24x7 outage history probe
     try:
         from airex_core.investigations.site24x7_outage_probe import (
             Site24x7OutageHistoryProbe,
             should_run_outage_probe,
         )
-
         if should_run_outage_probe(meta):
             secondary_plugins.append(("site24x7_outage_history", Site24x7OutageHistoryProbe()))
             log.info("site24x7_outage_probe_added")
     except Exception:
         pass
 
-    # Add change detection probe when cloud context is available
+    # Add change detection probe
     try:
         from airex_core.investigations.change_detection_probe import (
             ChangeDetectionProbe,
             should_run_change_detection,
         )
-
         if should_run_change_detection(meta):
             secondary_plugins.append(("change_detection", ChangeDetectionProbe()))
             log.info("change_detection_probe_added")
     except Exception:
         pass
 
-    # Add infrastructure state probe when cloud context is available
+    # Add infrastructure state probe
     try:
         from airex_core.investigations.infra_state_probe import (
             InfraStateProbe,
             should_run_infra_state_probe,
         )
-
         if should_run_infra_state_probe(meta):
             secondary_plugins.append(("infra_state", InfraStateProbe()))
             log.info("infra_state_probe_added")
     except Exception:
         pass
 
-    # Add enhanced log analysis probe for applicable alert types
+    # Add log analysis probe
     try:
         from airex_core.investigations.log_analysis_probe import (
             LogAnalysisProbe,
             should_run_log_analysis,
         )
-
         if should_run_log_analysis(meta):
             secondary_plugins.append(("log_analysis", LogAnalysisProbe()))
             log.info("log_analysis_probe_added")
@@ -281,13 +242,44 @@ async def _run_investigation_legacy(
     total_probes = 1 + len(secondary_plugins)
     log.info(
         "investigation_plan",
-        primary=incident.alert_type,
+        primary=alert_type,
         secondary_count=len(secondary_plugins),
         secondary_types=[t for t, _ in secondary_plugins],
         total_probes=total_probes,
     )
 
-    # ── Run all probes in parallel ───────────────────────────────
+    return {
+        "primary_plugin": primary_plugin,
+        "secondary_plugins": secondary_plugins,
+        "total_probes": total_probes,
+        "meta": meta,
+    }
+
+
+# ── Node: execute_probes ──────────────────────────────────────────
+
+async def execute_probes_node(state: InvestigationState) -> dict:
+    """Run all probes in parallel with per-probe timeouts.
+
+    Extracted from investigation_service.py _run_all_probes() L634-756.
+    """
+    if state.get("failed"):
+        return {}
+
+    incident = _incident_var.get()
+    session = _session_var.get()
+    log = logger.bind(
+        tenant_id=state["tenant_id"],
+        incident_id=state["incident_id"],
+    )
+
+    primary_plugin = state["primary_plugin"]
+    secondary_plugins = state["secondary_plugins"]
+    meta = state["meta"]
+    tenant_id = state["tenant_id"]
+    incident_id = state["incident_id"]
+    total_probes = state["total_probes"]
+
     try:
         all_results = await asyncio.wait_for(
             _run_all_probes(
@@ -296,7 +288,7 @@ async def _run_investigation_legacy(
                 meta=meta,
                 tenant_id=tenant_id,
                 incident_id=incident_id,
-                alert_type=incident.alert_type,
+                alert_type=state["alert_type"],
                 total_probes=total_probes,
                 log=log,
             ),
@@ -304,21 +296,20 @@ async def _run_investigation_legacy(
         )
     except asyncio.TimeoutError:
         await _handle_failure(session, incident, log, "Investigation timed out")
-        return
+        return {"failed": True, "error": "Investigation timed out"}
     except (RuntimeError, ValueError, TypeError) as exc:
         await _handle_failure(session, incident, log, f"Investigation failed: {exc}")
-        return
+        return {"failed": True, "error": str(exc)}
 
     if not all_results:
         await _handle_failure(session, incident, log, "All probes returned no results")
-        return
+        return {"failed": True, "error": "All probes returned no results"}
 
-    # ── Phase 5: Dynamic probe chaining ─────────────────────────
-    # After initial probes complete, examine actual metric values to decide
-    # if follow-up probes are warranted based on what was actually found.
+    # ── Dynamic probe chaining ─────────────────────────────────
+    use_cloud = state.get("use_cloud", False)
     try:
         probe_results_initial = [r for r in all_results if isinstance(r, ProbeResult)]
-        already_running_types = {incident.alert_type} | {
+        already_running_types = {state["alert_type"]} | {
             t for t, _ in secondary_plugins
         }
         chained = get_chained_probes(probe_results_initial, already_running_types)
@@ -343,7 +334,7 @@ async def _run_investigation_legacy(
                         meta=meta,
                         tenant_id=tenant_id,
                         incident_id=incident_id,
-                        alert_type=incident.alert_type,
+                        alert_type=state["alert_type"],
                         total_probes=len(chained_plugins),
                         log=log,
                     ),
@@ -358,13 +349,29 @@ async def _run_investigation_legacy(
     except Exception as exc:
         log.warning("probe_chaining_failed", error=str(exc))
 
-    # ── Anomaly detection ────────────────────────────────────────
+    return {"all_results": all_results}
+
+
+# ── Node: analyze ─────────────────────────────────────────────────
+
+async def analyze_node(state: InvestigationState) -> dict:
+    """Run anomaly detection on probe results.
+
+    Extracted from investigation_service.py L344-373.
+    """
+    if state.get("failed"):
+        return {}
+
+    all_results = state["all_results"]
+    tenant_id = state["tenant_id"]
+    incident_id = state["incident_id"]
+    total_probes = state.get("total_probes", len(all_results))
+
     probe_results = [r for r in all_results if isinstance(r, ProbeResult)]
     if probe_results:
         annotate_probe_results(probe_results)
         anomaly_summary = summarize_anomalies(probe_results)
 
-        # Emit anomaly SSE event if any detected
         if anomaly_summary["total_count"] > 0:
             try:
                 await emit_investigation_progress(
@@ -380,14 +387,41 @@ async def _run_investigation_legacy(
             except Exception:
                 pass
 
-        log.info(
+        logger.info(
             "anomaly_detection_complete",
+            tenant_id=tenant_id,
+            incident_id=incident_id,
             total_anomalies=anomaly_summary["total_count"],
             critical=anomaly_summary["critical_count"],
             warning=anomaly_summary["warning_count"],
         )
     else:
         anomaly_summary = None
+
+    return {"anomaly_summary": anomaly_summary}
+
+
+# ── Node: store ───────────────────────────────────────────────────
+
+async def store_node(state: InvestigationState) -> dict:
+    """Persist evidence records and update incident meta.
+
+    Extracted from investigation_service.py L375-432.
+    """
+    if state.get("failed"):
+        return {}
+
+    session = _session_var.get()
+    incident = _incident_var.get()
+    log = logger.bind(
+        tenant_id=state["tenant_id"],
+        incident_id=state["incident_id"],
+    )
+
+    all_results = state["all_results"]
+    anomaly_summary = state.get("anomaly_summary")
+    tenant_id = state["tenant_id"]
+    incident_id = state["incident_id"]
 
     # ── Store evidence for each probe ────────────────────────────
     for result in all_results:
@@ -415,12 +449,9 @@ async def _run_investigation_legacy(
     # ── Store structured probe data in incident meta ─────────────
     meta = dict(incident.meta or {})
 
-    # Store probe metrics summary
     probe_summary: list[dict[str, Any]] = []
     for result in all_results:
-        entry: dict[str, Any] = {
-            "tool_name": result.tool_name,
-        }
+        entry: dict[str, Any] = {"tool_name": result.tool_name}
         if isinstance(result, ProbeResult):
             entry["category"] = result.category.value
             entry["metrics"] = result.metrics
@@ -448,7 +479,29 @@ async def _run_investigation_legacy(
     flag_modified(incident, "meta")
     await session.flush()
 
-    # ── Determine investigation summary for transition reason ────
+    return {}
+
+
+# ── Node: transition ──────────────────────────────────────────────
+
+async def transition_node(state: InvestigationState) -> dict:
+    """Transition to RECOMMENDATION_READY, update KG, and enqueue recommendation.
+
+    Extracted from investigation_service.py L434-492.
+    """
+    if state.get("failed"):
+        return {}
+
+    session = _session_var.get()
+    incident = _incident_var.get()
+    log = logger.bind(
+        tenant_id=state["tenant_id"],
+        incident_id=state["incident_id"],
+    )
+
+    all_results = state["all_results"]
+    anomaly_summary = state.get("anomaly_summary")
+
     tool_names = [r.tool_name for r in all_results]
     anomaly_note = ""
     if anomaly_summary and anomaly_summary["total_count"] > 0:
@@ -476,7 +529,7 @@ async def _run_investigation_legacy(
         reason=reason,
     )
 
-    # ── Knowledge Graph: upsert observed entities (Phase 4) ───────
+    # ── Knowledge Graph: upsert observed entities ─────────────────
     try:
         current_meta = incident.meta or {}
         host = current_meta.get("_private_ip") or current_meta.get("_instance_id")
@@ -489,6 +542,13 @@ async def _run_investigation_legacy(
             host=host,
             service_name=service_name,
         )
+
+        from airex_core.services.investigation_service import (
+            _build_timeline_observations,
+            _build_timeline_metrics,
+            _extract_config_snapshot,
+        )
+
         config_name, config_snapshot = _extract_config_snapshot(all_results)
         await knowledge_graph.record_incident_timeline(
             session=session,
@@ -508,144 +568,100 @@ async def _run_investigation_legacy(
     # Auto-trigger AI recommendation generation
     await _enqueue_recommendation(incident, log)
 
+    return {}
 
-async def _upsert_investigation_entities(
-    *,
+
+# ── Graph builder ─────────────────────────────────────────────────
+
+def _should_continue(state: InvestigationState) -> str:
+    """Route to END if a failure occurred, otherwise continue."""
+    if state.get("failed"):
+        return "end"
+    return "continue"
+
+
+def build_investigation_graph() -> StateGraph:
+    """Construct the 6-node investigation StateGraph."""
+    graph = StateGraph(InvestigationState)
+
+    graph.add_node("resolve_context", resolve_context_node)
+    graph.add_node("plan_probes", plan_probes_node)
+    graph.add_node("execute_probes", execute_probes_node)
+    graph.add_node("analyze", analyze_node)
+    graph.add_node("store", store_node)
+    graph.add_node("transition", transition_node)
+
+    graph.set_entry_point("resolve_context")
+    graph.add_edge("resolve_context", "plan_probes")
+
+    # After plan_probes, check if we failed (no plugin)
+    graph.add_conditional_edges(
+        "plan_probes",
+        _should_continue,
+        {"continue": "execute_probes", "end": END},
+    )
+
+    # After execute_probes, check if we failed (timeout, no results)
+    graph.add_conditional_edges(
+        "execute_probes",
+        _should_continue,
+        {"continue": "analyze", "end": END},
+    )
+
+    graph.add_edge("analyze", "store")
+    graph.add_edge("store", "transition")
+    graph.add_edge("transition", END)
+
+    return graph
+
+
+# ── Public entry point ────────────────────────────────────────────
+
+_compiled_graph = None
+
+
+def _get_compiled_graph():
+    """Lazily compile the graph once."""
+    global _compiled_graph
+    if _compiled_graph is None:
+        _compiled_graph = build_investigation_graph().compile()
+    return _compiled_graph
+
+
+async def run_investigation_graph(
     session: AsyncSession,
     incident: Incident,
-    affected_entities: Sequence[str],
 ) -> None:
-    if not affected_entities:
-        return
+    """Run the LangGraph investigation pipeline.
 
-    incident_entity_id = f"incident:{incident.id}"
-    await knowledge_graph.upsert_node(
-        session=session,
-        tenant_id=incident.tenant_id,
-        entity_id=incident_entity_id,
-        entity_type="incident",
-        label=str(incident.id),
-        properties={"alert_type": incident.alert_type},
-    )
-
-    for entity in affected_entities:
-        entity_type, _, entity_name = entity.partition(":")
-        if not entity_type or not entity_name:
-            continue
-        await knowledge_graph.upsert_node(
-            session=session,
-            tenant_id=incident.tenant_id,
-            entity_id=entity,
-            entity_type=entity_type,
-            label=entity_name,
-            properties={"source": "investigation"},
-        )
-        await knowledge_graph.add_edge(
-            session=session,
-            tenant_id=incident.tenant_id,
-            src_entity_id=incident_entity_id,
-            relation="affected",
-            dst_entity_id=entity,
-            meta={"incident_id": str(incident.id)},
-        )
-
-
-async def persist_investigation_evidence(
-    *,
-    session: AsyncSession,
-    incident: Incident,
-    contract: Any,
-    log: structlog.stdlib.BoundLogger | None = None,
-) -> Evidence:
-    """Persist a normalized investigation evidence contract onto an incident."""
-
-    evidence = Evidence(
-        tenant_id=incident.tenant_id,
-        incident_id=incident.id,
-        tool_name="investigation",
-        raw_output=contract.model_dump_json(),
-    )
-    session.add(evidence)
-    await session.flush()
-
-    meta = dict(incident.meta or {})
-    meta["investigation"] = contract.model_dump()
-    meta["investigation_run"] = _extract_investigation_run_meta(contract.raw_refs)
-    meta["probe_results"] = [
-        {
-            "tool_name": "investigation",
-            "signals": contract.signals,
-            "affected_entities": contract.affected_entities,
-            "confidence": contract.confidence,
-        }
-    ]
-    meta["probe_count"] = 1
-    meta["investigation_summary"] = contract.summary
-    incident.meta = meta
-    flag_modified(incident, "meta")
-    await session.flush()
-
+    Sets session and incident into ContextVars so nodes can access them
+    without passing through the state dict.
+    """
+    session_token = _session_var.set(session)
+    incident_token = _incident_var.set(incident)
     try:
-        await emit_evidence_added(
-            tenant_id=str(incident.tenant_id),
-            incident_id=str(incident.id),
-            tool_name="investigation",
-            evidence_id=str(evidence.id),
-        )
-    except Exception:
-        pass
-
-    try:
-        await _upsert_investigation_entities(
-            session=session,
-            incident=incident,
-            affected_entities=contract.affected_entities,
-        )
-        current_meta = incident.meta or {}
-        host = current_meta.get("_private_ip") or current_meta.get("_instance_id")
-        service_name = current_meta.get("service_name") or current_meta.get("_service_name")
-        await knowledge_graph.record_incident_timeline(
-            session=session,
-            tenant_id=incident.tenant_id,
-            incident_id=incident.id,
-            alert_type=incident.alert_type,
-            service_name=service_name,
-            host=host,
-            observations=contract.signals,
-            metrics={
-                "investigation.confidence": contract.confidence,
-                "investigation.affected_entity_count": len(contract.affected_entities),
-            },
-        )
-    except Exception as exc:
-        if log is not None:
-            log.warning("investigation_kg_entity_upsert_failed", error=str(exc))
-
-    return evidence
-
-
-def _extract_investigation_run_meta(raw_refs: Any) -> dict[str, Any]:
-    if not isinstance(raw_refs, dict):
-        return {
-            "commands_executed": [],
-            "tools_used": [],
-            "fallback_used": False,
-            "failure_reason": "",
+        graph = _get_compiled_graph()
+        initial_state: InvestigationState = {
+            "tenant_id": str(incident.tenant_id),
+            "incident_id": str(incident.id),
+            "alert_type": incident.alert_type,
+            "meta": dict(incident.meta or {}),
+            "use_cloud": False,
+            "primary_plugin": None,
+            "secondary_plugins": [],
+            "total_probes": 0,
+            "all_results": [],
+            "anomaly_summary": None,
+            "error": None,
+            "failed": False,
         }
+        await graph.ainvoke(initial_state)
+    finally:
+        _session_var.reset(session_token)
+        _incident_var.reset(incident_token)
 
-    commands_executed = raw_refs.get("commands_executed")
-    tools_used = raw_refs.get("tools_used")
-    return {
-        "commands_executed": commands_executed if isinstance(commands_executed, list) else [],
-        "tools_used": tools_used if isinstance(tools_used, list) else [],
-        "fallback_used": bool(raw_refs.get("fallback_used", False)),
-        "failure_reason": str(raw_refs.get("failure_reason") or ""),
-        "forensic_tools": (
-            raw_refs.get("forensic_tools")
-            if isinstance(raw_refs.get("forensic_tools"), list)
-            else []
-        ),
-    }
+
+# ── Shared helpers (extracted from investigation_service.py) ──────
 
 
 async def _run_all_probes(
@@ -666,11 +682,9 @@ async def _run_all_probes(
         step: int,
         probe_type: str,
     ) -> InvestigationResult | None:
-        """Run a single probe with timing, progress events, and error handling."""
         probe_name = type(plugin).__name__
         category = getattr(plugin, "alert_type", "unknown")
 
-        # Emit "started" event
         try:
             await emit_investigation_progress(
                 tenant_id=tenant_id,
@@ -689,13 +703,11 @@ async def _run_all_probes(
             result = await plugin.investigate(probe_meta)
             duration_ms = round((time.monotonic() - start_time) * 1000, 1)
 
-            # Tag ProbeResult with timing and type
             if isinstance(result, ProbeResult):
                 result.duration_ms = duration_ms
                 if not result.probe_type:
                     result.probe_type = probe_type
 
-            # Emit "completed" event
             try:
                 await emit_investigation_progress(
                     tenant_id=tenant_id,
@@ -729,7 +741,6 @@ async def _run_all_probes(
                 duration_ms=duration_ms,
             )
 
-            # Emit "failed" event
             try:
                 await emit_investigation_progress(
                     tenant_id=tenant_id,
@@ -744,27 +755,21 @@ async def _run_all_probes(
             except Exception:
                 pass
 
-            # Secondary probe failures are non-fatal
             if probe_type == "secondary":
                 return None
             raise
 
-    # Build task list: primary at step 1, secondaries at steps 2+
     tasks = [_run_single_probe(primary_plugin, meta, 1, "primary")]
     for idx, (sec_type, sec_plugin) in enumerate(secondary_plugins, start=2):
         tasks.append(_run_single_probe(sec_plugin, meta, idx, "secondary"))
 
-    # Run all probes in parallel
     raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Process results — primary failure is fatal, secondary failures are ignored
     results: list[InvestigationResult] = []
     for i, raw in enumerate(raw_results):
         if isinstance(raw, BaseException):
             if i == 0:
-                # Primary probe raised — re-raise
                 raise raw
-            # Secondary probe failed — skip
             log.warning("secondary_probe_exception", error=str(raw))
             continue
         if raw is not None:

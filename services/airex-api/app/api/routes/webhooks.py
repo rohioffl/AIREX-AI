@@ -51,6 +51,7 @@ class Site24x7IntegrationContext:
     integration_type_key: str
     enabled: bool
     status: str | None
+    cloud_account_provider: str | None = None
 
 
 @dataclass(slots=True)
@@ -99,7 +100,7 @@ async def _resolve_site24x7_integration_context(
         sa_text(
             """
             SELECT mi.id, mi.tenant_id, mi.name, mi.slug, mi.enabled, mi.status, it.key AS integration_type_key,
-                   mi.cloud_account_binding_id, cab.external_account_id
+                   mi.cloud_account_binding_id, cab.external_account_id, cab.provider AS cloud_provider
             FROM monitoring_integrations mi
             JOIN integration_types it ON it.id = mi.integration_type_id
             LEFT JOIN cloud_account_bindings cab ON cab.id = mi.cloud_account_binding_id
@@ -142,6 +143,7 @@ async def _resolve_site24x7_integration_context(
         integration_type_key=matched_row.integration_type_key,
         enabled=bool(matched_row.enabled),
         status=matched_row.status,
+        cloud_account_provider=matched_row.cloud_provider,
     )
 
 
@@ -196,6 +198,8 @@ def _merge_site24x7_integration_meta(
         meta["_integration_name"] = integration_context.integration_name
         meta["_integration_slug"] = integration_context.integration_slug
         meta["_integration_type"] = integration_context.integration_type_key
+        if integration_context.cloud_account_provider:
+            meta["_cloud_account_provider"] = integration_context.cloud_account_provider
     if project_binding is not None:
         meta["project_id"] = str(project_binding.project_id)
         meta["project_name"] = project_binding.project_name
@@ -255,8 +259,8 @@ MONITOR_TYPE_MAP: dict[str, str] = {
     "homepage": "http_check",
     "realbrowser": "http_check",
     "restapi": "api_check",
-    "server": "cpu_high",
-    "agentserver": "cpu_high",
+    "server": "server_check",
+    "agentserver": "server_check",
     "amazon": "cloud_check",
     "ec2instance": "cpu_high",
     "rdsinstance": "database_check",
@@ -279,9 +283,13 @@ GENERIC_MONITOR_TYPES = {
     "network_issue",
     "cloud_check",
     "api_check",
+    "server_check",
 }
 
 _KEYWORD_ALERT_OVERRIDES: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"agent.*(?:stopped|down|not responding|unreachable)", re.IGNORECASE), "service_down"),
+    (re.compile(r"service.*(?:stopped|down|not running|unavailable)", re.IGNORECASE), "service_down"),
+    (re.compile(r"\b(?:stopped|down|not responding|unreachable|offline)\b", re.IGNORECASE), "service_down"),
     (re.compile(r"\b(cpu|processor|load average|load)\b", re.IGNORECASE), "cpu_high"),
     (re.compile(r"\b(memory|ram|oom)\b", re.IGNORECASE), "memory_high"),
     (re.compile(r"\b(disk|filesystem|storage|inode)\b", re.IGNORECASE), "disk_full"),
@@ -823,6 +831,7 @@ async def _ingest_site24x7_request(
             Incident.state.notin_(
                 [
                     IncidentState.RESOLVED,
+                    IncidentState.REJECTED,
                     IncidentState.FAILED_ANALYSIS,
                     IncidentState.FAILED_EXECUTION,
                     IncidentState.FAILED_VERIFICATION,
@@ -934,6 +943,12 @@ async def _ingest_site24x7_request(
 
     # Inject structured cloud context into meta for investigation plugins
     merge_context_into_meta(meta, cloud_ctx)
+
+    # Fallback: populate _cloud from integration's cloud account binding
+    # when tag_parser didn't extract it from monitor tags
+    if not meta.get("_cloud") and meta.get("_cloud_account_provider"):
+        meta["_cloud"] = meta["_cloud_account_provider"]
+
     meta = _annotate_tenant_tag_mismatch(
         meta,
         tenant_slug=tenant_slug,

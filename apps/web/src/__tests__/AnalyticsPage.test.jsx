@@ -12,6 +12,9 @@ const mockApi = vi.hoisted(() => ({
   fetchOrganizationAnalytics: vi.fn(),
 }))
 
+// isOrgScoped drives scope automatically — default to tenant-scoped for manual-toggle tests
+const mockWorkspacePath = vi.hoisted(() => ({ isOrgScoped: false }))
+
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => mockAuth,
 }))
@@ -21,11 +24,16 @@ vi.mock('../services/api', () => ({
   fetchOrganizationAnalytics: mockApi.fetchOrganizationAnalytics,
 }))
 
+vi.mock('../hooks/useWorkspacePath', () => ({
+  useWorkspacePath: () => mockWorkspacePath,
+}))
+
 import AnalyticsPage from '../pages/AnalyticsPage'
 
 describe('AnalyticsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockWorkspacePath.isOrgScoped = false
     mockApi.fetchAnalyticsTrends.mockResolvedValue({
       mttr_trends: [],
       resolution_rates: [],
@@ -39,7 +47,7 @@ describe('AnalyticsPage', () => {
     })
   })
 
-  it('loads organization analytics when org scope is selected', async () => {
+  it('loads organization analytics when org scope is selected via toggle', async () => {
     const user = userEvent.setup()
     render(<AnalyticsPage />)
 
@@ -52,5 +60,19 @@ describe('AnalyticsPage', () => {
     expect(await screen.findByText('Total Workspaces')).toBeInTheDocument()
     expect(screen.getByText('Active Workspaces')).toBeInTheDocument()
     expect(screen.getByText('Org Members')).toBeInTheDocument()
+  })
+
+  it('auto-loads org analytics when URL is org-scoped', async () => {
+    mockWorkspacePath.isOrgScoped = true
+    render(<AnalyticsPage />)
+
+    expect(await screen.findByText('Analytics Dashboard')).toBeInTheDocument()
+    // Toggle is hidden when org-scoped
+    expect(screen.queryByRole('button', { name: /all org workspaces/i })).not.toBeInTheDocument()
+    // Org analytics load automatically
+    await waitFor(() => {
+      expect(mockApi.fetchOrganizationAnalytics).toHaveBeenCalledWith('org-1')
+    })
+    expect(await screen.findByText('Total Workspaces')).toBeInTheDocument()
   })
 })

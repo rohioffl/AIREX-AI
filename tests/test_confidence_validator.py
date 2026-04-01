@@ -199,11 +199,11 @@ class TestValidateConfidence:
         assert breakdown["hallucination_penalty"] > 0
 
     @pytest.mark.asyncio
-    async def test_composite_confidence_rewards_grounded_openclaw_evidence(self):
+    async def test_composite_confidence_rewards_grounded_investigation_evidence(self):
         session = _make_session(kg_count=2)
         incident = _make_incident()
         incident.meta = {
-            "openclaw": {
+            "investigation": {
                 "affected_entities": ["host:web-01", "service:checkout"],
                 "raw_refs": {
                     "forensic_tools": ["cpu_diagnostics", "log_analysis"],
@@ -212,7 +212,7 @@ class TestValidateConfidence:
             }
         }
         incident.evidence = [
-            MagicMock(tool_name="openclaw", raw_output="CPU investigation complete"),
+            MagicMock(tool_name="investigation", raw_output="CPU investigation complete"),
             MagicMock(tool_name="cpu_diagnostics", raw_output="Overall CPU Usage: 96%"),
         ]
 
@@ -227,4 +227,4 @@ class TestValidateConfidence:
         assert breakdown["tool_grounding_score"] > 0.5
         assert breakdown["evidence_strength_score"] > 0.5
         assert breakdown["kg_match_score"] > 0
-        assert "OpenClaw forensic tool" in result["grounding_summary"]
+        assert "forensic tool" in result["grounding_summary"]

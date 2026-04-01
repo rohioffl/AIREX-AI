@@ -1,4 +1,4 @@
-"""Internal tool server for OpenClaw forensic investigations."""
+"""Internal tool server for AIREX forensic investigations."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ from airex_core.investigations.infra_state_probe import InfraStateProbe
 from airex_core.investigations.k8s_probe import K8sStatusProbe
 from airex_core.investigations.log_analysis_probe import LogAnalysisProbe
 from airex_core.models.incident import Incident
-from airex_core.schemas.openclaw import EvidenceContract
-from airex_core.services.investigation_service import persist_openclaw_evidence_contract
+from airex_core.schemas.evidence import EvidenceContract
+from airex_core.services.investigation_service import persist_investigation_evidence
 from airex_core.services.rag_context import build_structured_context
 
 
@@ -30,7 +30,7 @@ logger = structlog.get_logger()
 
 
 class InternalToolRequest(BaseModel):
-    """Base request passed from the OpenClaw plugin into AIREX."""
+    """Base request passed from external tool integrations into AIREX."""
 
     tenant_id: uuid.UUID
     incident_meta: dict[str, Any] = Field(default_factory=dict)
@@ -72,7 +72,7 @@ class IncidentContextRequest(BaseModel):
 
 
 class IncidentContextResponse(BaseModel):
-    """Incident context returned to OpenClaw."""
+    """Incident context returned to the caller."""
 
     incident_id: uuid.UUID
     alert_type: str
@@ -87,7 +87,7 @@ class IncidentContextResponse(BaseModel):
 
 
 class WriteEvidenceRequest(BaseModel):
-    """Request payload for persisting normalized OpenClaw evidence."""
+    """Request payload for persisting normalized investigation evidence."""
 
     tenant_id: uuid.UUID
     incident_id: uuid.UUID
@@ -95,7 +95,7 @@ class WriteEvidenceRequest(BaseModel):
 
 
 class WriteEvidenceResponse(BaseModel):
-    """Confirmation payload for persisted OpenClaw evidence."""
+    """Confirmation payload for persisted investigation evidence."""
 
     ok: bool
     evidence_id: uuid.UUID
@@ -217,7 +217,7 @@ async def _load_incident_for_tool(
 @router.post(
     "/read_incident_context",
     response_model=IncidentContextResponse,
-    summary="Read normalized incident context for OpenClaw",
+    summary="Read normalized incident context for investigation",
 )
 async def read_incident_context(
     request: IncidentContextRequest,
@@ -265,7 +265,7 @@ async def read_incident_context(
 @router.post(
     "/write_evidence_contract",
     response_model=WriteEvidenceResponse,
-    summary="Persist normalized OpenClaw evidence onto an incident",
+    summary="Persist normalized investigation evidence onto an incident",
 )
 async def write_evidence_contract(
     request: WriteEvidenceRequest,
@@ -277,7 +277,7 @@ async def write_evidence_contract(
         incident_id=request.incident_id,
     )
 
-    evidence = await persist_openclaw_evidence_contract(
+    evidence = await persist_investigation_evidence(
         session=session,
         incident=incident,
         contract=request.evidence,

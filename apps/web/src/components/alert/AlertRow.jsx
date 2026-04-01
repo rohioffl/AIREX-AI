@@ -13,6 +13,7 @@ import {
 import SeverityBadge from '../common/SeverityBadge'
 import StateBadge from '../common/StateBadge'
 import { formatRelativeTime, truncateId } from '../../utils/formatters'
+import { useWorkspacePath } from '../../hooks/useWorkspacePath'
 
 export default function AlertRow({
   alert,
@@ -26,6 +27,7 @@ export default function AlertRow({
   selected = false,
   onSelect = null,
 }) {
+  const { buildPath, isOrgScoped } = useWorkspacePath()
   const isUrgent = alert.severity === 'CRITICAL' || alert.state === 'AWAITING_APPROVAL'
   const needsAction = alert.state === 'AWAITING_APPROVAL' || alert.state === 'RECOMMENDATION_READY'
   const manualNote = (manualReason || '').trim()
@@ -115,7 +117,7 @@ export default function AlertRow({
         </div>
       )}
       <Link
-        to={`/incidents/${alert.id}${alert.tenant_id ? `?tenant_id=${encodeURIComponent(alert.tenant_id)}` : ''}`}
+        to={buildPath(`incidents/${alert.id}`) + (isOrgScoped && alert.tenant_id ? `?tenant_id=${encodeURIComponent(alert.tenant_id)}` : '')}
         className="flex items-center gap-3 px-4 py-3 flex-1"
         style={{ textDecoration: 'none', color: 'inherit', display: 'flex', width: '100%', boxSizing: 'border-box' }}
       >

@@ -9,6 +9,7 @@ import SystemGraph from '../components/common/SystemGraph'
 import AlertHistoryWidget from '../components/common/AlertHistoryWidget'
 import AlertRow from '../components/alert/AlertRow'
 import { formatTimestamp, formatDuration } from '../utils/formatters'
+import { useWorkspacePath } from '../hooks/useWorkspacePath'
 
 const ACTIVE_STATES = [
   'RECEIVED',
@@ -24,10 +25,11 @@ const TERMINAL_STATES = ['RESOLVED', 'FAILED_EXECUTION', 'FAILED_VERIFICATION', 
 export default function DashboardPage() {
   const { incidents, loading, error, connected, reconnecting, reload } = useIncidents()
   const { activeTenant, activeOrganization, user, organizationMemberships } = useAuth()
+  const { isOrgScoped } = useWorkspacePath()
   const [graphType, setGraphType] = useState('area')
   const [metrics, setMetrics] = useState(null)
   const [_metricsLoading, setMetricsLoading] = useState(true)
-  const [orgScope, setOrgScope] = useState('tenant')
+  const [orgScope, setOrgScope] = useState(() => isOrgScoped ? 'org' : 'tenant')
   const [orgAnalytics, setOrgAnalytics] = useState(null)
   const [orgAnalyticsLoading, setOrgAnalyticsLoading] = useState(false)
 
@@ -147,7 +149,7 @@ export default function DashboardPage() {
                   {activeTenant.display_name || activeTenant.name}
                 </span>
               )}
-              {isOrgAdmin && activeOrganization && (
+              {isOrgAdmin && activeOrganization && !isOrgScoped && (
                 <div className="flex rounded-md overflow-hidden ml-2" style={{ border: '1px solid var(--border)' }}>
                   {[
                     { key: 'tenant', label: 'This Workspace' },

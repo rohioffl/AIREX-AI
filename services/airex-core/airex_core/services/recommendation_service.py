@@ -20,7 +20,6 @@ from airex_core.core.execution_safety import (
 )
 from airex_core.core.events import emit_recommendation_ready
 from airex_core.core.metrics import ai_failure_total, ai_request_total
-from airex_core.core.openclaw_recommendation_bridge import OpenClawRecommendationBridge
 from airex_core.core.policy import check_policy, evaluate_approval
 from airex_core.core.context_resolver import resolve_execution_context
 from airex_core.core.state_machine import transition_state
@@ -33,7 +32,6 @@ from airex_core.services.rag_context import build_structured_context
 logger = structlog.get_logger()
 
 llm_client = LLMClient()
-openclaw_recommendation_bridge = OpenClawRecommendationBridge()
 
 
 async def generate_recommendation(
@@ -109,29 +107,14 @@ async def generate_recommendation(
         session, incident.tenant_id, incident.alert_type
     )
 
-    recommendation = None
-    if settings.OPENCLAW_ENABLED:
-        ai_request_total.labels(model="openclaw").inc()
-        try:
-            recommendation = await openclaw_recommendation_bridge.generate_recommendation(
-                alert_type=incident.alert_type,
-                evidence=evidence_text,
-                severity=incident.severity.value,
-                context=context,
-            )
-        except Exception as exc:  # pragma: no cover - defensive logging
-            log.warning("openclaw_recommendation_failed", error=str(exc))
-            ai_failure_total.labels(model="openclaw", error_type="call_failed").inc()
-
-    if recommendation is None:
-        ai_request_total.labels(model="primary").inc()
-        recommendation = await llm_client.generate_recommendation(
-            alert_type=incident.alert_type,
-            evidence=evidence_text,
-            severity=incident.severity.value,
-            context=context,
-            redis=redis,
-        )
+    ai_request_total.labels(model="primary").inc()
+    recommendation = await llm_client.generate_recommendation(
+        alert_type=incident.alert_type,
+        evidence=evidence_text,
+        severity=incident.severity.value,
+        context=context,
+        redis=redis,
+    )
 
     # Apply confidence adjustment from feedback learning
     if recommendation and base_confidence_adjustment != 0:

@@ -133,7 +133,7 @@ class TestEnhancedRecommendation:
         assert len(data["alternatives"]) == 1
         assert data["alternatives"][0]["action"] == "flush_cache"
 
-    def test_openclaw_contract_fields_round_trip(self):
+    def test_contract_fields_round_trip(self):
         rec = Recommendation(
             root_cause="CPU saturation on checkout-api",
             proposed_action="scale_instances",
@@ -199,7 +199,7 @@ class TestParseRecommendation:
         assert len(rec.evidence_annotations) == 2
         assert len(rec.verification_criteria) == 2
 
-    def test_openclaw_contract_fields_parsed(self):
+    def test_contract_fields_parsed(self):
         data = {
             "action_type": "execute_fix",
             "action_id": "scale_instances",

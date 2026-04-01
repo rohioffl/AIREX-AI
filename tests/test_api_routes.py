@@ -121,30 +121,8 @@ async def test_health_returns_ok(client):
 
 
 @pytest.mark.asyncio
-async def test_openclaw_health_returns_probe_status(client, monkeypatch):
-    from app import main as app_main
-
-    monkeypatch.setattr(
-        app_main.openclaw_bridge,
-        "ping",
-        AsyncMock(return_value={"reachable": True, "status_code": 200, "url": "http://127.0.0.1:18789/health"}),
-    )
-    monkeypatch.setattr(settings, "OPENCLAW_ENABLED", True)
-    monkeypatch.setattr(settings, "OPENCLAW_GATEWAY_URL", "http://127.0.0.1:18789")
-    monkeypatch.setattr(settings, "OPENCLAW_GATEWAY_TOKEN", "")
-
-    response = await client.get("/health/openclaw")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "ok"
-    assert payload["gateway"]["enabled"] is True
-    assert payload["probe"]["reachable"] is True
-
-
-@pytest.mark.asyncio
 async def test_internal_tools_require_token(client, monkeypatch):
-    monkeypatch.setattr(settings, "OPENCLAW_TOOL_SERVER_TOKEN", "tool-secret")
+    monkeypatch.setattr(settings, "INTERNAL_TOOL_TOKEN", "tool-secret")
 
     response = await client.post(
         "/api/v1/internal/tools/fetch_log_analysis",
@@ -162,7 +140,7 @@ async def test_internal_tools_require_token(client, monkeypatch):
 async def test_internal_host_diagnostics_uses_cloud_probe(client, monkeypatch):
     from app.api.routes import internal_tools
 
-    monkeypatch.setattr(settings, "OPENCLAW_TOOL_SERVER_TOKEN", "tool-secret")
+    monkeypatch.setattr(settings, "INTERNAL_TOOL_TOKEN", "tool-secret")
     probe_result = ProbeResult(
         tool_name="cloud_investigation_aws",
         raw_output="=== Cloud Investigation: i-123 ===",
@@ -199,7 +177,7 @@ async def test_internal_host_diagnostics_uses_cloud_probe(client, monkeypatch):
 async def test_internal_host_diagnostics_uses_alert_probe(client, monkeypatch):
     from app.api.routes import internal_tools
 
-    monkeypatch.setattr(settings, "OPENCLAW_TOOL_SERVER_TOKEN", "tool-secret")
+    monkeypatch.setattr(settings, "INTERNAL_TOOL_TOKEN", "tool-secret")
 
     fake_probe = MagicMock()
     fake_probe.investigate = AsyncMock(
@@ -233,7 +211,7 @@ async def test_internal_host_diagnostics_uses_alert_probe(client, monkeypatch):
 async def test_internal_fetch_change_context_returns_probe(client, monkeypatch):
     from app.api.routes import internal_tools
 
-    monkeypatch.setattr(settings, "OPENCLAW_TOOL_SERVER_TOKEN", "tool-secret")
+    monkeypatch.setattr(settings, "INTERNAL_TOOL_TOKEN", "tool-secret")
     monkeypatch.setattr(
         internal_tools.ChangeDetectionProbe,
         "investigate",
@@ -265,7 +243,7 @@ async def test_internal_fetch_change_context_returns_probe(client, monkeypatch):
 async def test_internal_fetch_infra_state_returns_probe(client, monkeypatch):
     from app.api.routes import internal_tools
 
-    monkeypatch.setattr(settings, "OPENCLAW_TOOL_SERVER_TOKEN", "tool-secret")
+    monkeypatch.setattr(settings, "INTERNAL_TOOL_TOKEN", "tool-secret")
     monkeypatch.setattr(
         internal_tools.InfraStateProbe,
         "investigate",
@@ -297,7 +275,7 @@ async def test_internal_fetch_infra_state_returns_probe(client, monkeypatch):
 async def test_internal_fetch_k8s_status_returns_probe(client, monkeypatch):
     from app.api.routes import internal_tools
 
-    monkeypatch.setattr(settings, "OPENCLAW_TOOL_SERVER_TOKEN", "tool-secret")
+    monkeypatch.setattr(settings, "INTERNAL_TOOL_TOKEN", "tool-secret")
     monkeypatch.setattr(
         internal_tools.K8sStatusProbe,
         "investigate",
@@ -333,7 +311,7 @@ async def test_internal_read_incident_context_returns_structured_context(
 ):
     from app.api.routes import internal_tools
 
-    monkeypatch.setattr(settings, "OPENCLAW_TOOL_SERVER_TOKEN", "tool-secret")
+    monkeypatch.setattr(settings, "INTERNAL_TOOL_TOKEN", "tool-secret")
     incident_id = uuid.uuid4()
     incident = SimpleNamespace(
         id=incident_id,
@@ -379,12 +357,12 @@ async def test_internal_read_incident_context_returns_structured_context(
 
 
 @pytest.mark.asyncio
-async def test_internal_write_evidence_contract_persists_openclaw_evidence(
+async def test_internal_write_evidence_contract_persists_investigation_evidence(
     client,
     mock_session,
     monkeypatch,
 ):
-    monkeypatch.setattr(settings, "OPENCLAW_TOOL_SERVER_TOKEN", "tool-secret")
+    monkeypatch.setattr(settings, "INTERNAL_TOOL_TOKEN", "tool-secret")
     tenant_id = uuid.UUID(TENANT_ID)
     incident_id = uuid.uuid4()
     incident = Incident(
@@ -426,7 +404,7 @@ async def test_internal_write_evidence_contract_persists_openclaw_evidence(
     payload = response.json()
     assert payload["ok"] is True
     assert payload["evidence_id"]
-    assert incident.meta["openclaw"]["summary"] == "CPU Investigation: web-1"
+    assert incident.meta["investigation"]["summary"] == "CPU Investigation: web-1"
     assert incident.meta["investigation_summary"] == "CPU Investigation: web-1"
 
 
@@ -571,6 +549,7 @@ async def test_bulk_reject_hits_static_route(client):
 @pytest.mark.asyncio
 async def test_get_nonexistent_incident_returns_404(client, mock_session):
     mock_result = MagicMock()
+    mock_result.one_or_none = MagicMock(return_value=None)
     mock_result.scalar_one_or_none = MagicMock(return_value=None)
     mock_session.execute = AsyncMock(return_value=mock_result)
 

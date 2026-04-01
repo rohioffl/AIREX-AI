@@ -69,14 +69,11 @@ class Settings(BaseSettings):
     RAG_INCIDENT_SUMMARY_MAX_CHARS: int = 1600
     RAG_SIMILARITY_THRESHOLD: float = 0.7  # cosine distance; lower = more similar
 
-    # ── OpenClaw gateway (Phase 2 — InvestigationBridge) ───────────
-    # See docs/openclaw_local_setup.md and services/openclaw/env.example
-    OPENCLAW_ENABLED: bool = False
-    OPENCLAW_GATEWAY_URL: str = "http://127.0.0.1:18789"
-    OPENCLAW_GATEWAY_TOKEN: str = ""
-    OPENCLAW_REQUEST_TIMEOUT: int = 120
-    OPENCLAW_AGENT_ID: str = "controller"
-    OPENCLAW_TOOL_SERVER_TOKEN: str = ""
+    # ── Internal Tool Server ────────────────────────────────────────
+    INTERNAL_TOOL_TOKEN: str = ""
+
+    # ── LangGraph Investigation ────────────────────────────────────
+    USE_LANGGRAPH_INVESTIGATION: bool = True
 
     # Timeouts (seconds)
     INVESTIGATION_TIMEOUT: int = 60

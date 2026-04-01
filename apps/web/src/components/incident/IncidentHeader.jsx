@@ -9,6 +9,7 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
+import { useState } from 'react'
 import { useTheme } from '../../context/ThemeContext'
 import StateBadge from '../common/StateBadge'
 import SeverityBadge from '../common/SeverityBadge'
@@ -30,13 +31,27 @@ export default function IncidentHeader({ incident }) {
   const { isDark } = useTheme()
   const meta = incident.meta || {}
   const alertCount = meta._alert_count != null ? Number(meta._alert_count) : 1
-  const durationSec = meta._alert_duration_seconds != null ? Number(meta._alert_duration_seconds) : null
-  const firstSeen = meta._alert_first_seen_at ? formatTimestamp(String(meta._alert_first_seen_at)) : null
+  const durationSec = meta._alert_duration_seconds != null
+    ? Number(meta._alert_duration_seconds)
+    : (incident.resolution_duration_seconds != null ? Number(incident.resolution_duration_seconds) : null)
+  const [mountTime] = useState(() => Date.now())
+  const activeDurationSec = durationSec == null && incident.created_at
+    ? Math.round((mountTime - new Date(incident.created_at).getTime()) / 1000)
+    : null
+  const effectiveDuration = durationSec ?? activeDurationSec
+  const firstSeen = meta._alert_first_seen_at ? formatTimestamp(String(meta._alert_first_seen_at)) : formatTimestamp(incident.created_at)
   const lastSeen = meta._alert_last_seen_at ? formatTimestamp(String(meta._alert_last_seen_at)) : null
   const unstable = Boolean(meta._unstable)
-  const cloud = meta._cloud || meta.cloud
+  const cloud = meta._cloud || meta.cloud || meta._cloud_account_provider
   const region = meta._region || meta.region || meta.zone || meta._zone
-  const tenant = meta._tenant_name || meta.tenant
+  const project = meta._project || meta.project
+  const cloudProvider = cloud ? cloud.toUpperCase() : null
+  const source = meta._source || meta._integration_type
+  const sourceLabel = source ? source.charAt(0).toUpperCase() + source.slice(1) : null
+  const cloudAccountLabel = cloudProvider
+    ? (region || project || cloudProvider)
+    : sourceLabel
+  const tenant = incident.tenant_name || meta._tenant_name || meta.tenant
   const summary = meta.INCIDENT_REASON || meta.INCIDENT_DETAILS
   const latestTransition = incident.state_transitions?.[incident.state_transitions.length - 1]
   const confidence = meta.recommendation?.confidence != null ? Math.round(meta.recommendation.confidence * 100) : null
@@ -145,7 +160,7 @@ export default function IncidentHeader({ incident }) {
               <div className="text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>Alert Digest</div>
               <div className="mt-3 space-y-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
                 <div className="flex items-center justify-between"><span>Repeats</span><span>{alertCount}×</span></div>
-                <div className="flex items-center justify-between"><span>Duration</span><span>{durationSec ? formatDuration(durationSec) : '—'}</span></div>
+                <div className="flex items-center justify-between"><span>Duration</span><span>{effectiveDuration ? formatDuration(effectiveDuration) : '—'}</span></div>
                 <div className="flex items-center justify-between"><span>First seen</span><span>{firstSeen || '—'}</span></div>
                 <div className="flex items-center justify-between"><span>Last seen</span><span>{lastSeen || '—'}</span></div>
               </div>
@@ -156,18 +171,18 @@ export default function IncidentHeader({ incident }) {
         {/* Metric cards row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: 'Alert Repeats', value: `${alertCount}×`, hint: lastSeen ? `last ${lastSeen}` : 'single alert', icon: Repeat },
-            { label: 'Active Duration', value: durationSec ? formatDuration(durationSec) : '—', hint: firstSeen ? `since ${firstSeen}` : 'waiting data', icon: Clock },
-            { label: 'Cloud Target', value: cloud ? cloud.toUpperCase() : 'Unknown', hint: region || 'no region received', icon: Cloud },
-            { label: 'Workspace Scope', value: tenant || 'default', hint: `state ${incident.state}`, icon: GaugeCircle },
+            { label: 'Alert Repeats', value: `${alertCount}×`, hint: lastSeen ? `last ${lastSeen}` : (alertCount > 1 ? 'deduplicated' : 'single alert'), icon: Repeat },
+            { label: 'Active Duration', value: effectiveDuration ? formatDuration(effectiveDuration) : '—', hint: firstSeen ? `since ${firstSeen}` : '—', icon: Clock },
+            { label: 'Cloud Target', value: cloudAccountLabel || '—', hint: cloudProvider ? `${cloudProvider}${region ? ` · ${region}` : ''}` : (sourceLabel || '—'), icon: Cloud },
+            { label: 'Workspace', value: tenant || '—', hint: incident.alert_type || '—', icon: GaugeCircle },
           ].map((card) => (
-            <div key={card.label} className="rounded-2xl px-4 py-3 hover-lift" style={{ background: isDark ? 'rgba(6,8,15,0.6)' : 'rgba(255,255,255,0.6)', border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.08)' }}>
+            <div key={card.label} className="rounded-2xl px-4 py-3 hover-lift min-w-0" style={{ background: isDark ? 'rgba(6,8,15,0.6)' : 'rgba(255,255,255,0.6)', border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.08)' }}>
               <div className="flex items-center justify-between" style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {card.label}
                 <card.icon size={13} />
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }}>{card.value}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{card.hint}</div>
+              <div className="truncate" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)' }} title={card.value}>{card.value}</div>
+              <div className="truncate" style={{ fontSize: 11, color: 'var(--text-secondary)' }} title={card.hint}>{card.hint}</div>
             </div>
           ))}
         </div>

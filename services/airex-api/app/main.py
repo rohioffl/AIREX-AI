@@ -2,7 +2,6 @@
 
 import time
 from contextlib import asynccontextmanager
-from urllib.parse import urlparse
 
 import redis.asyncio as aioredis
 import structlog
@@ -44,7 +43,6 @@ from app.api.routes import (
 )
 from airex_core.core.config import settings
 from airex_core.core.events import set_redis
-from airex_core.core.investigation_bridge import InvestigationBridge
 from airex_core.core.logging import setup_logging
 from airex_core.core.csrf import CSRFMiddleware
 from airex_core.core.metrics import http_request_duration_seconds
@@ -53,7 +51,6 @@ from airex_core.core.metrics import http_request_duration_seconds
 setup_logging(json_output=False)
 
 logger = structlog.get_logger()
-openclaw_bridge = InvestigationBridge()
 
 
 @asynccontextmanager
@@ -125,28 +122,6 @@ async def correlation_id_middleware(request: Request, call_next):
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "airex-backend"}
-
-
-@app.get("/health/openclaw")
-async def health_check_openclaw():
-    parsed = urlparse(settings.OPENCLAW_GATEWAY_URL)
-    gateway = {
-        "enabled": settings.OPENCLAW_ENABLED,
-        "url": settings.OPENCLAW_GATEWAY_URL,
-        "host": parsed.hostname or "",
-        "port": parsed.port,
-        "has_token": bool(settings.OPENCLAW_GATEWAY_TOKEN),
-    }
-
-    probe = await openclaw_bridge.ping()
-    status = "ok" if probe.get("reachable") else "degraded"
-
-    return {
-        "status": status,
-        "service": "airex-openclaw-bridge",
-        "gateway": gateway,
-        "probe": probe,
-    }
 
 
 # Prometheus metrics endpoint

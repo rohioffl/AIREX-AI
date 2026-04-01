@@ -171,8 +171,8 @@ def require_authenticated_user(current_user: TokenData | None) -> TokenData:
 async def require_internal_tool_access(
     x_internal_tool_token: str | None = Header(None, alias="X-Internal-Tool-Token"),
 ) -> None:
-    """Require the shared secret used by the internal OpenClaw tool server."""
-    configured_token = settings.OPENCLAW_TOOL_SERVER_TOKEN or settings.OPENCLAW_GATEWAY_TOKEN
+    """Require the shared secret used by the internal tool server."""
+    configured_token = settings.INTERNAL_TOOL_TOKEN
     if not configured_token:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -51,6 +51,9 @@ CORRELATION_MAP: dict[str, list[str]] = {
     # Mail/FTP — check network
     "mail_check": ["network_issue", "port_check"],
     "ftp_check": ["network_issue", "port_check"],
+    # Service/agent down — check if host is reachable and system resources
+    "service_down": ["network_issue", "cpu_high", "memory_high"],
+    "server_check": ["network_issue", "cpu_high", "memory_high"],
 }
 
 

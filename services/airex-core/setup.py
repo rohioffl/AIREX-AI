@@ -27,6 +27,7 @@ setup(
         "structlog>=24.4.0,<26.0.0",
         "prometheus-client>=0.21.0,<3.0.0",
         "pyyaml>=6.0",
+        "langgraph>=1.1.0,<2.0.0",
     ],
     python_requires=">=3.12",
 )

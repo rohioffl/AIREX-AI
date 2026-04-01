@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useLocation, Link, useNavigate } from 'react-router-dom'
+import { useWorkspacePath } from '../hooks/useWorkspacePath'
 import {
   AlertTriangle, Bell,
   ShieldAlert, AlertOctagon, Radio, Zap, Server, Plus,
@@ -13,7 +14,6 @@ import AlertRow from '../components/alert/AlertRow'
 import CreateIncidentModal from '../components/incident/CreateIncidentModal'
 import { exportIncidents, bulkApprove, bulkReject } from '../services/api'
 import { useAuth } from '../context/AuthContext'
-import { isAllTenantsScopeForOrganization } from '../utils/workspaceScope'
 import { extractErrorMessage } from '../utils/errorHandler'
 
 const ACTION_STATES = ['RECOMMENDATION_READY', 'AWAITING_APPROVAL']
@@ -38,12 +38,11 @@ const SORT_OPTIONS = [
 export default function AlertsPage() {
   const location = useLocation()
   const { activeOrganization } = useAuth()
+  const { buildPath, isOrgScoped } = useWorkspacePath()
   const searchParams = new URLSearchParams(location.search)
   const urlSearch = searchParams.get('search') || ''
   const hostFilter = searchParams.get('host') || ''
-  const organizationId = isAllTenantsScopeForOrganization(activeOrganization?.id)
-    ? activeOrganization?.id
-    : null
+  const organizationId = isOrgScoped ? activeOrganization?.id : null
 
   const { incidents, loading, error, connected, reconnecting, reload, setFilters } = useIncidents({ 
     search: urlSearch || null,
@@ -179,7 +178,7 @@ export default function AlertsPage() {
       setShowRejectInput(false)
       setRejectReason('')
       if (result?.rejected_count > 0) {
-        navigate('/rejected')
+        navigate(buildPath('rejected'))
       } else {
         await reload()
       }
@@ -432,7 +431,7 @@ export default function AlertsPage() {
               } else {
                 newParams.delete('search')
               }
-              navigate(`/alerts?${newParams.toString()}`, { replace: true })
+              navigate(`${buildPath('alerts')}?${newParams.toString()}`, { replace: true })
             }}
             className="w-full pl-10 pr-3 py-2 rounded-lg outline-none transition-all"
             style={{

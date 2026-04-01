@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class EvidenceContract(BaseModel):
-    """Structured OpenClaw investigation payload expected by AIREX."""
+    """Structured investigation evidence payload."""
 
     summary: str
     signals: list[str] = Field(default_factory=list)

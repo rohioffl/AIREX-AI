@@ -91,8 +91,8 @@ class TestMonitorTypeMapping:
     def test_homepage_maps_to_http_check(self):
         assert _map_site24x7_alert_type("HOMEPAGE") == "http_check"
 
-    def test_server_maps_to_cpu_high(self):
-        assert _map_site24x7_alert_type("SERVER") == "cpu_high"
+    def test_server_maps_to_server_check(self):
+        assert _map_site24x7_alert_type("SERVER") == "server_check"
 
     def test_ping_maps_to_network_issue(self):
         assert _map_site24x7_alert_type("PING") == "network_issue"

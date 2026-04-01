@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
+import { useWorkspacePath } from '../hooks/useWorkspacePath'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '../components/common/KeyboardShortcutsModal'
 import {
@@ -47,9 +48,10 @@ export default function IncidentDetail() {
   const { id } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
+  const { buildPath } = useWorkspacePath()
   const tenantOverride = new URLSearchParams(location.search).get('tenant_id')
   const { activeTenant, switchTenant } = useAuth()
-  const { incident, loading, error, connected, reconnecting, executionLogs, probeSteps } = useIncidentDetail(id, tenantOverride)
+  const { incident, loading, error, connected, reconnecting, executionLogs, probeSteps, reload } = useIncidentDetail(id, tenantOverride)
   const { isDark } = useTheme()
   const [ackRejectModalOpen, setAckRejectModalOpen] = useState(false)
   const [modalInitialAction, setModalInitialAction] = useState(null) // 'acknowledge' | 'reject'
@@ -102,7 +104,7 @@ export default function IncidentDetail() {
     setRejectError(null)
     try {
       await rejectIncident(incident.id, note)
-      navigate('/rejected', { replace: true })
+      navigate(buildPath('rejected'), { replace: true })
     } catch (err) {
       setRejectError(extractErrorMessage(err) || err.message)
       setRejectLoading(false)
@@ -169,7 +171,7 @@ export default function IncidentDetail() {
       {/* Breadcrumb */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2" style={{ fontSize: 14 }}>
-          <Link to="/incidents" className="flex items-center gap-1.5 transition-colors" style={{ color: 'var(--text-muted)' }}>
+          <Link to={buildPath('alerts')} className="flex items-center gap-1.5 transition-colors" style={{ color: 'var(--text-muted)' }}>
             <ArrowLeft size={14} />
             Incidents
           </Link>
@@ -269,7 +271,7 @@ export default function IncidentDetail() {
                 Same server — other alerts
               </div>
               <Link
-                to={`/alerts?host=${encodeURIComponent(incident.host_key)}`}
+                to={buildPath(`alerts?host=${encodeURIComponent(incident.host_key)}`)}
                 className="flex items-center gap-1 transition-colors"
                 style={{ fontSize: 10, fontWeight: 600, color: 'var(--neon-indigo)', textDecoration: 'none' }}
                 onMouseEnter={(e) => e.currentTarget.style.color = 'var(--neon-indigo)'}
@@ -288,7 +290,7 @@ export default function IncidentDetail() {
                     <div
                       onClick={(e) => {
                         e.preventDefault()
-                        navigate(`/incidents/${rel.id}`)
+                        navigate(buildPath(`incidents/${rel.id}`))
                       }}
                       className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg transition-colors cursor-pointer"
                       style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 13 }}
@@ -360,7 +362,7 @@ export default function IncidentDetail() {
         <AutoRunbook incident={incident} />
 
         {/* 5. Assignment */}
-        <AssignmentPanel incident={incident} />
+        <AssignmentPanel incident={incident} onRefresh={() => reload({ silent: true })} />
 
         {/* 6. Related Incidents (Manual Links) */}
         <RelatedIncidentsPanel incident={incident} />

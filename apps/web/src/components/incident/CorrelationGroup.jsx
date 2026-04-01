@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeContext'
+import { useWorkspacePath } from '../../hooks/useWorkspacePath'
 import {
   GitBranch,
   ChevronDown,
@@ -17,6 +18,7 @@ import { formatRelativeTime } from '../../utils/formatters'
 export default function CorrelationGroup({ incident }) {
   const { isDark } = useTheme()
   const navigate = useNavigate()
+  const { buildPath, isOrgScoped } = useWorkspacePath()
   const [expanded, setExpanded] = useState(false)
 
   const correlatedIncidents = incident?.correlated_incidents || []
@@ -142,12 +144,12 @@ export default function CorrelationGroup({ incident }) {
             {correlatedIncidents.map((rel) => (
               <li key={rel.id}>
                 <div
-                  onClick={() => navigate(`/incidents/${rel.id}`)}
+                  onClick={() => navigate(buildPath(`incidents/${rel.id}`) + (isOrgScoped && rel.tenant_id ? `?tenant_id=${encodeURIComponent(rel.tenant_id)}` : ''))}
                   className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg transition-colors cursor-pointer"
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') navigate(`/incidents/${rel.id}`)
+                    if (e.key === 'Enter') navigate(buildPath(`incidents/${rel.id}`) + (isOrgScoped && rel.tenant_id ? `?tenant_id=${encodeURIComponent(rel.tenant_id)}` : ''))
                   }}
                   style={{
                     background: isDark ? 'var(--bg-input)' : '#FFFFFF',

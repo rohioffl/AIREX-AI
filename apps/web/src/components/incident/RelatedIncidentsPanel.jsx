@@ -5,11 +5,13 @@ import { fetchRelatedIncidents, linkIncident, unlinkIncident, fetchIncidents } f
 import { formatRelativeTime } from '../../utils/formatters'
 import { extractErrorMessage } from '../../utils/errorHandler'
 import { useToasts } from '../../context/ToastContext'
+import { useWorkspacePath } from '../../hooks/useWorkspacePath'
 import StateBadge from '../common/StateBadge'
 import SeverityBadge from '../common/SeverityBadge'
 
 export default function RelatedIncidentsPanel({ incident }) {
   const { addToast } = useToasts()
+  const { buildPath, isOrgScoped } = useWorkspacePath()
   const [related, setRelated] = useState([])
   const [loading, setLoading] = useState(true)
   const [showLinkModal, setShowLinkModal] = useState(false)
@@ -154,7 +156,7 @@ export default function RelatedIncidentsPanel({ incident }) {
               style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}
             >
               <Link
-                to={`/incidents/${rel.related_incident_id}`}
+                to={buildPath(`incidents/${rel.related_incident_id}`) + (isOrgScoped && rel.related_incident?.tenant_id ? `?tenant_id=${encodeURIComponent(rel.related_incident.tenant_id)}` : '')}
                 className="flex-1 min-w-0 flex items-center gap-3"
                 style={{ textDecoration: 'none', color: 'var(--text-primary)' }}
               >

@@ -96,8 +96,9 @@ class Site24x7Payload(BaseModel):
         Extract IP from all possible payload fields.
 
         Site24x7 sends the server IP in various fields depending on
-        monitor type: IPADDRESS, IP_ADDRESS, MONITORURL, DISPLAYNAME,
-        or even inside MONITORNAME.
+        monitor type: IPADDRESS, IP_ADDRESS, IPv4 (list), MONITORURL,
+        DISPLAYNAME, or even inside MONITORNAME.  AWS-style hostnames
+        like ``ip-172-31-71-160`` are also parsed.
         """
         import re
 
@@ -106,6 +107,11 @@ class Site24x7Payload(BaseModel):
             r"|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
             r"|192\.168\.\d{1,3}\.\d{1,3}"
             r"|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+        )
+
+        # AWS-style hostname: ip-172-31-71-160 → 172.31.71.160
+        aws_hostname_re = re.compile(
+            r"\bip-(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\b"
         )
 
         # Check explicit IP fields first
@@ -118,7 +124,18 @@ class Site24x7Payload(BaseModel):
             if val and val.strip():
                 return val.strip()
 
-        # Try to extract IP from URL/name fields
+        # Check IPv4 field — Site24x7 SERVER monitors send ["172.31.71.160"]
+        extra = self.model_extra or {}
+        ipv4_val = extra.get("IPv4") or extra.get("ipv4")
+        if ipv4_val:
+            if isinstance(ipv4_val, list) and ipv4_val:
+                first = str(ipv4_val[0]).strip()
+                if first:
+                    return first
+            elif isinstance(ipv4_val, str) and ipv4_val.strip():
+                return ipv4_val.strip()
+
+        # Try to extract IP from URL/name fields (dotted notation first)
         for val in [
             self.MONITORURL,
             self.monitorurl,
@@ -132,8 +149,21 @@ class Site24x7Payload(BaseModel):
                 if match:
                     return match.group(1)
 
+        # Try AWS-style hostname parsing (ip-X-X-X-X → X.X.X.X)
+        for val in [
+            self.MONITORURL,
+            self.monitorurl,
+            self.DISPLAYNAME,
+            self.displayname,
+            self.MONITORNAME,
+            self.monitor_name,
+        ]:
+            if val:
+                aws_match = aws_hostname_re.search(val)
+                if aws_match:
+                    return ".".join(aws_match.groups())
+
         # Check extra fields (model_config extra="allow")
-        extra = self.model_extra or {}
         for key in [
             "ip",
             "ipaddress",
