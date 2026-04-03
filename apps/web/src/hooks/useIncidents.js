@@ -86,10 +86,11 @@ export default function useIncidents(initialFilters = {}) {
           load({ silent: true })
         },
         state_changed(data) {
+          const newState = data.to_state || data.new_state
           setIncidents((prev) =>
             prev.map((inc) => {
               const incidentId = inc.id || inc.incident_id
-              return incidentId === data.incident_id ? { ...inc, state: data.new_state } : inc
+              return incidentId === data.incident_id ? { ...inc, state: newState } : inc
             })
           )
           load({ silent: true })

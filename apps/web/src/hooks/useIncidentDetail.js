@@ -44,7 +44,8 @@ export default function useIncidentDetail(id, tenantId = null) {
       {
         state_changed(data) {
           if (data.incident_id === id) {
-            setIncident((prev) => prev ? { ...prev, state: data.new_state } : prev)
+            const newState = data.to_state || data.new_state
+            setIncident((prev) => prev ? { ...prev, state: newState } : prev)
             load({ silent: true })
           }
         },

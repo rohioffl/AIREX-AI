@@ -201,8 +201,9 @@ export default function Layout({ children }) {
             }, ...prev].slice(0, 20))
           },
           state_changed(data) {
+            const newState = data.to_state || data.new_state
             const resolvedStates = ['RESOLVED', 'FAILED_ANALYSIS', 'FAILED_EXECUTION', 'REJECTED']
-            if (resolvedStates.includes(data.new_state)) {
+            if (resolvedStates.includes(newState)) {
               setActiveAlertIds(prev => {
                 const next = new Set(prev)
                 next.delete(data.incident_id)
@@ -215,7 +216,7 @@ export default function Layout({ children }) {
               })
             }
             setNotifications(prev =>
-              prev.map(n => n.id === data.incident_id ? { ...n, state: data.new_state } : n)
+              prev.map(n => n.id === data.incident_id ? { ...n, state: newState } : n)
             )
           },
         },
