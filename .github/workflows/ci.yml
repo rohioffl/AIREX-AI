@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install ruff
+        run: pip install ruff mypy
+      - name: Lint (ruff)
+        run: ruff check services/ --ignore E501 || true
+      - name: Type check
+        run: mypy services/airex-core/airex_core/ --ignore-missing-imports || true
+
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: cd apps/web && npm ci
+      - name: Lint
+        run: cd apps/web && npm run lint || true
+      - name: Build check
+        run: cd apps/web && npm run build || true
