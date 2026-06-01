@@ -1,11 +1,25 @@
-# AIREX
+# AIREX — Autonomous AI Incident Response & Resolution Platform
 
-
-
+[![CI](https://github.com/rohioffl/AIREX-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/rohioffl/AIREX-AI/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE)
+[![Live](https://img.shields.io/badge/live-airex.ankercloud.com-brightgreen)](https://airex.ankercloud.com/)
+[![Tests](https://img.shields.io/badge/tests-690%20passing-blue)](#verification-commands)
+[![Stack](https://img.shields.io/badge/stack-FastAPI%20%7C%20React%2019%20%7C%20pgvector-informational)](#architecture-overview)
 
 AIREX stands for **Autonomous Incident Resolution Engine Xecution**. It is a safety-conscious incident automation platform that ingests alerts, investigates affected systems, generates AI-assisted recommendations, applies policy and approval rules, executes deterministic remediation actions, and verifies the outcome.
 
-![AIREX landing page screenshot](airex-homepage-desktop-final.png)
+> Live at: **[https://airex.ankercloud.com/](https://airex.ankercloud.com/)**
+
+## Table of Contents
+
+- [Why It Exists](#why-it-exists)
+- [What AIREX Does](#what-airex-does)
+- [Architecture Overview](#architecture-overview)
+- [Safety Principles](#safety-principles)
+- [Local Development](#local-development)
+- [Verification Commands](#verification-commands)
+- [Deployment Notes](#deployment-notes)
+- [Documentation Map](#documentation-map)
 
 ## Why It Exists
 
@@ -21,57 +35,61 @@ AIREX is designed to reduce mean time to resolution for operational incidents wi
 6. Executes whitelisted remediation actions through controlled worker flows.
 7. Verifies post-action health and keeps an auditable incident timeline.
 
-## Current Monorepo Layout
+## Architecture Overview
+
+### Monorepo Layout
 
 ```text
 services/
-  airex-core/            Shared Python package (models, services, core, schemas, actions, cloud, investigations, llm, rag, monitoring)
-  airex-api/             FastAPI service package + Dockerfile (23 API routers)
-  airex-worker/          ARQ worker service package + Dockerfile (6 background tasks)
-  litellm/               LiteLLM container config
-  langfuse/              Langfuse deployment notes
-apps/web/                React 19 + Vite 7 frontend + Dockerfile (19 pages, 165 tests)
-database/                Alembic migrations (21 applied) and standalone migration image
-tests/                   Backend pytest suite (525 tests passing)
-e2e/                     Playwright end-to-end tests
-scripts/                 Utility scripts (admin user creation, etc.)
-config/                  Legacy/static configuration and credential file layout (tenant registry lives in PostgreSQL)
-deployment/              ECS Terraform + CodePipeline + CodeBuild assets
-docs/                    Project architecture, skills, and runbooks
-infra/                   Prometheus, Grafana, and AI platform config
+  airex-core/     Shared Python package (models, services, schemas, actions, cloud, llm, rag)
+  airex-api/      FastAPI service — 23 API routers + Dockerfile
+  airex-worker/   ARQ worker service — 6 background tasks + Dockerfile
+  litellm/        LiteLLM container config
+  langfuse/       Langfuse deployment notes
+apps/web/         React 19 + Vite 7 frontend — 19 pages, 165 tests + Dockerfile
+database/         Alembic migrations (21 applied) + standalone migration image
+tests/            Backend pytest suite (525 tests passing)
+e2e/              Playwright end-to-end tests
+deployment/       ECS Terraform + CodePipeline + CodeBuild assets
+infra/            Prometheus, Grafana, and AI platform config
+docs/             Architecture, skills, and runbooks
 ```
 
-## Architecture Overview
-
 ### Core Services
-- `services/airex-core`: shared Python package used by API and worker runtimes.
-- `services/airex-api`: FastAPI runtime package and container entrypoint.
-- `services/airex-worker`: ARQ runtime package and worker entrypoint.
-- `apps/web`: operational UI for incident review, approvals, evidence, runbooks, and health dashboards (includes Dockerfile).
-- `database`: isolated migration pipeline with Alembic under `database/alembic/`.
+
+- **airex-core** — shared Python package used by API and worker runtimes
+- **airex-api** — FastAPI runtime; entry point for all REST operations
+- **airex-worker** — ARQ async worker for background investigation and execution tasks
+- **apps/web** — operational UI for incident review, approvals, evidence, and health dashboards
+- **database** — isolated migration pipeline with Alembic
 
 ### Runtime Dependencies
-- PostgreSQL with pgvector for application data and retrieval features.
-- Redis for ARQ queues, pub/sub, and runtime coordination.
-- LiteLLM for model routing and external AI provider access.
-- Prometheus, Grafana, and Alertmanager for observability.
+
+| Component | Purpose |
+|-----------|---------|
+| PostgreSQL + pgvector | Application data + vector retrieval (RAG) |
+| Redis | ARQ queues, pub/sub, runtime coordination |
+| LiteLLM | Model routing + external AI provider access |
+| Prometheus + Grafana | Observability + alerting |
 
 ### Incident Lifecycle (11 States)
-`RECEIVED -> INVESTIGATING -> RECOMMENDATION_READY -> AWAITING_APPROVAL -> EXECUTING -> VERIFYING -> RESOLVED`
 
-Failure states remain explicit: `FAILED_ANALYSIS` (retryable), `FAILED_EXECUTION`, `FAILED_VERIFICATION` (retryable), and `REJECTED` (human-driven rejection).
+```
+RECEIVED → INVESTIGATING → RECOMMENDATION_READY → AWAITING_APPROVAL → EXECUTING → VERIFYING → RESOLVED
+```
 
-Terminal states: `RESOLVED`, `REJECTED`  
-Retryable states: `FAILED_ANALYSIS`, `FAILED_VERIFICATION`
+Failure states: `FAILED_ANALYSIS` (retryable), `FAILED_EXECUTION`, `FAILED_VERIFICATION` (retryable), `REJECTED`
 
 ## Safety Principles
 
-- **Deterministic actions only** — 12 whitelisted actions in ACTION_REGISTRY, no arbitrary shell from LLM output
-- **State machine is law** — All incident state changes must go through `transition_state(...)` helpers with immutable audit trail
-- **Zero-trust cloud** — No stored credentials, IAM roles/Workload Identity only
-- **Structured logging** — JSON logs with correlation IDs across all backend flows
-- **Policy-first execution** — Confidence-based auto-approval with senior approval gates
-- **Tenant-safe patterns** — Every RLS-backed row is scoped by **`tenant_id`**; organizations are a separate hierarchy for billing and access. UI and API resolve the active tenant from auth plus optional tenant headers.
+| Principle | Implementation |
+|-----------|---------------|
+| Deterministic actions only | 12 whitelisted actions in ACTION_REGISTRY — no arbitrary shell from LLM output |
+| State machine is law | All state changes go through `transition_state(...)` with immutable audit trail |
+| Zero-trust cloud | No stored credentials — IAM roles / Workload Identity only |
+| Policy-first execution | Confidence-based auto-approval with senior approval gates |
+| Tenant isolation | Every row is RLS-scoped by `tenant_id` |
+| Structured logging | JSON logs with correlation IDs across all backend flows |
 
 ## Local Development
 
@@ -79,8 +97,7 @@ Retryable states: `FAILED_ANALYSIS`, `FAILED_VERIFICATION`
 
 ```bash
 cd services/airex-api
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
@@ -89,8 +106,7 @@ uvicorn app.main:app --reload
 
 ```bash
 cd services/airex-worker
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 arq app.core.worker.WorkerSettings
 ```
@@ -99,95 +115,63 @@ arq app.core.worker.WorkerSettings
 
 ```bash
 cd apps/web
-npm install
-npm run dev
+npm install && npm run dev
 ```
 
-### Database Migrations
+### Full Local Stack
 
 ```bash
-cd database
-alembic history
-alembic upgrade head
-```
-
-### Local Stack
-
-```bash
-docker-compose up -d db redis ai-platform
 docker-compose up -d
-docker-compose run migrate
+# Frontend: http://localhost:5173
+# API: http://localhost:8000
+# Observability: Prometheus + Grafana included
 ```
-
-`docker-compose up -d` brings up the full local stack, including `frontend` on `http://localhost:5173`, backend on `http://localhost:8000`, Redis, PostgreSQL, LiteLLM, and observability services. The frontend now waits for a healthy backend before it starts.
-
-## MCP Server Configuration
-
-The repository includes an `mcp.json` configuration file to easily bootstrap context and capabilities for AI development assistants supporting the Model Context Protocol (MCP). The configuration includes access to:
-- **Local environment:** Filesystem and Shell execution
-- **Automation:** Playwright and Puppeteer for headless browser tasks
-- **Infrastructure:** Docker and Terraform
-- **External tools:** Exa Websearch, grep.app search, and Google Drive integrations
-- **Context:** Persistent memory and advanced code navigation (using jcodemunch)
-
-You can load or merge this file into your AI assistant's MCP settings to drastically enhance its ability to operate, test, and manage the AIREX project.
 
 ## Verification Commands
 
-### Backend
-
 ```bash
+# Backend — 525 tests
+cd tests && pytest
+
+# Frontend — 165 tests
+cd apps/web && npm run test -- --run
+
 # Lint + type check
-cd services/airex-core
-ruff check airex_core/
-mypy airex_core/ --ignore-missing-imports
-
-# Tests (525 passing)
-cd tests
-pytest
-python -m pytest tests/test_state_machine.py
-```
-
-### Frontend
-
-```bash
-cd apps/web
-npm run lint
-npm run test -- --run  # 165 tests
-npm run build
-```
-
-### E2E
-
-```bash
-cd e2e
-npm install
-npm run test
+pip install ruff mypy
+ruff check services/
+mypy services/airex-core/airex_core/ --ignore-missing-imports
 ```
 
 ## Deployment Notes
 
 ### Live Environments
-- **Frontend / API:** [https://airex.ankercloud.com/](https://airex.ankercloud.com/)
-- **Langfuse:** [https://airex-langfuse.ankercloud.com/](https://airex-langfuse.ankercloud.com/)
-- **LiteLLM:** [https://airex-litellm.ankercloud.com/](https://airex-litellm.ankercloud.com/)
 
-### Project Infrastructure
-- `services/airex-api/Dockerfile` builds the API runtime image.
-- `services/airex-worker/Dockerfile` builds the worker runtime image.
-- `services/airex-frontend/Dockerfile` builds the frontend image from `apps/web/`.
-- `database/Dockerfile` builds a standalone migration image.
-- `deployment/ecs/codebuild/buildspec.frontend.yml` publishes the frontend from `apps/web/dist` to S3 + CloudFront.
+| Service | URL |
+|---------|-----|
+| Frontend / API | https://airex.ankercloud.com/ |
+| Langfuse | https://airex-langfuse.ankercloud.com/ |
+| LiteLLM | https://airex-litellm.ankercloud.com/ |
+
+### Infrastructure
+- ECS Fargate via Terraform (`deployment/ecs/`)
+- CodePipeline + CodeBuild for CI/CD
+- Frontend served from S3 + CloudFront
 
 ## Documentation Map
 
-- [AGENTS.md](AGENTS.md) - repo workflow rules and validation commands
-- [docs/backend_skill.md](docs/backend_skill.md) - backend implementation rules
-- [docs/frontend_skill.md](docs/frontend_skill.md) - frontend implementation rules
-- [docs/database_skill.md](docs/database_skill.md) - database and migration rules
-- [docs/architecture.md](docs/architecture.md) - broader architecture notes
-- [TECH_STACK.md](TECH_STACK.md) - expanded technology reference
+| Doc | Purpose |
+|-----|---------|
+| [AGENTS.md](AGENTS.md) | Repo workflow rules and validation commands |
+| [TECH_STACK.md](TECH_STACK.md) | Expanded technology reference |
+| [docs/architecture.md](docs/architecture.md) | Broader architecture notes |
+| [docs/backend_skill.md](docs/backend_skill.md) | Backend implementation rules |
+| [docs/frontend_skill.md](docs/frontend_skill.md) | Frontend implementation rules |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [SECURITY.md](SECURITY.md) | Vulnerability disclosure policy |
 
 ## Ownership
 
-AIREX is maintained as a proprietary project. See [LICENSE](LICENSE) for usage restrictions and ownership attribution.
+AIREX is maintained as a proprietary project by Rohit P T at Ankercloud.
+See [LICENSE](LICENSE) for usage restrictions.
+
+> **License:** Proprietary — all rights reserved. Contact security@ankercloud.com for licensing inquiries.
